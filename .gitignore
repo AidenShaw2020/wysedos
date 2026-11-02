@@ -1,0 +1,42 @@
+# Build outputs
+efi/build/
+tools/installer/out/
+tools/pico-hid/build/
+*.o
+*.obj
+*.exe
+*.efi
+*.aml
+
+# Disk images, guest OS media and staging
+disks/386/*.img
+disks/386/*.iso
+disks/386/*.ima
+disks/386/*.orig
+disks/386/*.partial
+disks/EFI/
+GAMES/
+
+# Local development rig state, logs, captures and scratch files
+backups/
+work/
+recordings/
+tools/hdmi-live/
+tools/pico-hid/
+tools/pxe/
+tools/rig/
+last.txt
+ROADMAP.md
+Wyse3040_DOS_BareMetal_Design.md
+docs/2026-*.md
+docs/m0/
+/*.png
+/*.jpg
+
+# Python / editor
+.venv/
+.vscode/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
