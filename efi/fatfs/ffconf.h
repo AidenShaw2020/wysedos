@@ -31,7 +31,7 @@
 #define FF_SFN_BUF		12
 #define FF_FS_RPATH		0
 
-#define FF_VOLUMES		4	/* 0 data, 1 installer source, 2 target ESP, 3 target data */
+#define FF_VOLUMES		8	/* 0..3 runtime/installer, 4..7 exclusive USB image sources */
 #define FF_STR_VOLUME_ID	0
 #define FF_VOLUME_STRS		"RAM","NAND","CF","SD","SD2","USB","USB2","USB3"
 #define FF_MULTI_PARTITION	0
@@ -50,6 +50,6 @@
 #define FF_NORTC_YEAR	2026
 #define FF_FS_NOFSINFO	0
 
-#define FF_FS_LOCK		0
+#define FF_FS_LOCK		16	/* refuse conflicting opens of the same writable image */
 #define FF_FS_REENTRANT	0
 #define FF_FS_TIMEOUT	1000

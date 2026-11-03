@@ -5,9 +5,11 @@
 // netbooted, the data volume when it started from the eMMC or a USB stick.
 
 #include <string.h>
+#include <stdio.h>
 #include <ctype.h>
 #include "ff.h"
 #include "fatvol.h"
+#include "image_media.h"
 
 FRESULT netfs_open(FIL *fp, const TCHAR *path, BYTE mode);
 FRESULT netfs_close(FIL *fp);
@@ -71,8 +73,11 @@ FRESULT f_open(FIL *fp, const TCHAR *path, BYTE mode) {
         return r;
     }
     memset(fp, 0, sizeof(*fp));
+    int image=vol>=IMAGE_MEDIA_FIRST && vol<IMAGE_MEDIA_FIRST+IMAGE_MEDIA_COUNT;
+    if (image && !image_media_hold(vol)) return FR_NOT_READY;
     FRESULT r = (FRESULT)fatvol_open(fp->fat, vol, rest, mode);
-    if (r != FR_OK) return r;
+    if (r != FR_OK) { if (image) image_media_end(vol); return r; }
+    fp->image_volume=image?(BYTE)(vol+1):0;
     fp->backend = FS_FAT;
     fp->obj.fs = &fat_marker;
     fp->flag = mode;
@@ -83,14 +88,23 @@ FRESULT f_open(FIL *fp, const TCHAR *path, BYTE mode) {
 FRESULT f_close(FIL *fp) {
     if (fp->backend != FS_FAT) return netfs_close(fp);
     if (!fp->obj.fs) return FR_INVALID_OBJECT;
+    int vol=(int)fp->image_volume-1;
+    FRESULT r=(FRESULT)fatvol_close(fp->fat);
+    if (r!=FR_OK && (vol<0 || image_media_live(vol))) return r;
     fp->obj.fs = NULL;
-    return (FRESULT)fatvol_close(fp->fat);
+    fp->image_volume=0;
+    if (vol>=0 && !image_media_end(vol)) return FR_DISK_ERR;
+    return r;
 }
 
 FRESULT f_read(FIL *fp, void *buff, UINT btr, UINT *br) {
     if (fp->backend != FS_FAT) return netfs_read(fp, buff, btr, br);
     if (!fp->obj.fs) return FR_INVALID_OBJECT;
     FRESULT r = (FRESULT)fatvol_read(fp->fat, buff, btr, br);
+    static unsigned image_read_errors;
+    if (r!=FR_OK && fp->image_volume && image_read_errors++<8)
+        printf("usb image: read volume %u offset %llu size %u failed %u\n",
+               fp->image_volume-1,(unsigned long long)fp->fptr,btr,r);
     fil_sync_fields(fp);
     return r;
 }

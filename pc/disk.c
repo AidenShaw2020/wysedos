@@ -9,6 +9,7 @@
 #include "i386.h"
 #include "ff.h"
 #include "blockdev.h"
+#include "image_media.h"
 #include "ems.h"
 #include "vga.h"
 
@@ -80,6 +81,11 @@ static void (*disk_cmos_update_cb)(uint8_t type_a, uint8_t type_b) = NULL;
 void disk_set_cmos_callback(void (*cb)(uint8_t, uint8_t)) { disk_cmos_update_cb = cb; }
 
 static void (*disk_fdc_mediachange_cb)(int drive) = NULL;
+static int (*ata_prepare)(int drive,int discard);
+static void (*ata_changed)(int drive);
+void disk_set_ata_callbacks(int (*prepare)(int,int),void (*changed)(int)) {
+    ata_prepare=prepare; ata_changed=changed;
+}
 void disk_set_fdc_mediachange_callback(void (*cb)(int drive)) { disk_fdc_mediachange_cb = cb; }
 
 /*
@@ -166,7 +172,14 @@ static void close_image(FIL *pf)
     f_close(pf);
 }
 
-void ejectdisk(uint8_t drivenum, bool is_fdd) {
+uint8_t ejectdisk(uint8_t drivenum, bool is_fdd) {
+    if ((is_fdd && drivenum>=2) || drivenum>=4) return 0;
+    FIL *current=is_fdd?&fdd[drivenum].fil:&ata[drivenum].fil;
+    if (!is_fdd && ata_prepare && ata_prepare(drivenum,0)<0) return 0;
+#ifdef WYSE_BUILD
+    if (current->obj.fs && current->image_volume &&
+        f_sync(current)!=FR_OK && image_media_live(current->image_volume-1)) return 0;
+#endif
     if (drivenum < 2 && is_fdd && fdd[drivenum].name) {
         blk_unbind(&fdd[drivenum].dev);
         close_image(&fdd[drivenum].fil);
@@ -180,9 +193,9 @@ void ejectdisk(uint8_t drivenum, bool is_fdd) {
         update_floppy_cmos();
         if (disk_fdc_mediachange_cb)
             disk_fdc_mediachange_cb(drivenum);
-        return;
+        return 1;
     }
-    if (drivenum < 4 && ata[drivenum].iscdrom && ata[drivenum].name) {
+    if (!is_fdd && drivenum < 4 && ata[drivenum].iscdrom && ata[drivenum].name) {
         /* ATA eject: CD (from GUI or insertdisk) */
         blk_unbind(&ata[drivenum].dev);
         close_image(&ata[drivenum].fil);
@@ -190,16 +203,19 @@ void ejectdisk(uint8_t drivenum, bool is_fdd) {
         ata[drivenum].name = 0;
         if (disk_cdrom_change_cb)
             disk_cdrom_change_cb(drivenum, NULL, 1);
-        return;
+        if (ata_changed) ata_changed(drivenum);
+        return 1;
     }
-    if (drivenum < 4 && ata[drivenum].name) {
+    if (!is_fdd && drivenum < 4 && ata[drivenum].name) {
         /* HDD eject (e.g. from GUI for HDD drives) */
         blk_unbind(&ata[drivenum].dev);
         close_image(&ata[drivenum].fil);
         free(ata[drivenum].name);
         ata[drivenum].name = 0;
         hdcount--;
+        if (ata_changed) ata_changed(drivenum);
     }
+    return 1;
 }
 
 /*
@@ -298,7 +314,10 @@ uint8_t insertdisk(uint8_t drivenum, bool is_fdd, bool is_cd, const char *pathna
                              && ata[drivenum].iscdrom && ata[drivenum].name != 0;
     // Build full path (files are in 386/ directory)
     char path[256];
-    snprintf(path, sizeof(path), "386/%s", pathname);
+    if (image_media_path_source(pathname)>=0) {
+        if (strlen(pathname)>=sizeof(path)) return 0;
+        strcpy(path,pathname);
+    } else snprintf(path, sizeof(path), "386/%s", pathname);
 
     /* Circle normally exposes images read-only.  The explicit build option
      * below is intentionally narrower than general SD write access: only the
@@ -325,7 +344,7 @@ uint8_t insertdisk(uint8_t drivenum, bool is_fdd, bool is_cd, const char *pathna
     FSIZE_t size;
 
     if (from_host) {
-        if (blk_present(bd)) ejectdisk(drivenum, is_fdd);
+        if (blk_present(bd) && !ejectdisk(drivenum,is_fdd)) return 0;
         #ifdef WYSE_BUILD
         int native_disk_bind(BlockDev *d);
         if (native ? !native_disk_bind(bd) : !blk_bind_host(bd, pathname[4] ? pathname + 4 : "ufd1")) return 0;
@@ -343,27 +362,34 @@ uint8_t insertdisk(uint8_t drivenum, bool is_fdd, bool is_cd, const char *pathna
         if (is_fdd) fdd[drivenum].name = strdup(pathname);
         else        ata[drivenum].name = strdup(pathname);
     } else {
-    if (pf->obj.fs) {
-        /* Eject whatever is currently in the drive before inserting new image */
-        if (is_fdd)
-            ejectdisk(drivenum, true);
-        else if (is_cd)
-            ejectdisk(drivenum, false);
-        else
-            ejectdisk(drivenum, false);
-    }
-    FRESULT fres = f_open(pf, path, fmode);
+    /* Validate and open the replacement before touching the working drive. */
+    FIL candidate;
+    memset(&candidate,0,sizeof(candidate));
+    FRESULT fres = f_open(&candidate,path,fmode);
     int opened_readonly = (fmode == FA_READ);
     if (FR_OK != fres) {
         /* Fall back to read-only if write-open failed (e.g. write-protected card) */
         if (fmode != FA_READ) {
-            fres = f_open(pf, path, FA_READ);
+            fres = f_open(&candidate,path,FA_READ);
             opened_readonly = 1;
         }
     }
     if (FR_OK != fres) {
         return 0;
     }
+    FSIZE_t candidate_size=f_size(&candidate);
+    FSIZE_t candidate_usable=candidate_size;
+    if (!is_fdd && !is_cd && detect_vhd(&candidate,candidate_size)) candidate_usable-=512;
+    if (!candidate_size || candidate_size%512 ||
+        (is_fdd && (candidate_size<163840 || candidate_size>2949120)) ||
+        (!is_fdd && !is_cd && (candidate_usable<368640 || candidate_usable>8ULL*1024*1024*1024 ||
+                              candidate_usable>1023ULL*255ULL*63ULL*512ULL))) {
+        f_close(&candidate); return 0;
+    }
+    if (blk_present(bd) && !ejectdisk(drivenum,is_fdd)) {
+        f_close(&candidate); return 0;
+    }
+    *pf=candidate;
     enable_fast_seek(pf);
     blk_bind_file(bd, pf, opened_readonly);
     if(is_fdd) fdd[drivenum].name = strdup(pathname);
@@ -390,6 +416,7 @@ uint8_t insertdisk(uint8_t drivenum, bool is_fdd, bool is_cd, const char *pathna
         ata[drivenum].cyls       = 0;
         ata[drivenum].heads      = 0;
         ata[drivenum].sects      = 0;
+        if (ata_changed) ata_changed(drivenum);
         if (disk_cdrom_change_cb)
             disk_cdrom_change_cb(drivenum, path, cd_was_present);
         return 1;
@@ -399,16 +426,19 @@ uint8_t insertdisk(uint8_t drivenum, bool is_fdd, bool is_cd, const char *pathna
      * from the original CHS-oriented disk layer. X86Pi's IDE path uses
      * LBA28 and FatFS is built with exFAT/64-bit FSIZE_t, so a 7 GiB image
      * is representable end-to-end. */
-    if (usable_size < 360ULL * 1024ULL ||
-        usable_size > (native ? 128ULL : 8ULL) * 1024ULL * 1024ULL * 1024ULL ||
+    if (usable_size < (is_fdd?160ULL:360ULL) * 1024ULL ||
+        usable_size > (from_host ? 128ULL : 8ULL) * 1024ULL * 1024ULL * 1024ULL ||
         (usable_size & 511ULL)) {
         if (from_host) blk_unbind(bd);
         else           f_close(pf);
+        if (is_fdd) { free(fdd[drivenum].name); fdd[drivenum].name = 0; }
+        else        { free(ata[drivenum].name); ata[drivenum].name = 0; }
         return 0;
     }
     // Determine geometry (cyls, heads, sects)
     uint16_t cyls = 0, heads = 0, sects = 0, drive_type = 47;
     if (!is_fdd) {  // Hard disk
+        ata[drivenum].iscdrom = 0;
         /*
          * Legacy BIOS CHS translation.
          *
@@ -430,17 +460,17 @@ uint8_t insertdisk(uint8_t drivenum, bool is_fdd, bool is_cd, const char *pathna
         sects = 63;
         heads = (usable_size > legacy_chs_limit) ? 255 : 16;
 
-        if (!native && usable_size > translated_chs_limit) {
+        if (!from_host && usable_size > translated_chs_limit) {
             f_close(pf);
+            free(ata[drivenum].name);
+            ata[drivenum].name = 0;
             return 0;
         }
 
         // Keep MBR geometry detection only for legacy-sized images.
         // Large images must keep stable 255/63 translation across reboots.
         if (usable_size <= legacy_chs_limit) {
-            UINT br;
-            f_lseek(pf, 0);
-            if (FR_OK == f_read(pf, sectorbuffer, 512, &br) && br == 512
+            if (blk_pread(bd, 0, sectorbuffer, 512) == 512
                 && sectorbuffer[510] == 0x55 && sectorbuffer[511] == 0xAA) {
                 for (int p = 0; p < 4; p++) {
                     uint8_t *pe = &sectorbuffer[0x1BE + p * 16];
@@ -470,11 +500,13 @@ uint8_t insertdisk(uint8_t drivenum, bool is_fdd, bool is_cd, const char *pathna
 #else
         fdd[drivenum].readonly = 0;
 #endif
+        fdd[drivenum].readonly |= bd->readonly;
         // Update CMOS floppy type if floppy
         update_floppy_cmos();
         if (disk_fdc_mediachange_cb)
             disk_fdc_mediachange_cb(drivenum);
     }
+    if (!is_fdd && ata_changed) ata_changed(drivenum);
     return 1;
 }
 

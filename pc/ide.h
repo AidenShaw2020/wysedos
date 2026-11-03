@@ -38,12 +38,16 @@ int ide_attach(IDEIFState *s, int drive, const char *filename);
 struct BlockDev;
 int ide_attach_ata(IDEIFState *s, int drive, struct BlockDev *dev,
                    int cylinders, int heads, int sectors);
+void ide_sync_ata(IDEIFState *s, int drive, struct BlockDev *dev,
+                  int cylinders, int heads, int sectors);
 
 /* Attach empty ATAPI CD-ROM slot (no image loaded yet) */
 int ide_attach_cd(IDEIFState *s, int drive);
 
 /* Returns non-zero if a drive (0=master, 1=slave) is attached */
 int ide_has_drive(IDEIFState *s, int drive);
+int ide_prepare_media(IDEIFState *s,int drive,int discard);
+void ide_sync_cd(IDEIFState *s,int drive,struct BlockDev *dev);
 
 /* Hot-swap the disc: the drive's block source on insert, NULL to eject.
  * That source may be a file or a real drive; see blockdev.h. */

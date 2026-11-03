@@ -6,6 +6,7 @@
 #include "pc.h"
 #include "disk.h"
 #include "ff.h"
+#include "image_media.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -329,14 +330,14 @@ static bool write_config(void)
     ok &= put(&fp, "\n; Disk images\n");
     for (int i = 0; i < 2; i++) {
         const char *f = fdd_get_filename(i);
-        if (f && f[0]) {
+        if (f && f[0] && image_media_path_source(f)<0) {
             snprintf(line, sizeof line, "fd%c=%s\n", 'a' + i, f);
             ok &= put(&fp, line);
         }
     }
     for (int i = 0; i < 4; i++) {
         const char *f = ata_get_filename(i);
-        if (f && f[0]) {
+        if (f && f[0] && image_media_path_source(f)<0) {
             snprintf(line, sizeof line, "%s%c=%s\n",
                      ata_is_cdrom(i) ? "cd" : "hd", 'a' + i, f);
             ok &= put(&fp, line);

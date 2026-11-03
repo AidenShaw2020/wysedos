@@ -67,6 +67,8 @@ void pci_register_bar(PCIDevice *d, unsigned int bar_num,
 //IRQSignal *pci_device_get_irq(PCIDevice *d, unsigned int irq_num);
 uint8_t *pci_device_get_dma_ptr(PCIDevice *d, uint64_t addr, bool is_rw);
 void pci_device_set_config8(PCIDevice *d, uint8_t addr, uint8_t val);
+uint8_t pci_device_get_config8(PCIDevice *d, uint8_t addr);
+void pci_device_set_fixed_irq(PCIDevice *d, uint8_t irq);
 void pci_device_set_config16(PCIDevice *d, uint8_t addr, uint16_t val);
 int pci_device_get_devfn(PCIDevice *d);
 int pci_add_capability(PCIDevice *d, const uint8_t *buf, int size);

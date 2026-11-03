@@ -15,6 +15,7 @@
 #include "blockdev.h"
 #include "config_save.h"
 #include "ff.h"
+#include "image_media.h"
 #include <string.h>
 #include <strings.h>  // For strcasecmp
 #include <stdio.h>
@@ -24,6 +25,7 @@ typedef enum {
     MENU_CLOSED,
     MENU_MAIN,          // Drive selection
     MENU_FILE_BROWSER   // File selection for a drive
+    , MENU_USB_CONFIRM
 } MenuState;
 
 // Drive table — matches DiskUIDrive enum order from diskui.h
@@ -38,8 +40,13 @@ static const DriveInfo drive_table[DRIVE_TOTAL] = {
 };
 
 // File listing (reduced size to save SRAM)
+#ifdef WYSE_BUILD
+#define MAX_FILES        96
+#define MAX_FILENAME_LEN 256
+#else
 #define MAX_FILES        24
 #define MAX_FILENAME_LEN 32
+#endif
 
 // Menu state
 static MenuState menu_state   = MENU_CLOSED;
@@ -55,6 +62,10 @@ static bool pending_changed[DRIVE_TOTAL];  // true if user modified this drive
 static bool reboot_required;               // true if any ATA drive was changed
 static char file_list[MAX_FILES][MAX_FILENAME_LEN];
 static int  file_count   = 0;
+static char browser_path[MAX_FILENAME_LEN]; /* empty = original 386/ source */
+static bool source_hold[IMAGE_MEDIA_COUNT];
+static int claim_source;
+static char menu_error[64];
 
 // Bottom row index: either "Save and Exit" or "Save and Reboot"
 #define MAIN_MENU_ROWS  (DRIVE_TOTAL + 1)
@@ -71,7 +82,7 @@ static bool drive_hidden(int drive) { return drive == DRIVE_ATA0_0; }
 #define VISIBLE_DRIVES DRIVE_TOTAL
 static bool drive_hidden(int drive) { (void)drive; return false; }
 #endif
-#define MENU_H      (8 + VISIBLE_DRIVES + 1)  // border(2) + rows + blank + notification + blank + action + border(2)
+#define MENU_H      (8 + VISIBLE_DRIVES + 1 + IMAGE_MEDIA_COUNT)
 
 #define FILE_X      12
 #define FILE_Y      7
@@ -87,9 +98,52 @@ static void select_file(void);
 static void eject_pending(void);
 static void apply_and_close(void);
 static void reset_pending(void);
+static void enter_source(int source);
+static void draw_usb_confirm(void);
+static bool file_is_iso(const char *filename);
+static void update_reboot_needed(void) {
+    reboot_required=false;
+    for (int i=2;i<DRIVE_TOTAL;i++) {
+        if (!pending_changed[i]) continue;
+        int cd=ata_is_cdrom(i-2);
+        if (!cd || (pending_filename[i][0] && !file_is_iso(pending_filename[i]) &&
+                    strncmp(pending_filename[i],"usb:ucd",7))) reboot_required=true;
+    }
+}
 
 /* Read and cleared by the kernel loop, which owns resetting the guest. */
 bool diskui_reset_requested_flag;
+bool g_usb_hd_ejected_by_user;
+
+static void format_drive_target(const char *name, char *out, size_t cap) {
+    if (!name || !name[0]) {
+        snprintf(out, cap, "[empty]");
+        return;
+    }
+    if (strncmp(name, "usb:ufd", 7) == 0) {
+        snprintf(out, cap, "USB floppy %s", name + 7);
+        return;
+    }
+    if (strncmp(name, "usb:ucd", 7) == 0) {
+        snprintf(out, cap, "USB CD-ROM %s", name + 7);
+        return;
+    }
+    if (strncmp(name, "usb:uhd", 7) == 0) {
+        uint64_t mb = blk_host_size_mb(name + 4);
+        if (mb >= 10240)
+            snprintf(out, cap, "USB disk %s (%llu GB)", name + 7, (unsigned long long)((mb + 512) / 1024));
+        else if (mb > 0)
+            snprintf(out, cap, "USB disk %s (%llu MB)", name + 7, (unsigned long long)mb);
+        else
+            snprintf(out, cap, "USB disk %s", name + 7);
+        return;
+    }
+    int source=image_media_path_source(name);
+    if (source>=0) {
+        snprintf(out,cap,"USB%d:%s",source+1,name+2); return;
+    }
+    snprintf(out, cap, "%s", name);
+}
 
 // --------------------------------------------------------------------------
 // Helpers
@@ -166,11 +220,12 @@ void diskui_init(void) {
     selected_file = 0;
     file_count    = 0;
     reset_pending();
+    browser_path[0]=menu_error[0]=0;
 }
 
 void diskui_open(void) {
     if (menu_state != MENU_CLOSED) return;
-
+    menu_error[0]=0;
     reset_pending();
     if (drive_hidden(selected_row)) selected_row=0;
     menu_state = MENU_MAIN;
@@ -180,6 +235,13 @@ void diskui_open(void) {
 }
 
 void diskui_close(void) {
+    for (int source=0;source<IMAGE_MEDIA_COUNT;source++) if (source_hold[source]) {
+        if (!image_media_end(IMAGE_MEDIA_FIRST+source)) {
+            snprintf(menu_error,sizeof(menu_error),"USB flush failed; medium stays owned by monitor");
+            menu_state=MENU_MAIN; draw_main_menu(); return;
+        }
+        source_hold[source]=false;
+    }
     menu_state = MENU_CLOSED;
     reset_pending();
     osd_hide();
@@ -227,8 +289,10 @@ static void draw_main_menu(void) {
 
         const char *filename = get_display_filename(i);
         if (filename) {
+            char formatted[40];
             char truncated[24];
-            strncpy(truncated, filename, 23);
+            format_drive_target(filename, formatted, sizeof(formatted));
+            strncpy(truncated, formatted, 23);
             truncated[23] = '\0';
             osd_print(MENU_X + 22, y, truncated, attr);
         } else {
@@ -247,9 +311,17 @@ static void draw_main_menu(void) {
     if (reboot_required) {
         osd_print_center(notify_y, "! Reboot required for HDD changes !", OSD_ATTR(OSD_WHITE, OSD_RED));
     }
+    if (menu_error[0]) osd_print_center(notify_y,menu_error,OSD_ATTR(OSD_WHITE,OSD_RED));
+    for (int source=0;source<IMAGE_MEDIA_COUNT;source++) {
+        if (!image_media_available(source)) continue;
+        char state[64];
+        snprintf(state,sizeof(state),"USB %d: %s",source+1,
+                 image_media_owned(source)?"Monitor - image files":"USB disk for DOS / Windows");
+        osd_print(MENU_X+2,notify_y+1+source,state,OSD_ATTR_HIGHLIGHT);
+    }
 
     // Action row
-    int action_y = MENU_Y + 5 + VISIBLE_DRIVES;
+    int action_y = MENU_Y + 5 + VISIBLE_DRIVES + IMAGE_MEDIA_COUNT;
     {
         uint8_t attr = (selected_row == ROW_ACTION) ? OSD_ATTR_SELECTED : OSD_ATTR_HIGHLIGHT;
         osd_fill(MENU_X + 2, action_y, MENU_W - 4, 1, ' ', attr);
@@ -285,12 +357,31 @@ static void draw_file_browser(void) {
             osd_print(FILE_X + 2, y, ">", attr);
         }
         /* "usb:ufd1" reads as nothing at all in a list of file names. */
-        char shown[MAX_FILENAME_LEN + 16];
-        if (strncmp(file_list[file_idx], "usb:ufd", 7) == 0)
+        char shown[MAX_FILENAME_LEN + 24];
+        if (strncmp(file_list[file_idx],"@usb:",5)==0) {
+            int source=file_list[file_idx][5]-'1';
+            snprintf(shown,sizeof(shown),"[ USB %d - browse images (%s) ]",source+1,
+                     image_media_owned(source)?"Monitor":"System");
+        } else if (!strcmp(file_list[file_idx],".."))
+            snprintf(shown,sizeof(shown),"[..] Parent / other media");
+        else if (file_list[file_idx][0]=='/')
+            snprintf(shown,sizeof(shown),"[%.42s]",file_list[file_idx]+1);
+        else if (strncmp(file_list[file_idx], "usb:ufd", 7) == 0)
             snprintf(shown, sizeof shown, "USB floppy drive %s",
                      file_list[file_idx] + 7);
-        else
-            snprintf(shown, sizeof shown, "%s", file_list[file_idx]);
+        else if (strncmp(file_list[file_idx], "usb:ucd", 7) == 0)
+            snprintf(shown, sizeof shown, "USB CD-ROM drive %s",
+                     file_list[file_idx] + 7);
+        else if (strncmp(file_list[file_idx], "usb:uhd", 7) == 0) {
+            uint64_t mb = blk_host_size_mb(file_list[file_idx] + 4);
+            if (mb > 0)
+                snprintf(shown, sizeof shown, "USB disk %s (%llu MB)",
+                         file_list[file_idx] + 7, (unsigned long long)mb);
+            else
+                snprintf(shown, sizeof shown, "USB disk %s",
+                         file_list[file_idx] + 7);
+        } else
+            snprintf(shown, sizeof shown, "%.46s", file_list[file_idx]);
         osd_print(FILE_X + 4, y, shown, attr);
     }
 
@@ -302,7 +393,7 @@ static void draw_file_browser(void) {
     }
 
     if (file_count == 0) {
-        osd_print_center(FILE_Y + FILE_H / 2, "No disk images found in 386/", OSD_ATTR_DISABLED);
+        osd_print_center(FILE_Y + FILE_H / 2, "No disk images or external media found", OSD_ATTR_DISABLED);
     }
 
     int help_y = FILE_Y + FILE_H - 2;
@@ -321,9 +412,33 @@ static void scan_disk_images(int drive_idx) {
 
     file_count = 0;
     memset(file_list, 0, sizeof(file_list));
+    if (browser_path[0]) {
+        strcpy(file_list[file_count++],"..");
+        if (f_opendir(&dir,browser_path)==FR_OK) {
+            while (file_count<MAX_FILES && f_readdir(&dir,&fno)==FR_OK && fno.fname[0]) {
+                if (!strcmp(fno.fname,".") || !strcmp(fno.fname,"..")) continue;
+                if (fno.fattrib&AM_DIR) {
+                    if (strlen(fno.fname)+2>MAX_FILENAME_LEN) continue;
+                    snprintf(file_list[file_count++],MAX_FILENAME_LEN,"/%s",fno.fname);
+                } else {
+                    const char *ext=file_ext(fno.fname);
+                    if (ext && ext_accepted_for_drive(ext,drive_idx))
+                        snprintf(file_list[file_count++],MAX_FILENAME_LEN,"%s",fno.fname);
+                }
+            }
+            f_closedir(&dir);
+        }
+        selected_file=file_scroll_offset=0;
+        return;
+    }
 
+#ifdef WYSE_BUILD
+    /* Keep network transfer fixtures on the development rig, but never
+     * browse the installed eMMC's runtime partition for image files. */
+    if (fs_default_backend()!=FS_NETFS) goto external_sources;
+#endif
     res = f_opendir(&dir, "SD:/386");
-    if (res != FR_OK) return;
+    if (res != FR_OK) goto external_sources;
 
     while (file_count < MAX_FILES) {
         res = f_readdir(&dir, &fno);
@@ -342,6 +457,10 @@ static void scan_disk_images(int drive_idx) {
     }
 
     f_closedir(&dir);
+external_sources:
+    for (int source=0;source<IMAGE_MEDIA_COUNT && file_count<MAX_FILES;source++)
+        if (image_media_available(source))
+            snprintf(file_list[file_count++],MAX_FILENAME_LEN,"@usb:%d",source+1);
 
     // Sort alphabetically (bubble sort)
     for (int i = 0; i < file_count - 1; i++) {
@@ -376,6 +495,17 @@ static void scan_disk_images(int drive_idx) {
             snprintf(file_list[0], MAX_FILENAME_LEN, "usb:%s", which);
             file_count++;
         }
+    } else {
+        for (int n = 2; n >= 1; n--) {
+            char which[8];
+            snprintf(which, sizeof which, "ucd%d", n);
+            if (!blk_host_available(which) || file_count >= MAX_FILES)
+                continue;
+            for (int i = file_count; i > 0; i--)
+                strcpy(file_list[i], file_list[i - 1]);
+            snprintf(file_list[0], MAX_FILENAME_LEN, "usb:%s", which);
+            file_count++;
+        }
     }
 
     selected_file = 0;
@@ -388,16 +518,62 @@ static void scan_disk_images(int drive_idx) {
 
 static void select_file(void) {
     if (file_count == 0 || selected_file >= file_count) return;
+    const char *chosen=file_list[selected_file];
+    if (!strncmp(chosen,"@usb:",5)) {
+        claim_source=chosen[5]-'1';
+        if (image_media_owned(claim_source)) enter_source(claim_source);
+        else { menu_state=MENU_USB_CONFIRM; draw_usb_confirm(); }
+        return;
+    }
+    if (!strcmp(chosen,"..")) {
+        char *slash=strrchr(browser_path,'/');
+        if (!slash || slash<=browser_path+2) browser_path[0]=0;
+        else *slash=0;
+        scan_disk_images(selected_row); draw_file_browser(); return;
+    }
+    if (chosen[0]=='/') {
+        if (strlen(browser_path)+strlen(chosen)>=sizeof(browser_path)) return;
+        if (browser_path[strlen(browser_path)-1]=='/') browser_path[strlen(browser_path)-1]=0;
+        strcat(browser_path,chosen);
+        scan_disk_images(selected_row); draw_file_browser(); return;
+    }
 
     int drive_idx = selected_row;
-    strncpy(pending_filename[drive_idx], file_list[selected_file], MAX_FILENAME_LEN - 1);
+    if (browser_path[0]) {
+        int n=snprintf(pending_filename[drive_idx],MAX_FILENAME_LEN,"%s%s%s",browser_path,
+                       browser_path[strlen(browser_path)-1]=='/'?"":"/",chosen);
+        if (n>=MAX_FILENAME_LEN) { pending_filename[drive_idx][0]=0; return; }
+    } else strncpy(pending_filename[drive_idx],chosen,MAX_FILENAME_LEN-1);
     pending_filename[drive_idx][MAX_FILENAME_LEN - 1] = '\0';
     pending_changed[drive_idx] = true;
 
-    if (drive_idx >= 2) reboot_required = true;
+    update_reboot_needed();
 
     menu_state = MENU_MAIN;
     draw_main_menu();
+}
+static void draw_usb_confirm(void) {
+    osd_draw_box(FILE_X,FILE_Y,FILE_W,FILE_H,OSD_ATTR_BORDER);
+    osd_fill(FILE_X+1,FILE_Y+1,FILE_W-2,FILE_H-2,' ',OSD_ATTR_NORMAL);
+    osd_print_center(FILE_Y," USB media ownership ",OSD_ATTR_HIGHLIGHT);
+    osd_print(FILE_X+2,FILE_Y+2,"Close files on this USB disk in DOS / Windows.",OSD_ATTR_NORMAL);
+    osd_print(FILE_X+2,FILE_Y+4,"In Windows, Stop it via Unplug or Eject Hardware.",OSD_ATTR_NORMAL);
+    osd_print(FILE_X+2,FILE_Y+6,"The monitor will take exclusive access for images.",OSD_ATTR_NORMAL);
+    osd_print(FILE_X+2,FILE_Y+8,"Last image closed: disk returns to the system.",OSD_ATTR_NORMAL);
+    osd_print(FILE_X+2,FILE_Y+11,"Enter: take disk    Esc: cancel",OSD_ATTR_HIGHLIGHT);
+}
+static void enter_source(int source) {
+    int vol=IMAGE_MEDIA_FIRST+source;
+    if (!source_hold[source]) {
+        vol=image_media_begin(source);
+        if (vol<0) {
+            snprintf(menu_error,sizeof(menu_error),"Cannot take USB disk or mount FAT filesystem");
+            menu_state=MENU_MAIN; draw_main_menu(); return;
+        }
+        source_hold[source]=true;
+    }
+    snprintf(browser_path,sizeof(browser_path),"%d:/",vol);
+    scan_disk_images(selected_row); menu_state=MENU_FILE_BROWSER; draw_file_browser();
 }
 
 static void eject_pending(void) {
@@ -405,7 +581,7 @@ static void eject_pending(void) {
     pending_filename[drive_idx][0] = '\0';
     pending_changed[drive_idx] = true;
 
-    if (drive_idx >= 2) reboot_required = true;
+    update_reboot_needed();
 
     draw_main_menu();
 }
@@ -418,20 +594,27 @@ static void apply_and_close(void) {
         if (pending_filename[i][0] == '\0') {
             // Eject
             if (i < 2) {
-                ejectdisk(i, true);
+                if (!ejectdisk(i,true)) goto change_failed;
             } else {
-                ejectdisk(i - 2, false);
+                const char *old = ata_get_filename(i - 2);
+                if (old && strncmp(old, "usb:uhd", 7) == 0)
+                    g_usb_hd_ejected_by_user = true;
+                if (!ejectdisk(i-2,false)) goto change_failed;
             }
         } else {
             // Insert
             if (i < 2) {
-                insertdisk(i, true, false, pending_filename[i]);
+                if (!insertdisk(i,true,false,pending_filename[i])) goto change_failed;
             } else {
                 int ata_index = i - 2;
-                bool is_cdrom = file_is_iso(pending_filename[i]);
-                insertdisk(ata_index, false, is_cdrom, pending_filename[i]);
+                if (strncmp(pending_filename[i], "usb:uhd", 7) == 0)
+                    g_usb_hd_ejected_by_user = false;
+                bool is_cdrom = file_is_iso(pending_filename[i]) ||
+                                strncmp(pending_filename[i], "usb:ucd", 7) == 0;
+                if (!insertdisk(ata_index,false,is_cdrom,pending_filename[i])) goto change_failed;
             }
         }
+        pending_changed[i]=false;
     }
 
     config_save_disks();
@@ -440,9 +623,13 @@ static void apply_and_close(void) {
      * can be expected to survive, so those changes take effect on a reset.
      * Floppies are designed to be changed while the machine runs and take
      * effect immediately. */
-    if (reboot_required) diskui_reset_requested_flag = true;
-
+    bool reboot=reboot_required;
     diskui_close();
+    if (menu_state==MENU_CLOSED && reboot) diskui_reset_requested_flag=true;
+    return;
+change_failed:
+    snprintf(menu_error,sizeof(menu_error),"Image change failed; check media, space or busy drive");
+    draw_main_menu();
 }
 
 // --------------------------------------------------------------------------
@@ -476,6 +663,7 @@ bool diskui_handle_key(int keycode, bool is_down) {
                     if (filename) {
                         eject_pending();
                     } else {
+                        browser_path[0]=0;
                         scan_disk_images(selected_row);
                         menu_state = MENU_FILE_BROWSER;
                         draw_file_browser();
@@ -499,6 +687,10 @@ bool diskui_handle_key(int keycode, bool is_down) {
             }
             break;
 
+        case MENU_USB_CONFIRM:
+            if (keycode==KEY_ENTER) enter_source(claim_source);
+            else if (keycode==KEY_ESC) { menu_state=MENU_FILE_BROWSER; draw_file_browser(); }
+            break;
         case MENU_FILE_BROWSER:
             switch (keycode) {
                 case KEY_UP:

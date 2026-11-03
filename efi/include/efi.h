@@ -147,7 +147,7 @@ typedef struct {
     void *GetNextMonotonicCount;
     EFI_STATUS (*Stall)(uint64_t Microseconds);
     EFI_STATUS (*SetWatchdogTimer)(uint64_t Timeout, uint64_t WatchdogCode, uint64_t DataSize, CHAR16 *);
-    void *ConnectController;
+    EFI_STATUS (*ConnectController)(EFI_HANDLE ControllerHandle, EFI_HANDLE *DriverImageHandle, void *RemainingDevicePath, bool Recursive);
     void *DisconnectController;
     EFI_STATUS (*OpenProtocol)(EFI_HANDLE, const EFI_GUID *, void **, EFI_HANDLE Agent, EFI_HANDLE Controller, uint32_t Attributes);
     EFI_STATUS (*CloseProtocol)(EFI_HANDLE, const EFI_GUID *, EFI_HANDLE Agent, EFI_HANDLE Controller);

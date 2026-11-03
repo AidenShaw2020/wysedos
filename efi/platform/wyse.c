@@ -22,6 +22,7 @@
 #include "installer.h"
 #include "delltoken.h"
 #include "blkcache.h"
+#include "hostblk.h"
 #include "ide.h"
 #include "gmsynth.h"
 #include "../include/efi.h"
@@ -190,6 +191,12 @@ int load_rom(void *phys_mem, const char *file, uword addr, int backward) {
 // USB floppy and CD drives: hostblk.c. The guest's NE2000 is bridged to the
 // onboard NIC, whose MAC it takes (net.c keeps the monitor's own UDP apart).
 void hostblk_list(void);
+void hostblk_usb_start(void (*change)(int port, BlockDev *dev, unsigned serial));
+static int usb_storage_enabled = 1;
+static void guest_usb_change(int port, BlockDev *dev, unsigned serial) {
+    extern PC *g_wyse_pc;
+    if (g_wyse_pc) uhci_attach(g_wyse_pc->uhci, port, dev, serial);
+}
 static int guest_send(void *ctx, const uint8_t *buf, int len) { return net_guest_send(buf, len); }
 static int guest_poll(void *ctx, uint8_t *buf, int cap) { return net_guest_poll(buf, cap); }
 
@@ -269,7 +276,7 @@ static void local_to_rtc(const CmosDateTime *dt, EFI_TIME *t) {
 // The [pc] keys only wyseDOS reads, for config_save.c to write back
 const char *config_platform_lines(void) {
     static char lines[96];
-    snprintf(lines, sizeof(lines), "timezone=%s\n%s", tz_cet ? "cet" : "utc",
+    snprintf(lines, sizeof(lines), "timezone=%s\nusb_storage=%d\n%s", tz_cet ? "cet" : "utc", usb_storage_enabled,
              g_net_accept_broadcast ? "devctl=1\n" : "");
     return lines;
 }
@@ -289,7 +296,8 @@ uint32_t wyse_fat_time(void) {
 //--------------------------------------------------------------------+
 
 typedef struct {
-    char bios[128], vga_bios[128], fdd0[128], fdd1[128], ata0[128], ata1[128];
+    char bios[128], vga_bios[128], fdd0[128], fdd1[128], ata0[128], ata1[128], ata2[128], ata3[128];
+    int iscd[4];
     char mem[24], vga_mem[24];
     int cpu, fpu;
 } cfg_t;
@@ -315,6 +323,7 @@ static void copy_value(char *dst, size_t cap, const char *v) {
 static int cfg_handler(void *user, const char *section, const char *name, const char *value) {
     cfg_t *c = user;
     if (!strcmp(name, "devctl")) g_net_accept_broadcast = atoi(value) != 0;
+    else if (!strcmp(name, "usb_storage")) usb_storage_enabled = atoi(value) != 0;
     else if (!strcmp(name, "hwvga")) {
         extern int g_hwvga_wanted;
         g_hwvga_wanted = atoi(value) != 0;
@@ -324,8 +333,14 @@ static int cfg_handler(void *user, const char *section, const char *name, const 
     else if (!strcmp(name, "vga_bios")) copy_value(c->vga_bios, sizeof(c->vga_bios), value);
     else if (!strcmp(name, "fda")) copy_value(c->fdd0, sizeof(c->fdd0), value);
     else if (!strcmp(name, "fdb")) copy_value(c->fdd1, sizeof(c->fdd1), value);
-    else if (!strcmp(name, "hda")) copy_value(c->ata0, sizeof(c->ata0), value);
-    else if (!strcmp(name, "hdb")) copy_value(c->ata1, sizeof(c->ata1), value);
+    else if (!strcmp(name, "hda")) { copy_value(c->ata0, sizeof(c->ata0), value); c->iscd[0] = 0; }
+    else if (!strcmp(name, "hdb")) { copy_value(c->ata1, sizeof(c->ata1), value); c->iscd[1] = 0; }
+    else if (!strcmp(name, "hdc")) { copy_value(c->ata2, sizeof(c->ata2), value); c->iscd[2] = 0; }
+    else if (!strcmp(name, "hdd")) { copy_value(c->ata3, sizeof(c->ata3), value); c->iscd[3] = 0; }
+    else if (!strcmp(name, "cda")) { copy_value(c->ata0, sizeof(c->ata0), value); c->iscd[0] = 1; }
+    else if (!strcmp(name, "cdb")) { copy_value(c->ata1, sizeof(c->ata1), value); c->iscd[1] = 1; }
+    else if (!strcmp(name, "cdc")) { copy_value(c->ata2, sizeof(c->ata2), value); c->iscd[2] = 1; }
+    else if (!strcmp(name, "cdd")) { copy_value(c->ata3, sizeof(c->ata3), value); c->iscd[3] = 1; }
     else if (!strcmp(name, "mem")) copy_value(c->mem, sizeof(c->mem), value);
     else if (!strcmp(name, "vga_mem")) copy_value(c->vga_mem, sizeof(c->vga_mem), value);
     else if (!strcmp(name, "cpu") || !strcmp(name, "gen")) c->cpu = atoi(value);
@@ -354,8 +369,12 @@ static bool load_config(PCConfig *conf) {
     conf->fdd[1] = c.fdd1;
     conf->ata[0] = c.ata0;
     conf->ata[1] = c.ata1;
+    conf->ata[2] = c.ata2;
+    conf->ata[3] = c.ata3;
+    for (int i = 0; i < 4; i++) conf->iscd[i] = c.iscd[i];
     conf->cpu_gen = c.cpu;
     conf->fpu = c.fpu;
+    conf->usb_storage = usb_storage_enabled;
     conf->mem_size = parse_size(c.mem);
     if (!conf->mem_size) conf->mem_size = 16L << 20;
     conf->vga_mem_size = parse_size(c.vga_mem);
@@ -363,13 +382,24 @@ static bool load_config(PCConfig *conf) {
     conf->width = 640;
     conf->height = 480;
     conf->vga_force_8dm = 1;
-    // a USB floppy drive is drive A and a USB CD drive the secondary master
-    // unless the configuration says otherwise, as on X86Pi
+    // a USB floppy drive is drive A, a USB CD drive the secondary master, and
+    // USB flash / external disks attach to the free slave ATA slots by default
     if (!conf->fdd[0][0] && blk_host_available("ufd1")) conf->fdd[0] = "usb:ufd1";
     if (!conf->fdd[1][0] && blk_host_available("ufd2")) conf->fdd[1] = "usb:ufd2";
-    if (blk_host_available("ucd1")) {
+    if (!conf->ata[2][0] && blk_host_available("ucd1")) {
         conf->ata[2] = "usb:ucd1";
         conf->iscd[2] = 1;
+    }
+    if (!conf->usb_storage && blk_host_available("uhd1")) {
+        if (!conf->ata[1][0]) { conf->ata[1] = "usb:uhd1"; conf->iscd[1] = 0; }
+        else if (!conf->ata[3][0] && strcmp(conf->ata[1], "usb:uhd1") != 0) {
+            conf->ata[3] = "usb:uhd1";
+            conf->iscd[3] = 0;
+        }
+    }
+    if (!conf->usb_storage && blk_host_available("uhd2") && !conf->ata[3][0]) {
+        conf->ata[3] = "usb:uhd2";
+        conf->iscd[3] = 0;
     }
     return true;
 }
@@ -931,6 +961,36 @@ static void poll_control(PC *pc) {
     } else if (!strncmp(cmd, "hiddebug", 8)) {
         extern int hid_debug;
         hid_debug = atoi(cmd + 8);
+    } else if (!strncmp(cmd,"fddhash ",8)) {
+        int drive=atoi(cmd+8);
+        BlockDev *dev=drive>=0 && drive<2?fdd_get_dev(drive):NULL;
+        if (!diskui_is_open() || !dev || !blk_size(dev)) {
+            printf("fddhash: pause in Disk Manager and attach a floppy first\n");
+        } else {
+            static uint8_t data[8192];
+            uint64_t saved=dev->pos,size=blk_size(dev),hash=14695981039346656037ULL;
+            int ok=1;
+            for (uint64_t off=0;off<size;) {
+                unsigned n=size-off>sizeof(data)?sizeof(data):(unsigned)(size-off);
+                if (blk_pread(dev,off,data,n)!=(int)n) { ok=0; break; }
+                for (unsigned i=0;i<n;i++) hash=(hash^data[i])*1099511628211ULL;
+                off+=n;
+            }
+            if (blk_seek(dev,saved)<0) ok=0;
+            printf("fddhash: %d size %llu FNV64 %016llx %s\n",drive,
+                   (unsigned long long)size,(unsigned long long)hash,ok?"OK":"FAILED");
+        }
+    } else if (!strcmp(cmd, "usb")) {
+        uhci_report(pc->uhci);
+    } else if (!strncmp(cmd, "usb eject ", 10)) {
+        printf("usb: eject %s\n", hostblk_usb_eject(atoi(cmd + 10)) ? "OK" : "refused");
+    } else if (!strncmp(cmd, "usb insert ", 11)) {
+        char *which;
+        long port = strtol(cmd + 11, &which, 10);
+        if (which != cmd + 11 && *which == ' ' && port >= 0 && port < 2)
+            printf("usb: insert %s\n", hostblk_usb_insert((int)port, which + 1) ? "OK" : "refused");
+        else
+            printf("usb: usage: usb insert <0|1> uhdN\n");
     } else if (!strncmp(cmd, "hid", 3)) {
         void usbhid_report(void);
         usbhid_report();
@@ -1271,6 +1331,7 @@ void wyse_main(void) {
     PC *pc = pc_new(redraw, NULL, NULL, (uint8_t *)surface, &conf);
     if (!pc) wyse_fatal("pc_new failed");
     g_wyse_pc = pc;
+    if (pc->uhci) hostblk_usb_start(guest_usb_change);
     net_bind_host(pc->ne2000);
     // what the menus show and change: the machine as read, and the live settings applied
     config_note_machine((int)(conf.mem_size >> 20), conf.cpu_gen);
@@ -1341,10 +1402,12 @@ void wyse_main(void) {
         firmware_events_poll(now);
         if (now - last_input > 2000) {
             uint64_t th = rdtsc_();
-            // keyboards and mice plugged in or pulled out while running
+            // keyboards, mice and USB storage plugged in or pulled out while running
             static uint64_t last_scan;
             if (now - last_scan > 1000000) {
+                void hostblk_poll(void);
                 hid = usbhid_scan();
+                hostblk_poll();
                 last_scan = now;
             }
             if (hid) {

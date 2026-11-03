@@ -331,7 +331,7 @@ static bool runtime_file(const char *name) {
     return strncmp(name,"emmc-before-native",18) && strcmp(name,"config.ini") &&
         (!dot || (strcasecmp(dot,".img") && strcasecmp(dot,".partial")));
 }
-static uint64_t tree_size(const char *dir) {
+static uint64_t tree_size(const char *dir, bool runtime) {
     DIR d;
     FILINFO fi;
     uint64_t sum = 0;
@@ -339,7 +339,7 @@ static uint64_t tree_size(const char *dir) {
     while (f_readdir(&d, &fi) == FR_OK && fi.fname[0]) {
         char p[300];
         snprintf(p, sizeof(p), "%s/%s", dir, fi.fname);
-        sum += fi.fattrib & AM_DIR ? tree_size(p) : (runtime_file(fi.fname)?fi.fsize:0);
+        sum += fi.fattrib & AM_DIR ? tree_size(p,runtime) : ((!runtime || runtime_file(fi.fname))?fi.fsize:0);
     }
     f_closedir(&d);
     return sum;
@@ -385,17 +385,22 @@ static bool copy_file(const char *from, const char *to) {
     return ok;
 }
 
-static bool copy_tree(const char *from, const char *to) {
+static bool copy_tree(const char *from, const char *to, bool runtime) {
     DIR d;
     FILINFO fi;
-    f_mkdir(to);
+    FRESULT result=f_mkdir(to);
+    if (result!=FR_OK && result!=FR_EXIST) return false;
     if (f_opendir(&d, from) != FR_OK) return false;
     bool ok = true;
-    while (ok && f_readdir(&d, &fi) == FR_OK && fi.fname[0]) {
+    while (ok) {
+        result=f_readdir(&d,&fi);
+        if (result!=FR_OK) { ok=false; break; }
+        if (!fi.fname[0]) break;
         char a[300], b[300];
-        snprintf(a, sizeof(a), "%s/%s", from, fi.fname);
-        snprintf(b, sizeof(b), "%s/%s", to, fi.fname);
-        ok = fi.fattrib & AM_DIR ? copy_tree(a, b) : (!runtime_file(fi.fname) || copy_file(a, b));
+        if (snprintf(a,sizeof(a),"%s/%s",from,fi.fname)>=(int)sizeof(a) ||
+            snprintf(b,sizeof(b),"%s/%s",to,fi.fname)>=(int)sizeof(b)) { ok=false; break; }
+        ok = fi.fattrib & AM_DIR ? copy_tree(a,b,runtime) :
+             (runtime && !runtime_file(fi.fname)) || copy_file(a,b);
     }
     f_closedir(&d);
     return ok;
@@ -672,8 +677,21 @@ void installer_run(void) {
     if (f_stat("EFI/BOOT/BOOTX64.EFI",NULL)!=FR_OK || f_stat("386/config.ini",NULL)!=FR_OK ||
         f_stat("386/guest_mbr.bin",NULL)!=FR_OK || f_stat("386/bios.bin",NULL)!=FR_OK ||
         f_stat("386/vgabios.bin",NULL)!=FR_OK) stop("Installation files missing");
-    total_bytes=tree_size("386"); copied_bytes=0; last_percent=-1;
+    FILINFO driver_dir;
+    if (f_stat("DRIVERS",&driver_dir)!=FR_OK || !(driver_dir.fattrib&AM_DIR))
+        stop("Unpacked DRIVERS bundle missing");
+    static const char *driver_files[]={"DRIVERS/README.TXT","DRIVERS/SHA256.TXT",
+        "DRIVERS/VGA/vmdisp9x.inf","DRIVERS/USBDOS/USBUHCIL.COM",
+        "DRIVERS/USBDOS/USBDRIVE.COM","DRIVERS/CTMOUSE/CTMOUSE.EXE",
+        "DRIVERS/NUSBFE/_nusb.inf","DRIVERS/NUSBSE/_nusb.inf"};
+    for (unsigned i=0;i<sizeof(driver_files)/sizeof(driver_files[0]);i++) {
+        FILINFO file;
+        if (f_stat(driver_files[i],&file)!=FR_OK || !file.fsize || (file.fattrib&AM_DIR))
+            stop("Driver bundle incomplete - eMMC unchanged");
+    }
+    total_bytes=tree_size("386",true); copied_bytes=0; last_percent=-1;
     if (total_bytes+4*1024*1024>ESP_BLOCKS*512) stop("Monitor files do not fit firmware partition");
+    total_bytes+=tree_size("DRIVERS",false);
     step_wait(3000000);
     snprintf(detail,sizeof(detail),"eMMC %llu MiB. ERASE eMMC? Y = install, any other key = cancel",
         (unsigned long long)(blocks/2048));
@@ -697,7 +715,14 @@ void installer_run(void) {
     copy_start_us=wyse_ticks_us();
     f_mkdir("2:EFI"); f_mkdir("2:EFI/BOOT");
     if (!copy_file("EFI/BOOT/BOOTX64.EFI","2:EFI/BOOT/BOOTX64.EFI") ||
-        !copy_tree("386","2:386") || !write_native_config()) stop("Copying monitor files failed");
+        !copy_tree("386","2:386",true) || !write_native_config()) stop("Copying monitor files failed");
+    /* Mount only the freshly formatted guest FAT32 partition. The guest MBR
+     * reserves 2048 sectors inside its protected container. */
+    if (fatvol_attach(FATVOL_TARGET_DATA,emmc,guest.first+2048,guest.count-2048)!=FR_OK)
+        stop("Cannot mount guest partition for drivers");
+    if (graphical) installer_ui_status(copy_step,"Copying unpacked drivers to C:\\DRIVERS",last_percent<0?30:30+(unsigned)last_percent*60/100);
+    if (!copy_tree("DRIVERS","3:DRIVERS",false)) stop("Copying guest drivers failed");
+    fatvol_detach(FATVOL_TARGET_DATA);
     step("5 / 6 - Setting boot entry","UEFI starts wyseDOS; DOS sees only the guest disk",92);
     if (!add_boot_entry(&esp)) stop("Cannot write UEFI boot entry");
     step("6 / 6 - Finishing","Flushing files and configuring firmware",97);

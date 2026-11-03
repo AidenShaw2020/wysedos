@@ -57,6 +57,7 @@ typedef struct {
     BYTE flag;
     DWORD *cltbl;
     BYTE backend;           // FS_NETFS or FS_FAT
+    BYTE image_volume;      // exclusive USB image source volume + 1, or zero
     uint64_t fat[80];       // FatFs's own FIL (FATVOL_FIL_BYTES)
 } FIL;
 

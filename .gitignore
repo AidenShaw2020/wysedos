@@ -5,6 +5,8 @@ tools/pico-hid/build/
 *.o
 *.obj
 *.exe
+!drivers/windows9x/nusb/nusb320-fe.exe
+!drivers/windows9x/nusb/nusb36e.exe
 *.efi
 *.aml
 
@@ -19,6 +21,8 @@ GAMES/
 
 # Local development rig state, logs, captures and scratch files
 backups/
+disks/recovery/
+disks/FDDUSB/
 work/
 recordings/
 tools/hdmi-live/
@@ -40,3 +44,8 @@ __pycache__/
 *.pyc
 .DS_Store
 Thumbs.db
+
+# Preserve the upstream DOS driver archive; local extracted copies are staging.
+drivers/dos/usbdos/*
+!drivers/dos/usbdos/usbdos.zip
+!drivers/dos/usbdos/README.md

@@ -107,6 +107,9 @@ int blk_bind_host(BlockDev *d, const char *which);
  * whether to offer it. */
 int blk_host_available(const char *which);
 
+/* Capacity in MiB of a host block device ("uhd1", etc.), or 0 if unknown. */
+uint64_t blk_host_size_mb(const char *which);
+
 #ifdef __cplusplus
 }
 #endif

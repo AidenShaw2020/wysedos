@@ -78,6 +78,7 @@ struct PCIDevice {
     uint8_t next_cap_offset; /* offset of the next capability */
     char *name; /* for debug only */
     PCIIORegion io_regions[PCI_NUM_REGIONS];
+    uint8_t fixed_irq_plus_one;
 };
 
 struct PCIBus {
@@ -88,6 +89,10 @@ struct PCIBus {
     uint32_t irq_state[4][8]; /* one bit per device */
 //    IRQSignal irq[4];
 };
+uint8_t pci_device_get_config8(PCIDevice *d, uint8_t addr) { return d->config[addr]; }
+void pci_device_set_fixed_irq(PCIDevice *d, uint8_t irq) {
+    d->fixed_irq_plus_one=irq+1; d->config[0x3c]=irq;
+}
 
 static int bus_map_irq(PCIDevice *d, int irq_num)
 {
@@ -314,6 +319,11 @@ static void pci_device_config_write8(PCIDevice *d, uint32_t addr,
                                      uint32_t data)
 {
     int can_write;
+
+    /* This board wires dedicated virtual devices directly to a PIC input.
+     * Keep that resource visible even when a BIOS without a PIRQ router
+     * tries to replace Interrupt Line with zero during PCI enumeration. */
+    if(addr==PCI_INTERRUPT_LINE && d->fixed_irq_plus_one) return;
 
     if (addr == PCI_STATUS || addr == (PCI_STATUS + 1)) {
         /* write 1 reset bits */

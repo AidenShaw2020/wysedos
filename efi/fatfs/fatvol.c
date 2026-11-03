@@ -13,6 +13,7 @@
 #include "../platform/bio.h"
 #include "../platform/fatvol.h"
 #include "../platform/blkcache.h"
+#include "../../pc/blockdev.h"
 
 _Static_assert(sizeof(FIL) <= FATVOL_FIL_BYTES, "FATVOL_FIL_BYTES too small");
 _Static_assert(sizeof(DIR) <= FATVOL_DIR_BYTES, "FATVOL_DIR_BYTES too small");
@@ -21,6 +22,7 @@ uint32_t wyse_fat_time(void);
 
 typedef struct {
     EFI_BLOCK_IO_PROTOCOL *bio;
+    BlockDev *block;
     uint64_t first, count;
     bool mounted;
     FATFS fs;
@@ -32,18 +34,34 @@ static vol_t vols[FF_VOLUMES];
 // FatFs's disk interface
 //--------------------------------------------------------------------+
 
-DSTATUS disk_status(BYTE pdrv) { return pdrv < FF_VOLUMES && vols[pdrv].bio ? 0 : STA_NOINIT; }
+DSTATUS disk_status(BYTE pdrv) {
+    if (pdrv>=FF_VOLUMES) return STA_NOINIT;
+    vol_t *v=&vols[pdrv];
+    if (v->block) return blk_size(v->block)?(v->block->readonly?STA_PROTECT:0):STA_NOINIT;
+    return v->bio?0:STA_NOINIT;
+}
 DSTATUS disk_initialize(BYTE pdrv) { return disk_status(pdrv); }
 
 DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
+    if (pdrv>=FF_VOLUMES) return RES_PARERR;
     vol_t *v = &vols[pdrv];
+    if (v->block) {
+        if (sector>v->count || count>v->count-sector || count>0x7fffff) return RES_PARERR;
+        return blk_pread(v->block,(uint64_t)sector*512,buff,count*512)==(int)(count*512)?RES_OK:RES_ERROR;
+    }
     if (!v->bio) return RES_NOTRDY;
     if ((uint64_t)sector + count > v->count) return RES_PARERR;
     return EFI_ERROR(blkcache_read(v->bio, v->first + sector, count, buff)) ? RES_ERROR : RES_OK;
 }
 
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
+    if (pdrv>=FF_VOLUMES) return RES_PARERR;
     vol_t *v = &vols[pdrv];
+    if (v->block) {
+        if (v->block->readonly) return RES_WRPRT;
+        if (sector>v->count || count>v->count-sector || count>0x7fffff) return RES_PARERR;
+        return blk_pwrite(v->block,(uint64_t)sector*512,buff,count*512)==(int)(count*512)?RES_OK:RES_ERROR;
+    }
     if (!v->bio) return RES_NOTRDY;
     if ((uint64_t)sector + count > v->count) return RES_PARERR;
     EFI_STATUS st = blkcache_write(v->bio, v->first + sector, count, buff);
@@ -52,7 +70,18 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
 }
 
 DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
+    if (pdrv>=FF_VOLUMES) return RES_PARERR;
     vol_t *v = &vols[pdrv];
+    if (v->block) {
+        if (!blk_size(v->block)) return RES_NOTRDY;
+        switch(cmd) {
+        case CTRL_SYNC: return blk_sync(v->block)<0?RES_ERROR:RES_OK;
+        case GET_SECTOR_COUNT: *(LBA_t *)buff=(LBA_t)v->count; return RES_OK;
+        case GET_SECTOR_SIZE: *(WORD *)buff=512; return RES_OK;
+        case GET_BLOCK_SIZE: *(DWORD *)buff=1; return RES_OK;
+        default: return RES_PARERR;
+        }
+    }
     if (!v->bio) return RES_NOTRDY;
     switch (cmd) {
     case CTRL_SYNC: return EFI_ERROR(blkcache_flush(v->bio)) ? RES_ERROR : RES_OK;
@@ -93,10 +122,21 @@ int fatvol_attach(int vol, void *block_io, uint64_t first_lba, uint64_t count) {
 }
 
 void fatvol_detach(int vol) {
-    if (vol < 0 || vol >= FF_VOLUMES || !vols[vol].bio) return;
+    if (vol < 0 || vol >= FF_VOLUMES || (!vols[vol].bio && !vols[vol].block)) return;
     char p[4];
     f_mount(NULL, vpath(vol, "", p, sizeof(p)), 0);
     memset(&vols[vol], 0, sizeof(vols[vol]));
+}
+int fatvol_attach_block(int vol,BlockDev *block) {
+    uint64_t size=blk_size(block);
+    if (vol<4 || vol>=FF_VOLUMES || !size || size%512 || size/512>0xffffffffull)
+        return FR_INVALID_PARAMETER;
+    fatvol_detach(vol);
+    vol_t *v=&vols[vol]; v->block=block; v->count=size/512;
+    char p[4];
+    FRESULT r=f_mount(&v->fs,vpath(vol,"",p,sizeof(p)),1);
+    v->mounted=r==FR_OK;
+    return r;
 }
 
 bool fatvol_attached(int vol) { return vol >= 0 && vol < FF_VOLUMES && vols[vol].mounted; }

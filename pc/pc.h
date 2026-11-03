@@ -21,6 +21,7 @@
 #include "ini.h"
 #include "sn76489.h"
 #include "fdd.h"
+#include "uhci.h"
 
 /// Platform HAL
 uint32_t get_uticks();
@@ -105,6 +106,7 @@ typedef struct {
 
 	IDEIFState *ide;
 	IDEIFState *ide2;
+	UHCIState *uhci;
 	PCIDevice *pci_ide;
 
 	I440FXState *i440fx;
@@ -147,6 +149,7 @@ typedef struct {
 	int fpu;
 	int enable_serial;
 	int vga_force_8dm;
+	int usb_storage;
 } PCConfig;
 
 PC *pc_new(SimpleFBDrawFunc *redraw, void (*poll)(void *), void *redraw_data,

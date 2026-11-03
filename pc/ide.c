@@ -2218,6 +2218,79 @@ int ide_attach_ata(IDEIFState *s, int drive, BlockDev *dev,
     return s->drives[drive] ? 0 : -1;
 }
 
+void ide_sync_ata(IDEIFState *s, int drive, BlockDev *dev,
+                  int cylinders, int heads, int sectors)
+{
+    if (!s || drive < 0 || drive >= 2) return;
+    IDEState *d = s->drives[drive];
+    int selected=d && s->cur_drive==d;
+    if (dev && blk_present(dev)) {
+        if (d && d->drive_kind == IDE_CD) {
+            free(d->rcache);
+            free(d->wcache);
+            free(d);
+            d = s->drives[drive] = NULL;
+        }
+        if (!d) {
+            ide_attach_ata(s, drive, dev, cylinders, heads, sectors);
+            if (selected) s->cur_drive=s->drives[drive];
+            return;
+        }
+        if (d->wcache_len) ide_wcache_flush(d);
+        d->dev          = dev;
+        d->nb_sectors   = (int64_t)blk_size(dev) / SECTOR_SIZE;
+        d->start_offset = 0;
+        if (cylinders && heads && sectors) {
+            d->cylinders = cylinders;
+            d->heads     = heads;
+            d->sectors   = sectors;
+        }
+        d->cur_heads    = d->heads;
+        d->cur_sectors  = d->sectors;
+        d->rcache_active = 0;
+        d->wcache_len    = 0;
+        d->xfer_left     = 0;
+        d->xfer_is_write = 0;
+        d->xfer_done     = ide_transfer_stop;
+        d->status        = READY_STAT | SEEK_STAT;
+        d->error         = 0;
+    } else if (d && d->drive_kind == IDE_HD) {
+        if (d->wcache_len) ide_wcache_flush(d);
+        free(d->rcache);
+        free(d->wcache);
+        free(d);
+        s->drives[drive] = NULL;
+        if (selected)
+            s->cur_drive = s->drives[0];
+    }
+}
+int ide_prepare_media(IDEIFState *s,int drive,int discard) {
+    if (!s || drive<0 || drive>=2 || !s->drives[drive]) return 0;
+    IDEState *d=s->drives[drive];
+    if (!discard) {
+        if (d->xfer_left || (d->wcache_len && ide_wcache_flush(d)<0)) return -1;
+        if (blk_present(d->dev) && blk_size(d->dev) && blk_sync(d->dev)<0) return -1;
+    }
+    for (int i=0;i<IDE_DIRTY_MAX;i++) if (d->dev && ide_dirty[i]==d->dev) {
+        for (int k=i;k+1<IDE_DIRTY_MAX;k++) ide_dirty[k]=ide_dirty[k+1];
+        ide_dirty[IDE_DIRTY_MAX-1]=NULL; i--;
+    }
+    d->wcache_len=0; d->rcache_active=0; d->xfer_left=0;
+    d->xfer_is_write=0; d->xfer_done=ide_transfer_stop;
+    return 0;
+}
+void ide_sync_cd(IDEIFState *s,int drive,BlockDev *dev) {
+    if (!s || drive<0 || drive>=2) return;
+    IDEState *d=s->drives[drive];
+    int selected=d && s->cur_drive==d;
+    if (d && d->drive_kind!=IDE_CD) {
+        free(d->rcache); free(d->wcache); free(d); s->drives[drive]=NULL;
+    }
+    if (!s->drives[drive]) ide_attach_cd(s,drive);
+    if (selected) s->cur_drive=s->drives[drive];
+    ide_change_cd(s,drive,dev,1);
+}
+
 /* Attach empty ATAPI CD-ROM device (no image loaded yet) */
 int ide_attach_cd(IDEIFState *s, int drive)
 {
@@ -2286,27 +2359,33 @@ void ide_fill_cmos(IDEIFState *s, void *cmos,
                    uint8_t (*set)(void *cmos, int addr, uint8_t val))
 {
     uint8_t d_0x12 = 0;
-    if (s->drives[0]) {
+    if (s->drives[0] && s->drives[0]->drive_kind == IDE_HD) {
+        int c0 = s->drives[0]->cylinders > 1024 ? 1024 : s->drives[0]->cylinders;
         d_0x12 |= 0xf0;
         set(cmos, 0x19, 47);
-        set(cmos, 0x1b, set(cmos, 0x21, s->drives[0]->cylinders));
-        set(cmos, 0x1c, set(cmos, 0x22, s->drives[0]->cylinders >> 8));
+        set(cmos, 0x1b, set(cmos, 0x21, c0));
+        set(cmos, 0x1c, set(cmos, 0x22, c0 >> 8));
         set(cmos, 0x1d, s->drives[0]->heads);
         set(cmos, 0x1e, 0xff);
         set(cmos, 0x1f, 0xff);
         set(cmos, 0x20, 0xc0 | ((s->drives[0]->heads > 8) << 3));
         set(cmos, 0x23, s->drives[0]->sectors);
+    } else {
+        set(cmos, 0x19, 0);
     }
-    if (s->drives[1]) {
+    if (s->drives[1] && s->drives[1]->drive_kind == IDE_HD) {
+        int c1 = s->drives[1]->cylinders > 1024 ? 1024 : s->drives[1]->cylinders;
         d_0x12 |= 0x0f;
         set(cmos, 0x1a, 47);
-        set(cmos, 0x24, set(cmos, 0x2a, s->drives[1]->cylinders));
-        set(cmos, 0x25, set(cmos, 0x2b, s->drives[1]->cylinders >> 8));
+        set(cmos, 0x24, set(cmos, 0x2a, c1));
+        set(cmos, 0x25, set(cmos, 0x2b, c1 >> 8));
         set(cmos, 0x26, s->drives[1]->heads);
         set(cmos, 0x27, 0xff);
         set(cmos, 0x28, 0xff);
         set(cmos, 0x29, 0xc0 | ((s->drives[1]->heads > 8) << 3));
         set(cmos, 0x2c, s->drives[1]->sectors);
+    } else {
+        set(cmos, 0x1a, 0);
     }
     set(cmos, 0x12, d_0x12);
 }

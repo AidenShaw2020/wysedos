@@ -122,7 +122,12 @@ static void emulink_exec(PC *pc)
 {
 	switch (pc->emulink.cmd) {
 	case 0x000:
+#ifdef WYSE_BUILD
+		/* Let BIOS and protected-mode guests share the real FDC model. */
+		pc->emulink.status = 0;
+#else
 		pc->emulink.status = 0xaa55ff00;
+#endif
 		pc->emulink.cmd    = -1;
 		break;
 	case 0x100:
@@ -277,6 +282,8 @@ void debug_write(const char *fmt, ...) {
 static __always_inline u8 _pc_io_read(void *o, int addr)
 {
 	PC *pc = o;
+	uint32_t usb_value;
+	if (uhci_io(pc->uhci, addr, 1, 0, &usb_value)) return usb_value;
 #if defined(WYSE_BUILD)
     uint32_t acpi_value;if (acpi_io_read(addr,1,&acpi_value)) return acpi_value;
 #endif
@@ -570,6 +577,8 @@ static u8 pc_io_read(void *o, int addr) {
 static __always_inline u16 _pc_io_read16(void *o, int addr)
 {
 	PC *pc = o;
+	uint32_t usb_value;
+	if (uhci_io(pc->uhci, addr, 2, 0, &usb_value)) return usb_value;
 	uint32_t nic_value;
 	if (ne2000_isa_read(pc->ne2000, addr, 2, &nic_value)) return nic_value;
 #if defined(WYSE_BUILD)
@@ -629,6 +638,8 @@ static u16 pc_io_read16(void *o, int addr) {
 static __always_inline u32 _pc_io_read32(void *o, int addr)
 {
 	PC *pc = o;
+	uint32_t usb_value;
+	if (uhci_io(pc->uhci, addr, 4, 0, &usb_value)) return usb_value;
 #if defined(WYSE_BUILD)
     uint32_t acpi_value;if (acpi_io_read(addr,4,&acpi_value)) return acpi_value;
 #endif
@@ -704,6 +715,8 @@ static void pc_io_write_impl(void *o, int addr, u8 val)
 	frank_diag_port((uint32_t)addr, 1);
 	debug_write("W8: %ph -> %02Xh\n", addr, val);
 	PC *pc = o;
+	uint32_t usb_value = val;
+	if (uhci_io(pc->uhci, addr, 1, 1, &usb_value)) return;
 	if (__builtin_expect(iot_port(addr), 0)) { iot_pc = pc; io_trace_note('w', addr, val); }
 	if (addr == 0x21) iot_imr(pc, addr, val);
 	if (ne2000_isa_write(pc->ne2000, addr, 1, val)) return;
@@ -933,6 +946,8 @@ static void pc_io_write16_impl(void *o, int addr, u16 val)
 	debug_write("W16: %ph -> %04Xh\n", addr, val);
 	PC *pc = o;
 	if (ne2000_isa_write(pc->ne2000, addr, 2, val)) return;
+	uint32_t usb_value = val;
+	if (uhci_io(pc->uhci, addr, 2, 1, &usb_value)) return;
 	switch(addr) {
 	/* IDE ports */
 	case 0x1f0:
@@ -990,6 +1005,8 @@ static void pc_io_write32_impl(void *o, int addr, u32 val)
 	frank_diag_port((uint32_t)addr, 1);
 	debug_write("W32: %ph -> %08Xh\n", addr, val);
 	PC *pc = o;
+	uint32_t usb_value = val;
+	if (uhci_io(pc->uhci, addr, 4, 1, &usb_value)) return;
 	switch(addr) {
 	/* IDE ports */
 	case 0x1f0:
@@ -1172,6 +1189,14 @@ void pc_step(PC *pc)
 #define STEP_T(i) ((void)0)
 #endif
 	int refresh = vga_step(pc->vga);
+	if (pc->uhci) {
+#if defined(WYSE_BUILD)
+		extern uint64_t wyse_ticks_us(void);
+		uhci_poll(pc->uhci, wyse_ticks_us());
+#else
+		uhci_poll(pc->uhci, get_uticks());
+#endif
+	}
 	i8254_update_irq(pc->pit);
 	cmos_update_irq(pc->cmos);
 	if (pc->enable_serial)
@@ -1599,6 +1624,17 @@ static void fdc_mediachange_notify(int drive) {
  *   ata[3] -> ide2, drive 1  (secondary slave)
  */
 static PC *_pc_for_cdrom = NULL;
+static int ata_prepare_change(int drive,int discard) {
+    if (!_pc_for_cdrom) return 0;
+    return ide_prepare_media(drive<2?_pc_for_cdrom->ide:_pc_for_cdrom->ide2,drive%2,discard);
+}
+static void ata_finish_change(int drive) {
+    if (!_pc_for_cdrom) return;
+    IDEIFState *bus=drive<2?_pc_for_cdrom->ide:_pc_for_cdrom->ide2;
+    BlockDev *dev=ata_is_inserted(drive)?ata_get_dev(drive):NULL;
+    if (ata_is_cdrom(drive)) ide_sync_cd(bus,drive%2,dev);
+    else ide_sync_ata(bus,drive%2,dev,ata_get_cyls(drive),ata_get_heads(drive),ata_get_sects(drive));
+}
 static void cdrom_change_notify(int drivenum, const char *filename, int was_present) {
     if (!_pc_for_cdrom) return;
     IDEIFState *ide = drivenum < 2 ? _pc_for_cdrom->ide : _pc_for_cdrom->ide2;
@@ -1700,6 +1736,7 @@ PC *pc_new(SimpleFBDrawFunc *redraw, void (*poll)(void *), void *redraw_data,
 	/* Register CD-ROM callback BEFORE insertdisk so the callback fires
 	 * correctly when insertdisk opens a configured CD image below. */
 	_pc_for_cdrom = pc;
+    disk_set_ata_callbacks(ata_prepare_change,ata_finish_change);
 	disk_set_cdrom_change_callback(cdrom_change_notify);
 
 	/* Attach hard disks and configured CD-ROMs.
@@ -1756,6 +1793,9 @@ PC *pc_new(SimpleFBDrawFunc *redraw, void (*poll)(void *), void *redraw_data,
 	pc->phys_mem = mem;
 	pc->phys_mem_size = conf->mem_size;
 	pc->phys_mem_capacity = mem_capacity;
+	pc->uhci = conf->usb_storage
+		? uhci_new(pc->pcibus, piix3_devfn + 2, (uint8_t *)mem,
+		           conf->mem_size, pc->pic, set_irq) : NULL;
 
 	cb->io = pc;
 	cb->io_read8 = pc_io_read;
@@ -1877,7 +1917,7 @@ PC *pc_new(SimpleFBDrawFunc *redraw, void (*poll)(void *), void *redraw_data,
 	 * pointer, and the machine took a data abort before it ever booted.
 	 */
 	i8257_set_cpu(pc->isa_dma, pc->cpu);
-	/* Emulink FDD – virtual floppy on ports 0xF1F0/0xF1F4 (required by BIOS) */
+	/* Legacy Emulink registers; the Wyse BIOS uses the shared FDC model. */
 	memset(&pc->emulink, 0, sizeof(pc->emulink));
 	pc->emulink.cmd = -1;
 
@@ -2014,9 +2054,62 @@ void load_bios_and_reset(PC *pc)
 #if defined(WYSE_BUILD)
     acpi_reset(pc);
 #endif
+	uhci_reset(pc->uhci);
 	int bios_size = 0;
 	/* What the guest wrote is made durable before it starts over. */
 	ide_sync_idle(1);
+#if defined(WYSE_BUILD)
+	{
+		extern bool g_usb_hd_ejected_by_user;
+		if (!blk_host_available("uhd1"))
+			g_usb_hd_ejected_by_user = false;
+		for (int i = 1; i < 4; i++) {
+			const char *cur = ata_get_filename(i);
+			if (cur && strncmp(cur, "usb:uhd", 7) == 0) {
+				char saved[32];
+				snprintf(saved, sizeof(saved), "%s", cur);
+				insertdisk((uint8_t)i, false, false, saved);
+			}
+		}
+		if (!pc->uhci && !g_usb_hd_ejected_by_user) {
+			for (int u = 1; u <= 2; u++) {
+				char which[8], spec[16];
+				snprintf(which, sizeof(which), "uhd%d", u);
+				snprintf(spec, sizeof(spec), "usb:%s", which);
+				if (!blk_host_available(which)) continue;
+				bool already = false;
+				for (int i = 0; i < 4; i++) {
+					const char *cur = ata_get_filename(i);
+					if (cur && strcmp(cur, spec) == 0) already = true;
+				}
+				if (already) continue;
+				if (!ata_is_inserted(1))
+					insertdisk(1, false, false, spec);
+				else if (!ata_is_inserted(3))
+					insertdisk(3, false, false, spec);
+			}
+		}
+		for (int i = 0; i < 4; i++) {
+			IDEIFState *bus = i < 2 ? pc->ide : pc->ide2;
+			int drv = i < 2 ? i : i - 2;
+			if (ata_is_cdrom((uint8_t)i)) {
+				if (!ide_has_drive(bus, drv))
+					ide_attach_cd(bus, drv);
+				ide_change_cd(bus, drv, ata_is_inserted((uint8_t)i) ? ata_get_dev((uint8_t)i) : NULL, 0);
+			} else {
+				ide_sync_ata(bus, drv,
+				             ata_is_inserted((uint8_t)i) ? ata_get_dev((uint8_t)i) : NULL,
+				             ata_get_cyls((uint8_t)i),
+				             ata_get_heads((uint8_t)i),
+				             ata_get_sects((uint8_t)i));
+			}
+		}
+		if (pc->cmos) {
+			ide_fill_cmos(pc->ide, pc->cmos, cmos_set);
+			cmos_update_checksum(pc->cmos);
+		}
+	}
+#endif
 	if (pc->bios && pc->bios[0])
 		bios_size = load_rom(pc->phys_mem, pc->bios, 0x100000, 1);
 	hide_pnp_bios(pc);

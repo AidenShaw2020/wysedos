@@ -90,3 +90,9 @@ __attribute__((weak)) int blk_host_available(const char *which)
     (void)which;
     return 0;
 }
+
+__attribute__((weak)) uint64_t blk_host_size_mb(const char *which)
+{
+    (void)which;
+    return 0;
+}

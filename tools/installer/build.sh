@@ -13,6 +13,7 @@ cd "$(dirname "$0")"
 LLVM="${LLVM:-/c/Program Files/LLVM/bin}"
 OUT="${1:-out/wysedos-installer.img}"
 mkdir -p out/obj "$(dirname "$OUT")"
+"${PYTHON:-python}" prepare_drivers.py
 
 ../../efi/build.sh >/dev/null
 "$LLVM/clang" -O2 -DFF_NO_WINDOWS_H -D_CRT_SECURE_NO_WARNINGS -I../../efi/fatfs -Wno-everything \
@@ -24,7 +25,7 @@ cat > out/install.ini <<'EOF'
 EOF
 
 # the development rig's control port stays off on an installed machine
-grep -v '^devctl=' ../../disks/386/config.ini | sed 's/^hda=.*/hda=host:emmc/; s/^hdb=.*/hdb=/; s/^mem=.*/mem=16M/' > out/config.ini
+grep -v '^devctl=' ../../disks/386/config.ini | sed 's/^hda=.*/hda=host:emmc/; s/^hdb=.*/hdb=/; s/^fda=.*/fda=/; s/^fdb=.*/fdb=/; s/^mem=.*/mem=16M/' > out/config.ini
 
 rm -rf out/runtime
 mkdir -p out/runtime
@@ -33,5 +34,5 @@ for asset in ../../disks/386/*; do
     case "$asset" in *.img|*.iso|*.ima|*.orig|*.partial|*config.ini|*emmc-before-native*) continue;; esac
     cp "$asset" out/runtime/
 done
-out/mkusb.exe "$OUT" ../../efi/build/bootx64.efi=EFI/BOOT/BOOTX64.EFI out/install.ini=install.ini out/runtime=386 out/config.ini=386/config.ini
+out/mkusb.exe "$OUT" ../../efi/build/bootx64.efi=EFI/BOOT/BOOTX64.EFI out/install.ini=install.ini out/runtime=386 out/config.ini=386/config.ini out/DRIVERS=DRIVERS
 ls -l "$OUT"

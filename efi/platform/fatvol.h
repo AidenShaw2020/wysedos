@@ -26,6 +26,8 @@ typedef struct {
 // Put volume `vol` on blocks [first_lba, first_lba + count) of a 512-byte
 // Block I/O device and mount it (FR_NO_FILESYSTEM if it is not formatted)
 int fatvol_attach(int vol, void *block_io, uint64_t first_lba, uint64_t count);
+struct BlockDev;
+int fatvol_attach_block(int vol, struct BlockDev *block);
 void fatvol_detach(int vol);
 bool fatvol_attached(int vol);
 // Format an attached volume: FAT32 when it is big enough, else FAT16

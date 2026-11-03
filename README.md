@@ -83,6 +83,22 @@ can install an operating system onto it just as on a real PC:
 - **Disk Manager (`Win + F12`)**: open the on-screen disk manager at any time to
   mount floppy images (`.img` / `.ima`) in `A:` / `B:`, CD-ROM images (`.iso`)
   on the secondary IDE channel, or pick a boot device and restart.
+- **USB flash drives and external hard disks (experimental)**: with
+  `usb_storage=1` (the default), unassigned USB disks attach automatically to
+  the guest's virtual PIIX3 UHCI controller. Disk Manager shows their ownership
+  and lets you browse image files in arbitrary directories on FAT12/16/32
+  external media. Before taking a disk in Windows, close its files and use
+  the system's Stop/Eject dialog. Confirm the takeover in Disk Manager:
+  the entire source disk disappears from guest USB while any of its images
+  are mounted. After the last image is ejected, it is flushed and returned
+  automatically to USB. Image paths on external media are temporary and must
+  be selected again after a monitor restart. Guest C:/eMMC is not browsable.
+  A compatible guest USB mass-storage driver is still
+  required. Use the complete NUSB package matching FE/SE, or the DOS drivers
+  and instructions copied into `C:\DRIVERS` by the installer. The early
+  standalone INF under `drivers/windows9x/usb98fe/` is diagnostic only;
+  copying two storage files is insufficient for an unpatched Win98 FE.
+  Physical floppy and CD-ROM handling is unchanged.
 - **Windows 95 / 98 display driver**: `drivers/windows9x/vmdisp9x/` includes
   the [VMDisp9x](https://github.com/JHRobotics/vmdisp9x) 2D VBE display driver
   floppy image (`.ima`) and archive for the emulated Bochs VBE PCI adapter
@@ -168,6 +184,17 @@ Nuked OPL3 and the PC emulator into `efi/build/bootx64.efi`.
 This builds `efi/build/bootx64.efi` and packs it together with `disks/386/` into
 a bootable FAT32 USB image at `tools/installer/out/wysedos-installer.img`.
 
+The installer builder also requires Python 3 and 7-Zip. It checks pinned
+upstream archive hashes and adds an unpacked `DRIVERS/` payload. After creating
+the guest FAT32 partition, the installer copies it to `C:\DRIVERS`: VMDisp9x,
+Bret Johnson's DOS USB drivers, CuteMouse 2.1b4 (including sources), NUSB 3.20
+for Windows 98 FE and NUSB 3.6 for Windows 98 SE. The separate Win95 OSR2.1
+generic package is also included. These third-party drivers retain their own
+licenses; see [the bundled instructions](tools/installer/driver-docs/README.TXT).
+Installing Windows drivers remains a separate guest-side step; choose the
+package matching the Windows edition. The FE package was tested on this Wyse;
+the SE and Win95 packages are supplied without claiming a test on those OSes.
+
 ## Repository layout
 
 | Directory | Contents |
@@ -188,5 +215,8 @@ a bootable FAT32 USB image at `tools/installer/out/wysedos-installer.img`.
 - **[SeaBIOS](https://www.seabios.org/)** — open-source x86 BIOS and VGA BIOS (`disks/386/bios.bin`, `disks/386/vgabios.bin`).
 - **GeneralUser GS** (`disks/386/gm.sf2`) by S. Christian Collins — see [`disks/386/gm.sf2.LICENSE.txt`](disks/386/gm.sf2.LICENSE.txt).
 
-Released under the **GNU General Public License v3.0** — see [`LICENSE`](LICENSE)
-and [`LICENSES/`](LICENSES/).
+The wyseDOS code is released under the **GNU General Public License v3.0** —
+see [`LICENSE`](LICENSE) and [`LICENSES/`](LICENSES/). Third-party guest driver
+archives retain their own terms. In particular, NUSB includes proprietary
+Windows components and is not GPL code; see its [provenance and licensing
+limits](LICENSES/nusb.txt). The same notice accompanies the unpacked drivers.
