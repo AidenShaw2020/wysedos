@@ -14,20 +14,12 @@ USBDOS   Bret Johnson's DOS USB drivers, including their documentation.
 CTMOUSE  CuteMouse 2.1 beta 4. Run C:\DRIVERS\CTMOUSE\CTMOUSE.EXE /P.
          The binary matches the version tested on this Wyse. GPL sources
          and the upstream documentation are included.
-NUSBFE   Native USB 3.20 for Windows 98 First Edition, English.
-NUSBSE   Maximus Decim NUSB 3.6 for Windows 98 Second Edition, English.
-         Install ONLY the package for your Windows edition. These are
-         complete packages and replace system components, including
-         Explorer, ACPI and storage/kernel components. Localized Windows
-         may become partly English. Keep your system backup beforehand.
-         From Explorer open the matching folder, right-click _NUSB.INF
-         and choose Install, then restart Windows. The original upstream
-         readme and all unpacked files are in each folder.
-         The FE package is tested on this Wyse. SE is supplied for SE
-         installations; it has not been tested on the current FE system.
-USB95    Nathan Lineback's generic USB storage driver for Win95 OSR2.1
-         with Microsoft's USB supplement. Not for original Win95/95A.
-         Included separately; not tested on a Windows 95 installation.
+Windows USB packages not included
+---------------------------------
+NUSB FE, NUSB SE and the SanDisk-based Win95 package are not supplied.
+Their redistribution permissions have not been established. No download
+links or downloader are provided. Windows USB storage requires a compatible
+driver supplied independently under its applicable terms. See EXCLUDED.TXT.
 
 DOS / Windows handoff
 ---------------------
@@ -51,14 +43,6 @@ USBDOS: https://bretjohnson.us/programs/usbdos.zip
      Freeware; read the original USBINTRO.DOC for its redistribution terms.
 CTMOUSE: https://ibiblio.org/pub/micro/pc-stuff/freedos/files/repositories/latest/base/ctmouse.zip
      GNU GPL v2; original documentation and sources included.
-NUSB FE: external-reference-removed
-NUSB SE: external-reference-removed
-     Third-party packages containing Microsoft system files; not covered
-     by the wyseDOS project's GPL license. Original notices are included.
-     Read NUSB-LICENSE.TXT for authors, exact hashes and licensing limits.
-     No blanket redistribution licence was found in the upstream readmes.
-USB95: external-reference-removed
-     Original third-party SanDisk driver with generic INF.
 
 SHA256.TXT records every payload file for verification.
 

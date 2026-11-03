@@ -1,5 +1,10 @@
 # USB storage validation, 2026-11-03
 
+Historical hardware qualification included separately supplied Windows drivers.
+The current distributable contains no NUSB FE/SE or Win95/SanDisk package,
+download links or automatic downloader. Those private test results do not
+imply redistribution permission.
+
 Test rig: Dell Wyse 3040, PXE monitor, `hda=host:emmc`, 16 MiB guest RAM,
 Windows 98 First Edition 4.10.1998, physical 16 GB FAT32 USB flash drive.
 The initial USB qualification used PXE without changing the persistent monitor
@@ -25,7 +30,7 @@ is recorded below.
   drive through Windows' Unplug or Eject Hardware dialog.
 - Prior DOS 7.1 test with `USBUHCIL LowMemory:Yes` and `USBDRIVE LowMemory:Yes`:
   FAT32 enumeration, directory/file read, write/readback on the same flash.
-- Installer image built; all 227 unpacked payload files extracted from the
+- Installer image built; all 134 unpacked payload files extracted from the
   image matched the generated SHA-256 manifest. Installer copies DRIVERS to
   volume 3 at `guest.first + 2048`, after preparing its FAT32 filesystem.
   Required driver files are checked before the erase confirmation.
@@ -37,8 +42,8 @@ is recorded below.
 - Abrupt physical unplug with an open file produced a removed-volume warning
   and loss of monitor control. A physical restart was required. This path is
   not qualified; use Windows' system Stop/Eject workflow before removal.
-- SE and Win95 OSR2.1 packages are supplied separately but not tested on
-  those operating systems. Never install the SE package on FE.
+- SE and Win95 OSR2.1 packages were not tested on those operating systems.
+  They are excluded from the current distribution.
 - DOS reconnect with the TSRs loaded needs additional hardware qualification.
   Loading and unloading scripts are supplied; they do not edit AUTOEXEC.BAT.
 - FDD/CD/HID backend paths remain separate. Keyboard/mouse and the existing
@@ -80,7 +85,7 @@ is recorded below.
 - Our test files WYIMGA.IMG and VALID.IMG are old invalid fixtures; DOSVAL2.IMG
   is the working image containing the Windows-written WINWRITE test line.
 
-Final artifact check: installer image 120586240 bytes; all 227 unpacked driver
+Final artifact check: installer image 120586240 bytes; all 134 unpacked driver
 payload hashes match SHA256.TXT and the extracted EFI equals the final build.
 The companion wysedos-drivers.zip carries the same DRIVERS tree.
 
@@ -99,3 +104,12 @@ The companion wysedos-drivers.zip carries the same DRIVERS tree.
 - The installed monitor then started from eMMC and booted the physical floppy.
   C: is prepared for a new operating-system installation, with unpacked DRIVERS.
   Windows 98 SE installation and later restoration of games remain user follow-up.
+
+## Distribution cleanup
+
+The current driver bundle contains 134 payload files: VGA, DOS USB, CuteMouse,
+their documentation/sources and an exclusion notice. All extracted installer
+payload hashes and the EFI binary match the current build. NUSB FE/SE and
+Win95/SanDisk files and their download links are not distributed. This cleanup
+was verified by build/extraction and binary-hash checks; it did not reinstall
+or modify the user's already prepared eMMC or boot diskette.

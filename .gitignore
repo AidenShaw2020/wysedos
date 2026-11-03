@@ -5,8 +5,6 @@ tools/pico-hid/build/
 *.o
 *.obj
 *.exe
-!drivers/windows9x/nusb/nusb320-fe.exe
-!drivers/windows9x/nusb/nusb36e.exe
 *.efi
 *.aml
 
@@ -49,3 +47,7 @@ Thumbs.db
 drivers/dos/usbdos/*
 !drivers/dos/usbdos/usbdos.zip
 !drivers/dos/usbdos/README.md
+
+# Excluded third-party Windows USB driver archives must never be committed.
+drivers/windows9x/nusb/*.exe
+drivers/windows9x/nusb/*.zip

@@ -93,11 +93,9 @@ can install an operating system onto it just as on a real PC:
   are mounted. After the last image is ejected, it is flushed and returned
   automatically to USB. Image paths on external media are temporary and must
   be selected again after a monitor restart. Guest C:/eMMC is not browsable.
-  A compatible guest USB mass-storage driver is still
-  required. Use the complete NUSB package matching FE/SE, or the DOS drivers
-  and instructions copied into `C:\DRIVERS` by the installer. The early
-  standalone INF under `drivers/windows9x/usb98fe/` is diagnostic only;
-  copying two storage files is insufficient for an unpatched Win98 FE.
+  A compatible, separately licensed guest USB mass-storage driver is still
+  required in Windows. The installer supplies the real-DOS USB drivers in
+  `C:\DRIVERS`; it does not supply Windows USB storage packages.
   Physical floppy and CD-ROM handling is unchanged.
 - **Windows 95 / 98 display driver**: `drivers/windows9x/vmdisp9x/` includes
   the [VMDisp9x](https://github.com/JHRobotics/vmdisp9x) 2D VBE display driver
@@ -184,16 +182,16 @@ Nuked OPL3 and the PC emulator into `efi/build/bootx64.efi`.
 This builds `efi/build/bootx64.efi` and packs it together with `disks/386/` into
 a bootable FAT32 USB image at `tools/installer/out/wysedos-installer.img`.
 
-The installer builder also requires Python 3 and 7-Zip. It checks pinned
-upstream archive hashes and adds an unpacked `DRIVERS/` payload. After creating
-the guest FAT32 partition, the installer copies it to `C:\DRIVERS`: VMDisp9x,
-Bret Johnson's DOS USB drivers, CuteMouse 2.1b4 (including sources), NUSB 3.20
-for Windows 98 FE and NUSB 3.6 for Windows 98 SE. The separate Win95 OSR2.1
-generic package is also included. These third-party drivers retain their own
-licenses; see [the bundled instructions](tools/installer/driver-docs/README.TXT).
-Installing Windows drivers remains a separate guest-side step; choose the
-package matching the Windows edition. The FE package was tested on this Wyse;
-the SE and Win95 packages are supplied without claiming a test on those OSes.
+The installer builder also requires Python 3. It checks pinned upstream
+archive hashes and adds an unpacked `DRIVERS/` payload. After creating the
+guest FAT32 partition, the installer copies VMDisp9x, Bret Johnson's DOS USB
+drivers and CuteMouse 2.1b4 (including sources) to `C:\DRIVERS`. These drivers
+retain their own licences; see the bundled instructions.
+
+NUSB FE, NUSB SE and the SanDisk-based Win95 package are excluded because
+redistribution permissions for their proprietary components have not been
+established. This repository supplies no download links or downloader for
+them. Windows USB storage requires a separately supplied compatible driver.
 
 ## Repository layout
 
@@ -226,19 +224,12 @@ the SE and Win95 packages are supplied without claiming a test on those OSes.
   Richard Bonner credited for contributions — copyrighted **freeware under
   its own terms**, not the project GPL. The complete redistribution conditions
   are in `USBINTRO.DOC` inside the preserved [upstream package](drivers/dos/usbdos/README.md).
-- **[NUSB / Native USB](external-reference-removed)**
-  by Maximus Decim, with the Windows 98 FE adaptation credited to Q@PassingBy —
-  optional Windows USB packages containing proprietary Microsoft components
-  and other vendor files. They are **not GPL software**; no blanket
-  redistribution grant was found in the supplied readmes. See the
-  [authors, original download sources, hashes and licensing limits](LICENSES/nusb.txt).
-- **[Generic Windows 95 USB storage package](external-reference-removed)**
-  by Nathan Lineback — generic INF supplied with SanDisk driver binaries for
-  Windows 95 OSR2.1. These third-party files retain their original terms;
-  see the [separate package provenance and notice](LICENSES/nusb.txt).
+- **Excluded packages:** NUSB by Maximus Decim (FE adaptation credited to
+  Q@PassingBy), and Nathan Lineback's SanDisk-based Win95 USB package. Their
+  names are recorded for historical acknowledgement only. Their proprietary
+  files and download links are not distributed with this project.
 
-The wyseDOS code is released under the **GNU General Public License v3.0** —
-see [`LICENSE`](LICENSE) and [`LICENSES/`](LICENSES/). Third-party guest driver
-archives retain their own terms. In particular, NUSB includes proprietary
-Windows components and is not GPL code; see its [provenance and licensing
-limits](LICENSES/nusb.txt). The same notice accompanies the unpacked drivers.
+The wyseDOS code is released under the **GNU General Public License v3.0** �
+see [`LICENSE`](LICENSE) and [`LICENSES/`](LICENSES/). Bundled third-party guest
+drivers retain their own terms. Excluded Windows USB packages are not part
+of the GPL distribution; their redistribution permissions remain unverified.

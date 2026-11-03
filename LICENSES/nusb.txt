@@ -1,58 +1,21 @@
-NUSB third-party provenance and licensing notice
-===============================================
-Recorded: 2026-11-03
+Excluded third-party Windows USB packages
+========================================
 
-NUSB is a third-party collection of binary Windows updates and drivers. It
-is not wyseDOS source code and is NOT licensed by this project's GPLv3.
-Bundling or unpacking it does not change any original copyright or licence.
+The following packages are NOT supplied in this repository, installer or
+driver bundle:
 
-Authors / upstream
-------------------
-Maximus Decim created the Native USB collection for Windows 98 SE.
-The FE package credits Q@PassingBy in _NUSB.INF for the modification for
-Windows 98 First Edition; its readme credits Maximus Decim's NUSB 3.1.
-Underlying Microsoft components remain copyright Microsoft Corporation;
-other files retain their own embedded vendor notices. Attribution of the
-collection is not a claim that its compiler authored every binary.
+- NUSB 3.20 FE for Windows 98 First Edition, credited to Maximus Decim and
+  Q@PassingBy.
+- Maximus Decim NUSB 3.6 for Windows 98 Second Edition.
+- Nathan Lineback's generic Windows 95 OSR2.1 USB package, based on older
+  SanDisk drivers and containing Microsoft components.
 
-Upstream project discussion:
-external-reference-removed
+No redistribution grant covering all included proprietary files has been
+established. These packages are not covered by the wyseDOS GPL licence.
+They have therefore been excluded from this distribution. No download
+links, downloader or bundled installation files are provided for them.
 
-Exact binary inputs (preserved unchanged)
----------------------------------------
-NUSB FE 3.20 English, stored as nusb320-fe.exe:
-external-reference-removed
-SHA256 3579a694d67ca33e2659770fd99dff42aecc8b24f206224f2e92a1e5dede907a
-
-Maximus Decim NUSB SE 3.6 English, stored as nusb36e.exe:
-external-reference-removed
-external-reference-removed
-SHA256 42b13ce440cc6528600a7b085226050d855c50199ecde6cbd6f31cbf83a69621
-
-Licensing boundary
-------------------
-The checked !README.TXT and _NUSB.INF files identify the package and its
-authors but do not provide an explicit blanket redistribution licence for
-all included binaries. No such grant, open-source status, public-domain
-status or corresponding source code is asserted here. Availability from a
-download mirror is provenance, not proof of redistribution permission.
-This notice records the limitation; it does not grant additional rights.
-Use of Windows components remains subject to their applicable terms.
-
-The installer extracts the pinned originals without patching their files,
-keeps the upstream readmes/INF and copies them to C:\DRIVERS\NUSBFE and
-C:\DRIVERS\NUSBSE. SHA256.TXT identifies every extracted payload file.
-The package is optional for guest Windows; wyseDOS itself does not depend
-on installing it. Never use the FE package on SE or the SE package on FE.
-
-The complete packages replace system components, not just USBSTOR. English
-files may change parts of a localized installation. FE was tested on this
-Wyse; SE remains supplied for a new SE installation, not FE-qualified.
-
-Related Win95 package (separate from NUSB)
-----------------------------------------
-Nathan Lineback's generic INF package for Windows 95 OSR2.1 uses SanDisk
-driver binaries; neither the project GPL nor this notice relicenses them.
-external-reference-removed
-external-reference-removed
-SHA256 c10130c9a8f0f320a0522b63bae8b360e2b97a645ca591892d6b71892e581dbf
+A compatible, separately licensed guest driver is needed to use USB mass
+storage inside Windows 9x. The supplied DOS USB drivers serve real DOS;
+they do not replace a Windows driver. Choose software matching the guest
+Windows edition and follow its applicable terms.

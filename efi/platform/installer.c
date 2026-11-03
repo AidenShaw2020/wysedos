@@ -682,8 +682,7 @@ void installer_run(void) {
         stop("Unpacked DRIVERS bundle missing");
     static const char *driver_files[]={"DRIVERS/README.TXT","DRIVERS/SHA256.TXT",
         "DRIVERS/VGA/vmdisp9x.inf","DRIVERS/USBDOS/USBUHCIL.COM",
-        "DRIVERS/USBDOS/USBDRIVE.COM","DRIVERS/CTMOUSE/CTMOUSE.EXE",
-        "DRIVERS/NUSBFE/_nusb.inf","DRIVERS/NUSBSE/_nusb.inf"};
+        "DRIVERS/USBDOS/USBDRIVE.COM","DRIVERS/CTMOUSE/CTMOUSE.EXE"};
     for (unsigned i=0;i<sizeof(driver_files)/sizeof(driver_files[0]);i++) {
         FILINFO file;
         if (f_stat(driver_files[i],&file)!=FR_OK || !file.fsize || (file.fattrib&AM_DIR))
