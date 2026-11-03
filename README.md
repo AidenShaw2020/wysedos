@@ -210,7 +210,11 @@ them. Windows USB storage requires a separately supplied compatible driver.
 - **[Nuked OPL3](https://github.com/nukeykt/Nuked-OPL3)** by Alexey Khokholov (`Nuke.YKT`) — cycle-accurate Yamaha YMF262 (OPL3) emulator.
 - **[TinySoundFont](https://github.com/schellingb/TinySoundFont)** by Bernhard Schelling — SoundFont2 synthesiser.
 - **[FatFs](http://elm-chan.org/fsw/ff/)** by ChaN — FAT/exFAT filesystem module.
-- **[SeaBIOS](https://www.seabios.org/)** — open-source x86 BIOS and VGA BIOS (`disks/386/bios.bin`, `disks/386/vgabios.bin`).
+- **[SeaBIOS / SeaVGABIOS](https://www.seabios.org/)** by Kevin O'Connor,
+  Julian Pidancet, the LGPL VGABios developers Team and other contributors —
+  the x86 BIOS and VGA BIOS. Complete **LGPLv3 and GPLv3** licence texts and
+  notices accompany the ROMs in the installer. See the [licence texts,
+  ROM hashes and corresponding-source status](LICENSES/seabios.md).
 - **GeneralUser GS** (`disks/386/gm.sf2`) by S. Christian Collins — see [`disks/386/gm.sf2.LICENSE.txt`](disks/386/gm.sf2.LICENSE.txt).
 - **[VMDisp9x](https://github.com/JHRobotics/vmdisp9x)** by JHRobotics — the
   bundled Windows 95/98/Me graphics driver, under the **MIT licence**. The
@@ -229,7 +233,7 @@ them. Windows USB storage requires a separately supplied compatible driver.
   names are recorded for historical acknowledgement only. Their proprietary
   files and download links are not distributed with this project.
 
-The wyseDOS code is released under the **GNU General Public License v3.0** �
+The wyseDOS code is released under the **GNU General Public License v3.0** —
 see [`LICENSE`](LICENSE) and [`LICENSES/`](LICENSES/). Bundled third-party guest
 drivers retain their own terms. Excluded Windows USB packages are not part
 of the GPL distribution; their redistribution permissions remain unverified.

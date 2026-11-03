@@ -1,3 +1,6 @@
 # Shell scripts are executed on Linux or Git Bash; keep LF even when
 # checked out on Windows with core.autocrlf=true.
 *.sh text eol=lf
+
+# Preserve the exact upstream licence text bytes.
+disks/386/SeaBIOS-COPYING*.txt -text whitespace=-trailing-space

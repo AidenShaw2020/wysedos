@@ -1,0 +1,50 @@
+SeaBIOS and SeaVGABIOS notices
+=============================
+
+The BIOS ROMs in this directory are based on SeaBIOS / SeaVGABIOS.
+Copyright belongs to the upstream authors, including Kevin O'Connor,
+Julian Pidancet, the LGPL VGABios developers Team and other contributors.
+Individual source files retain their respective copyright notices.
+
+The checked BIOS and VGA source entry points state GNU LGPL version 3.
+The upstream project supplies both COPYING (GNU GPL version 3) and
+COPYING.LESSER (GNU LGPL version 3). The LGPL incorporates GPLv3 terms.
+Both complete, unmodified licence texts accompany these ROMs:
+
+  SeaBIOS-COPYING.txt
+  SeaBIOS-COPYING.LESSER.txt
+
+The wyseDOS project licence does not remove upstream notices or rights.
+
+Upstream revision identified in both original ROM version strings:
+106549a4362f6b499da522f8f8f5ed9f98388f87
+https://github.com/coreboot/seabios/tree/106549a4362f6b499da522f8f8f5ed9f98388f87
+
+Embedded build identifier:
+rel-1.17.0-7-g106549a4-dirty-20260327_011027-T001d08132
+
+Distributed ROM SHA-256:
+bios.bin:
+54999d10d5460ac5c8df105ab73d812e80841245a629f510a72feec9623cb8d2
+vgabios.bin:
+25a0b94795cb9bed6a68ef4e4a6846bf71e541f6293ea1917ce74c258d25b6f3
+
+wyseDOS VGA modification
+-----------------------
+The repository's tools/vgabios/patch.py and vbe_pm.S add a VBE 2.0 protected-
+mode interface to the preserved original SeaVGABIOS ROM. Reapplying these
+sources reproduces the distributed vgabios.bin byte for byte (verified
+2026-11-03). These local modifications are under the project's GPLv3 terms.
+
+Preserved original VGA ROM SHA-256:
+484e5b70263312379ee4b7d078741f0de6d93e762759ca1e4407b9dea08fedd2
+
+Source-provenance status
+------------------------
+The embedded revision identifies an upstream base, not every modification
+of the original build: both ROMs say "dirty". The original complete patched
+source tree, configuration and toolchain have not yet been established.
+The existing tiny386 SeaBIOS patch/configuration are leads, not verified
+proof of the exact original build inputs. Adding the licence texts and
+this notice does not claim that the corresponding-source requirement is
+fully satisfied. See LICENSES/seabios.md in the source repository.
