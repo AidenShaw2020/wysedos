@@ -214,6 +214,28 @@ the SE and Win95 packages are supplied without claiming a test on those OSes.
 - **[FatFs](http://elm-chan.org/fsw/ff/)** by ChaN — FAT/exFAT filesystem module.
 - **[SeaBIOS](https://www.seabios.org/)** — open-source x86 BIOS and VGA BIOS (`disks/386/bios.bin`, `disks/386/vgabios.bin`).
 - **GeneralUser GS** (`disks/386/gm.sf2`) by S. Christian Collins — see [`disks/386/gm.sf2.LICENSE.txt`](disks/386/gm.sf2.LICENSE.txt).
+- **[VMDisp9x](https://github.com/JHRobotics/vmdisp9x)** by JHRobotics — the
+  bundled Windows 95/98/Me graphics driver, under the **MIT licence**. The
+  original licence is included in the archive; see [package provenance](drivers/windows9x/vmdisp9x/README.md).
+- **[CuteMouse](https://cutemouse.sourceforge.net/)** by Nagy Daniel, with
+  maintenance and contributions by Eric Auer and other contributors — DOS
+  mouse driver under **GPL-2.0-or-later**. The [upstream archive](drivers/dos/ctmouse.zip)
+  includes sources and `COPYING`; the installer also unpacks those sources.
+  Included ASMLIB sources by Arkady Belousov retain their **LGPL-2.1-or-later** notices.
+- **[DOS USB drivers](https://bretjohnson.us/)** by Bret E. Johnson, with
+  Richard Bonner credited for contributions — copyrighted **freeware under
+  its own terms**, not the project GPL. The complete redistribution conditions
+  are in `USBINTRO.DOC` inside the preserved [upstream package](drivers/dos/usbdos/README.md).
+- **[NUSB / Native USB](external-reference-removed)**
+  by Maximus Decim, with the Windows 98 FE adaptation credited to Q@PassingBy —
+  optional Windows USB packages containing proprietary Microsoft components
+  and other vendor files. They are **not GPL software**; no blanket
+  redistribution grant was found in the supplied readmes. See the
+  [authors, original download sources, hashes and licensing limits](LICENSES/nusb.txt).
+- **[Generic Windows 95 USB storage package](external-reference-removed)**
+  by Nathan Lineback — generic INF supplied with SanDisk driver binaries for
+  Windows 95 OSR2.1. These third-party files retain their original terms;
+  see the [separate package provenance and notice](LICENSES/nusb.txt).
 
 The wyseDOS code is released under the **GNU General Public License v3.0** —
 see [`LICENSE`](LICENSE) and [`LICENSES/`](LICENSES/). Third-party guest driver
