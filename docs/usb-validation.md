@@ -2,8 +2,9 @@
 
 Test rig: Dell Wyse 3040, PXE monitor, `hda=host:emmc`, 16 MiB guest RAM,
 Windows 98 First Edition 4.10.1998, physical 16 GB FAT32 USB flash drive.
-The persistent monitor on eMMC was not updated. No guest partitions were
-recreated or formatted during these tests.
+The initial USB qualification used PXE without changing the persistent monitor
+or formatting the guest disk. A later explicitly requested clean installation
+is recorded below.
 
 ## Completed
 
@@ -41,9 +42,8 @@ recreated or formatted during these tests.
 - DOS reconnect with the TSRs loaded needs additional hardware qualification.
   Loading and unloading scripts are supplied; they do not edit AUTOEXEC.BAT.
 - FDD/CD/HID backend paths remain separate. Keyboard/mouse and the existing
-  CD drive were present in the Windows tests; no physical FDD test was run.
-- A fresh eMMC installation was not executed, to preserve the user's existing
-  Windows and games. Validation covers build and image payload integrity.
+  CD drive were present in the Windows tests. Physical USB FDD boot/read/write
+  and loading the DOS USB drivers were qualified in the later test below.
 - Temporary test files `WYS31103.TXT` and earlier `WYS31USB.TST` remain on the
   flash; `C:\TEMP\USBREAD.TXT` is the source text used for the read/write test.
 
@@ -76,11 +76,26 @@ recreated or formatted during these tests.
 - Real IDE lifecycle tests cover old-backend flush, busy/error refusal,
   empty slots and HDD/CD personality changes without replaying old buffers.
 - Physical CD/HDD image use remains additional hardware qualification; their
-  implemented lifecycle paths passed local tests. No persistent eMMC monitor
-  update or fresh installer run was performed.
+  implemented lifecycle paths passed local tests.
 - Our test files WYIMGA.IMG and VALID.IMG are old invalid fixtures; DOSVAL2.IMG
   is the working image containing the Windows-written WINWRITE test line.
 
 Final artifact check: installer image 120586240 bytes; all 227 unpacked driver
 payload hashes match SHA256.TXT and the extracted EFI equals the final build.
 The companion wysedos-drivers.zip carries the same DRIVERS tree.
+
+## Clean installer and physical FDD qualification, 2026-11-03
+
+- A physical 1.44 MB USB floppy booted DOS. The original boot options remained
+  available after adding DOS USB support locally to the user's diskette.
+  No copy of the diskette or its boot-menu files is published in this repository.
+- USBUHCIL and USBDRIVE loaded in low memory from the physical diskette, and DOS
+  assigned the 16 GB flash drive D:. Its FAT32 root directory was read successfully.
+- At the user's explicit request, the graphical installer recreated the internal
+  7456 MiB eMMC. All six stages completed, including the final storage flush.
+  The private guest container starts at physical LBA 264192 and spans 15003648
+  sectors; its FAT32 C: starts 2048 sectors inside the container. The protected
+  firmware partition remains outside the guest's addressable disk.
+- The installed monitor then started from eMMC and booted the physical floppy.
+  C: is prepared for a new operating-system installation, with unpacked DRIVERS.
+  Windows 98 SE installation and later restoration of games remain user follow-up.
