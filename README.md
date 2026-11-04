@@ -21,6 +21,58 @@ x86-64 bare metal on the Intel Atom x5-Z8350 with both hardware-assisted
 virtualisation (Intel VT-x unrestricted guest) and cycle-paced software
 emulation.
 
+## Game showcase
+
+Original DOS games running on a **Dell Wyse 3040**, booted from eMMC with
+**16 MB guest RAM**. All four clips have **720p60 video and captured game
+audio**, at the original game speed.
+
+| Game | Game resolution | Performance measurement |
+|---|---|---|
+| **Doom** | 320×200, high detail | **64.50 FPS** — separate unlocked `demo3` timedemo, sound off |
+| **Quake** | 320×200 → 640×480 | **62.4 → 16.6 FPS** — separate `demo1` timedemos, sound off |
+| **Duke Nukem 3D** | 320×200 | In-game **DNRATE** counter in the clip's final, separately marked scene |
+| **Tyrian 2000** | 320×200 | **31.2 FPS** — separate early-level debug sample, normal speed / low detail |
+
+Game FPS and capture FPS are different measurements. The footage has sound
+enabled; Doom and Quake benchmark results come from separate no-sound runs.
+Duke3D's counter is scene-dependent, and Tyrian's sample is not an unlocked
+benchmark or the recorded demo's average.
+
+<details open>
+<summary><strong>Doom</strong> · 18 seconds · high-detail demo with sound</summary>
+
+https://github.com/user-attachments/assets/93d561f5-158c-41cc-b80b-a2e4b9697752
+
+</details>
+
+<details>
+<summary><strong>Quake</strong> · 30 seconds · 320×200 and 640×480 side-by-side in time</summary>
+
+The resolution changes after 15 seconds. Both segments use the software
+renderer with sound effects enabled.
+
+https://github.com/user-attachments/assets/adaf09d4-b03b-4b69-a57e-363d88114b64
+
+</details>
+
+<details>
+<summary><strong>Duke Nukem 3D</strong> · 25 seconds · action demo and live FPS counter</summary>
+
+An 18-second built-in demo is followed by a clearly marked 7-second rooftop
+scene showing the game's own FPS counter. Its values apply to that scene.
+
+https://github.com/user-attachments/assets/7ca1a682-eaba-4a30-b432-ed5d3b593327
+
+</details>
+
+<details>
+<summary><strong>Tyrian 2000</strong> · 25 seconds · built-in demo with music and effects</summary>
+
+https://github.com/user-attachments/assets/5645a36b-19c8-43b2-8efc-84873c90fd31
+
+</details>
+
 ## What is inside
 
 | Component | Emulated hardware |
