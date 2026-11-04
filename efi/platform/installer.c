@@ -491,6 +491,7 @@ void installer_update_emmc(const char *replace) {
         printf("emmcupd: netboot required; refusing to overwrite the running source\n");
         return;
     }
+    bool keep_config=replace && !strcmp(replace,"keepconfig");
     uint64_t n;
     EFI_HANDLE *hs;
     if (EFI_ERROR(gBS->LocateHandleBuffer(ByProtocol, &bio_guid, NULL, &n, &hs))) return;
@@ -506,7 +507,7 @@ void installer_update_emmc(const char *replace) {
         if (!cfg && f_stat("2:386/config.ini", NULL) == FR_OK) {
             bool native_install=f_stat("2:386/native.ini",NULL)==FR_OK;
             bool write_native_config(void);
-            cfg = native_install ? write_native_config() : copy_file("386/config.ini", "2:386/config.ini");
+            cfg = keep_config || (native_install ? write_native_config() : copy_file("386/config.ini", "2:386/config.ini"));
             // files new in the source's 386/ (a SoundFont, an image) join the
             // ones there; those already there are left as the guest wrote them
             DIR d;
@@ -541,7 +542,8 @@ void installer_update_emmc(const char *replace) {
     }
     gBS->FreePool(hs);
     blkcache_flush(NULL);
-    printf("emmcupd: monitor %s, config.ini %s\n", efi ? "updated" : "not found", cfg ? "updated" : "not found");
+    printf("emmcupd: monitor %s, config.ini %s\n", efi ? "updated" : "not found",
+           cfg ? (keep_config ? "preserved" : "updated") : "not found");
 }
 
 /* Back up the installed image while netbooted: the eMMC is not the guest C:.

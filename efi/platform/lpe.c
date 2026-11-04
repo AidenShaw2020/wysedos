@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../include/efi.h"
+#include "lpe_clock.h"
 
 extern EFI_BOOT_SERVICES *gBS;
 
@@ -57,6 +58,14 @@ static inline void wr(uint32_t off, uint32_t v) { *(volatile uint32_t *)(mmio + 
 static inline void awr(uint32_t reg, uint32_t v) { aud[reg / 4] = v; }
 static inline uint32_t ard(uint32_t reg) { return aud[reg / 4]; }
 
+static uint32_t clock_read(void *ctx, uint32_t reg) {
+    return rd(VLV_DISPLAY_BASE+reg);
+}
+static uint64_t clock_time(void *ctx) {
+    extern uint64_t wyse_ticks_us(void);
+    return wyse_ticks_us();
+}
+
 static void flush(const void *p, size_t n) {
     for (size_t i = 0; i < n; i += 64) __asm__ volatile("clflush (%0)" :: "r"((const uint8_t *)p + i) : "memory");
     __asm__ volatile("mfence" ::: "memory");
@@ -80,7 +89,8 @@ static bool alloc_bufs(void) {
 
 // HDMI: CTS/N from the TMDS clock, the HDMI audio info frame, and the port
 // switched to HDMI mode (the GOP may drive DVI, which has no data islands).
-static bool lpe_init_hdmi(int port, int pipe, uint32_t port_reg, uint32_t en_dbg) {
+static bool lpe_init_hdmi(int port, int pipe, uint32_t port_reg, uint32_t en_dbg,
+                          uint32_t pixel_khz) {
     static const uint32_t cfg_off[3] = {0x000, 0x800, 0x900};
     uint32_t pv = rd(VLV_DISPLAY_BASE + port_reg);
     printf("lpe: HDMI%c on pipe %c, %s mode\n", 'B' + port, 'A' + pipe, (pv & (1u << 9)) ? "HDMI" : "DVI");
@@ -91,8 +101,7 @@ static bool lpe_init_hdmi(int port, int pipe, uint32_t port_reg, uint32_t en_dbg
     if (!alloc_bufs()) return false;
 
     uint32_t n = rate == 48000 ? 6144 : 6272;
-    uint32_t tmds = 148500;     // kHz, 1080p60
-    uint32_t cts = (uint32_t)((uint64_t)tmds * n * 1000 / (128ULL * rate));
+    uint32_t cts = lpe_hdmi_cts(pixel_khz,rate,n);
     awr(AUD_HDMI_STATUS, 1);
     awr(AUD_HDMI_STATUS, 0);
     awr(AUD_N_ENABLE, (1u << 24) | n);
@@ -156,19 +165,29 @@ bool lpe_init(uint32_t sample_rate) {
         printf("lpe: no display port enabled\n");
         return false;
     }
-    if (!dp) return lpe_init_hdmi(port, pipe, hdmi_ports[port], port_en_dbg[port]);
+    uint32_t pixel_khz=lpe_measure_pixel_clock(clock_read,clock_time,NULL,pipe);
+    printf("lpe: pipe %c measured pixel clock %u kHz\n",'A'+pipe,pixel_khz);
+    if (!pixel_khz) {
+        printf("lpe: no valid scanout clock; display audio stays disabled\n");
+        return false;
+    }
+    if (!dp) return lpe_init_hdmi(port, pipe, hdmi_ports[port], port_en_dbg[port],pixel_khz);
     // link rate from the link M/N: M/N = pixel clock / link symbol clock
     static const uint32_t trans[3] = {0x60000, 0x61000, 0x63000};
     uint32_t lm = rd(VLV_DISPLAY_BASE + trans[pipe] + 0x40) & 0xffffff;
     uint32_t ln = rd(VLV_DISPLAY_BASE + trans[pipe] + 0x44);
-    uint32_t gm = rd(VLV_DISPLAY_BASE + 0x70060 + pipe * 0x1000) & 0xffffff;
-    uint32_t gn = rd(VLV_DISPLAY_BASE + 0x70064 + pipe * 0x1000);
+    static const uint32_t pipes[3] = {0x70000,0x71000,0x74000};
+    uint32_t gm = rd(VLV_DISPLAY_BASE + pipes[pipe] + 0x60) & 0xffffff;
+    uint32_t gn = rd(VLV_DISPLAY_BASE + pipes[pipe] + 0x64);
     printf("lpe: DP_%c on pipe %c, link M/N %u/%u, g4x %u/%u\n", 'B' + port, 'A' + pipe, lm, ln, gm, gn);
     uint32_t mm = lm ? lm : gm, nn = lm ? ln : gn;
-    // 1080p60 is 148.5 MHz; ls = pixel * N / M
-    uint64_t ls = nn && mm ? (uint64_t)148500 * nn / mm : 270000;
-    bool hbr = ls > 216000;
-    printf("lpe: link symbol clock ~%llu kHz -> %s\n", (unsigned long long)ls, hbr ? "2.7 GHz" : "1.62 GHz");
+    uint64_t ls = nn && mm ? (uint64_t)pixel_khz * nn / mm : 0;
+    uint32_t link=0;
+    const uint32_t rates[]={162000,270000,540000};
+    for (unsigned i=0;i<3;i++)
+        if (ls>rates[i]*95ULL/100 && ls<rates[i]*105ULL/100) link=rates[i];
+    if (!link) { printf("lpe: invalid DP link clock %llu kHz\n",(unsigned long long)ls);return false; }
+    printf("lpe: measured DP link ~%llu kHz -> %u kHz\n",(unsigned long long)ls,link);
 
     // audio on: port audio enable, chicken bit (Wyse 3040), amp unmute
     uint32_t pv = rd(VLV_DISPLAY_BASE + ports[port]);
@@ -189,7 +208,7 @@ bool lpe_init(uint32_t sample_rate) {
     // reset, N/Maud, info frame, channel status, config, buffers
     awr(AUD_HDMI_STATUS, 1);
     awr(AUD_HDMI_STATUS, 0);
-    uint32_t maud = rate == 48000 ? (hbr ? 2982 : 4971) : (hbr ? 2740 : 4567);
+    uint32_t maud = ((uint64_t)rate*512*32768+link*500ULL)/(link*1000ULL);
     awr(AUD_N_ENABLE, (1u << 24) | 32768);
     awr(AUD_HDMI_CTS, (1u << 24) | maud);
     awr(AUD_CNTL_ST, 0);
