@@ -20,6 +20,11 @@ display hardware on the Wyse 3040.
 Tested on Windows 98 FE and Windows 98 SE, including 800x600 in 32-bit colour.
 The monitor's native-framebuffer refresh must remain active while Windows is
 idle so software cursor updates are not held until unrelated guest activity.
+The bundled VGA BIOS and VGA device also handle VBE/DPMS display power.
+Windows' **Turn off monitor** timer may remain enabled: the low-power state
+suppresses both pixels and the text cursor, and keyboard/mouse activity
+restores the display. The Windows screen saver runs until this later timer
+expires. This blanks the guest display; the host retains its HDMI signal.
 
 ## Installation in Windows 95 / 98 / Me
 

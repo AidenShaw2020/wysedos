@@ -1,7 +1,15 @@
 # Local SeaVGABIOS modification
 
 `patch.py` assembles `vbe_pm.S` with LLVM and appends a VBE 2.0 protected-mode
-interface to `seavgabios.orig.bin`. It redirects the original INT 10h entries
+interface to `seavgabios.orig.bin`. It also implements VBE/DPMS (INT 10h
+`4F10h`) through the wyseDOS DISPI extension at index `0Bh`. The original
+SeaVGABIOS records DPMS in the BIOS data area without changing scanout;
+Windows 98 then leaves a visible text cursor while the monitor is off.
+The extension keeps display power independent of the VGA register restore
+Windows performs after that BIOS call. On/standby/suspend/off, capability
+queries and state queries are supported; unsupported requests fail.
+
+The patch redirects both original INT 10h entries
 and updates ROM size fields and checksums. The modification sources are
 distributed under the project's GPLv3 terms.
 
@@ -12,8 +20,14 @@ python tools/vgabios/patch.py work/vgabios-rebuilt.bin
 Get-FileHash disks/386/vgabios.bin,work/vgabios-rebuilt.bin -Algorithm SHA256
 ```
 
-Verified on 2026-11-03: both hashes are
-`25a0b94795cb9bed6a68ef4e4a6846bf71e541f6293ea1917ce74c258d25b6f3`.
+Verified on 2026-11-04: both hashes are
+`d43a12414ed619216dcc268f353bd0812ec940be00bc7122e7a5ae9f738c0b6c`.
+
+`python tools/tests/vgabios_dpms.py work/vgabios-rebuilt.bin` executes both
+patched 16-bit interrupt entries using Unicorn and checks state changes,
+invalid requests, register preservation and ROM checksums. The VGA renderer
+regression in `tools/tests/vga_planar.c` checks blanking across VGA register
+restores and native-framebuffer wake without losing video memory.
 
 This verifies the modification relative to the preserved base binary; it
 does not rebuild that original binary from upstream source. Its embedded

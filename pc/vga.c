@@ -1875,7 +1875,8 @@ void vga_refresh(VGAState *s,
     const uint32_t vga_refresh_t0 = get_uticks();
     FBDevice *fb_dev = s->fb_dev;
     int graphic_mode;
-    if (!(s->ar_index & 0x20) || (s->sr[1] & VGA_SR01_SCREEN_OFF)) {
+    if (s->vbe_regs[VBE_DISPI_INDEX_DPMS] ||
+        !(s->ar_index & 0x20) || (s->sr[1] & VGA_SR01_SCREEN_OFF)) {
         /* blank */
         graphic_mode = 0;
     } else if (s->gr[0x06] & 1) {
@@ -2318,6 +2319,12 @@ void vbe_write(VGAState *s, uint32_t offset, uint32_t val)
         printf("VBE write: index=0x%04x val=0x%04x\n", s->vbe_index, val);
 #endif
         switch(s->vbe_index) {
+        case VBE_DISPI_INDEX_DPMS:
+            /* VBE/DPMS states: on, standby, suspend, off. Invalid writes
+             * must not silently resume a powered-down display. */
+            if (val == 0 || val == 1 || val == 2 || val == 4)
+                s->vbe_regs[VBE_DISPI_INDEX_DPMS] = val;
+            break;
         case VBE_DISPI_INDEX_ID:
             if (val >= VBE_DISPI_ID0 && val <= VBE_DISPI_ID5)
                 s->vbe_regs[s->vbe_index] = val;
@@ -3281,6 +3288,7 @@ int vga_dump_state(VGAState *s, char *buf, int size)
          s->force_8dm, s->fb_dev->width, s->fb_dev->height);
     DUMP("native_vram=%u (direct writes checked on every refresh)\n",
          (unsigned)__atomic_load_n(&s->direct_vram, __ATOMIC_ACQUIRE));
+    DUMP("dpms=%u\n", s->vbe_regs[VBE_DISPI_INDEX_DPMS]);
     DUMP("cr:");
     for (int i = 0; i < 0x19; i++) DUMP(" %02x", s->cr[i]);
     DUMP("\nsr:");
@@ -3360,7 +3368,8 @@ int vga_get_text_cols(VGAState *s) {
 /* Get current VGA mode: 0=blank, 1=text, 2=graphics */
 int vga_get_mode(VGAState *s)
 {
-    if (!(s->ar_index & 0x20) || (s->sr[1] & VGA_SR01_SCREEN_OFF)) {
+    if (s->vbe_regs[VBE_DISPI_INDEX_DPMS] ||
+        !(s->ar_index & 0x20) || (s->sr[1] & VGA_SR01_SCREEN_OFF)) {
         return 0;  // blank
     } else if (s->gr[0x06] & 1) {
         return 2;  // graphics
@@ -3457,7 +3466,8 @@ void vga_get_palette16(VGAState *s, uint8_t *palette16)
 int vga_get_graphics_mode(VGAState *s, int *width, int *height)
 {
     // Check if display is enabled
-    if (!(s->ar_index & 0x20) || (s->sr[1] & VGA_SR01_SCREEN_OFF)) {
+    if (s->vbe_regs[VBE_DISPI_INDEX_DPMS] ||
+        !(s->ar_index & 0x20) || (s->sr[1] & VGA_SR01_SCREEN_OFF)) {
         return 0;  // blank/text
     }
 

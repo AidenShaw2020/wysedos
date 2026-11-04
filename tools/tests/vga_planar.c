@@ -38,6 +38,22 @@ static int native_cursor(void) {
     vga_refresh(&s,redraw,NULL,0);
     CHECK(surface[11]==0x123456 && redraws==before+1 && last_y==1 && last_h==1);
     CHECK(g_vram_writes==writes);
+    /* DPMS survives the VGA state restoration Windows performs after the
+     * BIOS call. Both text cursor and native VBE pixels stay suppressed. */
+    for (unsigned state=1;state<=4;state*=2) {
+        vbe_write(&s,0,VBE_DISPI_INDEX_DPMS);vbe_write(&s,1,state);
+        CHECK(vbe_read(&s,1)==state && vga_get_mode(&s)==0);
+        CHECK(vga_get_graphics_mode(&s,NULL,NULL)==0);
+        s.sr[1]=0;s.ar_index=0x20;
+        vga_refresh(&s,redraw,NULL,0);
+        CHECK(s.graphic_mode==0);
+        for (unsigned i=0;i<32;i++) CHECK(surface[i]==0);
+        vbe_write(&s,1,3);CHECK(vbe_read(&s,1)==state);
+        s.gr[6]&=~1;CHECK(vga_get_mode(&s)==0);s.gr[6]|=1;
+        vram[11]=0x654321;
+        vbe_write(&s,1,0);vga_refresh(&s,redraw,NULL,0);
+        CHECK(s.graphic_mode==2 && surface[11]==0x654321);
+    }
     before=redraws;vga_refresh(&s,redraw,NULL,0);CHECK(redraws==before);
     vram[11]=0;vram[25]=0xabcdef;
     vga_refresh(&s,redraw,NULL,0);
@@ -76,6 +92,6 @@ int main(void) {
     vga_refresh(&s,redraw,NULL,0);
     CHECK(g_vga_refresh_skips==skips0+1 && redraws==1);
     CHECK(native_cursor()==0);
-    puts("PASS: planar/blanking; native cursor writes visible after halt; unchanged rows and emulated cache still skipped");
+    puts("PASS: planar/blanking; DPMS blanks text/native VBE and resumes without losing VRAM; native cursor/cache");
     return 0;
 }

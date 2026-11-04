@@ -105,7 +105,11 @@ const uint8_t* vga_get_font_ptr(VGAState *s, uint8_t ch, int attr_bit3);
 #define VBE_DISPI_INDEX_X_OFFSET        0x8
 #define VBE_DISPI_INDEX_Y_OFFSET        0x9
 #define VBE_DISPI_INDEX_VIDEO_MEMORY_64K 0xa
-#define VBE_DISPI_INDEX_NB              0xb
+/* wyseDOS extension used by the local SeaVGABIOS DPMS interface. Kept
+ * separate from VGA sequencer blanking: Windows restores VGA registers
+ * after asking the BIOS to power down the display. */
+#define VBE_DISPI_INDEX_DPMS            0xb
+#define VBE_DISPI_INDEX_NB              0xc
 
 #define VBE_DISPI_ID0                   0xB0C0
 #define VBE_DISPI_ID1                   0xB0C1

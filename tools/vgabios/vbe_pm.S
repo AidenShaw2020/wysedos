@@ -6,7 +6,9 @@
 //
 // patch.py appends this at BASE (the end of the original ROM) and points both
 // of SeaVGABIOS's INT 10h entries (with and without its own stack) at the
-// hooks here; everything but 4F0Ah goes on to the original entry.
+// hooks here. 4F10h also drives the monitor's DPMS state: the original BIOS
+// only records that request in the BDA, leaving a visible text cursor when
+// Windows switches out of its VBE mode to power down the display.
 
         .set BASE, 0x9a00
         .set ENTRY_10, 0x5607
@@ -17,6 +19,7 @@
         .set DISPI_VIRT_WIDTH, 6
         .set DISPI_X_OFFSET, 8
         .set DISPI_Y_OFFSET, 9
+        .set DISPI_DPMS, 11          // wyseDOS extension, not a Bochs register
 
         .text
         .code16
@@ -25,11 +28,23 @@ hook_10:
         cmp     $0x4f0a, %ax
         je      pm_info
         .byte   0xe9
-        .word   ENTRY_10 - (BASE + (1f - start))
+        .word   BASE + (dispatch_10 - start) - (BASE + (1f - start))
 1:
 hook_10_extrastack:
         cmp     $0x4f0a, %ax
         je      pm_info
+        .byte   0xe9
+        .word   BASE + (dispatch_10_extrastack - start) - (BASE + (1f - start))
+1:
+dispatch_10:
+        cmp     $0x4f10, %ax
+        je      dpms_info
+        .byte   0xe9
+        .word   ENTRY_10 - (BASE + (1f - start))
+1:
+dispatch_10_extrastack:
+        cmp     $0x4f10, %ax
+        je      dpms_info
         .byte   0xe9
         .word   ENTRY_10_EXTRASTACK - (BASE + (1f - start))
 1:
@@ -45,6 +60,62 @@ pm_info:
         mov     $0x004f, %ax
         iret
 1:      mov     $0x014f, %ax
+        iret
+
+// VBE/DPMS 1.0. Preserve the DISPI index, DX, ES and the BDA's other flags.
+// DPMS is independent of the VGA registers Windows saves/restores around
+// this call. All three low-power states suppress scanout, including cursor.
+dpms_info:
+        cmp     $0, %bl
+        je      dpms_caps
+        cmp     $2, %bl
+        je      dpms_get
+        cmp     $1, %bl
+        jne     dpms_fail
+        cmp     $4, %bh
+        je      dpms_set
+        cmp     $2, %bh
+        ja      dpms_fail
+dpms_set:
+        push    %dx
+        push    %cx
+        push    %es
+        mov     $0x40, %ax
+        mov     %ax, %es
+        andb    $0xf0, %es:0xb9
+        orb     %bh, %es:0xb9
+        mov     $DISPI_INDEX, %dx
+        in      %dx, %ax
+        mov     %ax, %cx
+        mov     $DISPI_DPMS, %ax
+        out     %ax, %dx
+        inc     %dx
+        xor     %ax, %ax
+        mov     %bh, %al
+        out     %ax, %dx
+        dec     %dx
+        mov     %cx, %ax
+        out     %ax, %dx
+        pop     %es
+        pop     %cx
+        pop     %dx
+        mov     $0x004f, %ax
+        iret
+dpms_caps:
+        mov     $0x0730, %bx         // standby, suspend, off; DPMS 1.0
+        mov     $0x004f, %ax
+        iret
+dpms_get:
+        push    %es
+        mov     $0x40, %ax
+        mov     %ax, %es
+        mov     %es:0xb9, %bh
+        and     $0x0f, %bh
+        pop     %es
+        mov     $0x004f, %ax
+        iret
+dpms_fail:
+        mov     $0x014f, %ax
         iret
 
 // The table and the code a 32-bit protected-mode program copies to its own
