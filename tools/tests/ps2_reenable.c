@@ -32,16 +32,35 @@ int main(void) {
         ps2_mouse_event(m, -300, 250, 0, 0);
         CHECK(m->common.queue.count % 3 == 0);
     }
+    int total_x=0,total_y=0;
     while (m->common.queue.count > 0 || m->mouse_dx != 0 || m->mouse_dy != 0) {
         CHECK(m->common.queue.count % 3 == 0);
         now += 1000; kbd_step(s);
         uint32_t b0 = kbd_read_data(s, 0);
         now += 1000; kbd_step(s);
-        (void)kbd_read_data(s, 0);
+        total_x+=(int8_t)kbd_read_data(s, 0);
         now += 1000; kbd_step(s);
-        (void)kbd_read_data(s, 0);
+        total_y+=(int8_t)kbd_read_data(s, 0);
         CHECK((b0 & 0x08) != 0 && (b0 & 0x07) == 0);
         now += 1000; kbd_step(s);
     }
-    puts("PASS: keyboard/mouse commands reopen clock, ACKs, delayed key IRQ edge, mouse framing");return 0;
+    CHECK(total_x==-30000 && total_y==-25000);
+    CHECK(m->motion_in_x==m->motion_out_x && m->motion_in_y==m->motion_out_y);
+    CHECK(m->common.queue.dropped==0 && m->common.queue.peak<PS2_QUEUE_SIZE);
+    /* Small, isolated vertical steps must survive in both directions. */
+    for(int direction=-1;direction<=1;direction+=2) {
+        for(int j=0;j<20;j++) {
+            ps2_mouse_event(m,0,direction,0,0);
+            now+=1000;kbd_step(s);uint32_t b=kbd_read_data(s,0);
+            now+=1000;kbd_step(s);CHECK(kbd_read_data(s,0)==0);
+            now+=1000;kbd_step(s);CHECK((int8_t)kbd_read_data(s,0)==-direction);
+            CHECK((b&8) && !(b&7));
+        }
+    }
+    CHECK(m->motion_in_y==m->motion_out_y && !m->mouse_dy);
+    CHECK(m->common.queue.produced==m->common.queue.consumed && !m->common.queue.count);
+    ps2_write_mouse(m,AUX_DISABLE_DEV);
+    ps2_mouse_event(m,0,3,0,0);
+    CHECK(m->motion_disabled==1 && m->motion_disabled_y==-3 && !m->mouse_dy);
+    puts("PASS: PS/2 IRQ/framing; motion conserved under pressure; single-step vertical motion; disabled-device accounting");return 0;
 }

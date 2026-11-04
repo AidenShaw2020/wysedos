@@ -15,6 +15,7 @@ void ps2_keyboard_set_translation(void *opaque, int mode);
 void ps2_put_keycode(PS2KbdState *s, int is_down, int keycode);
 void ps2_mouse_event(PS2MouseState *s,
                      int dx, int dy, int dz, int buttons_state);
+void ps2_mouse_report(PS2MouseState *s);
 
 typedef struct KBDState KBDState;
 

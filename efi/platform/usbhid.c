@@ -32,17 +32,28 @@ typedef struct {
 #define RING 256
 static hid_event_t ring[RING];
 static volatile uint32_t ring_head, ring_tail;
+static uint32_t ring_peak, ring_dropped, mouse_submitted, mouse_dropped;
+static uint32_t mouse_groups, mouse_merged, mouse_disabled;
+static int64_t mouse_in_x,mouse_in_y,mouse_out_x,mouse_out_y;
+static int64_t mouse_drop_x,mouse_drop_y,mouse_disabled_x,mouse_disabled_y;
 
 uint64_t wyse_ticks_us(void);
 static uint32_t lat_max, lat_sum, lat_n;     // report -> guest, this second
 
 static void push(hid_event_t e) {
     e.t = (uint32_t)wyse_ticks_us();
+    if (e.kind==1) { mouse_submitted++;mouse_in_x+=e.dx;mouse_in_y+=e.dy; }
     uint32_t next = (ring_head + 1) % RING;
-    if (next == ring_tail) return;
+    if (next == ring_tail) {
+        ring_dropped++;
+        if (e.kind==1) { mouse_dropped++;mouse_drop_x+=e.dx;mouse_drop_y+=e.dy; }
+        return;
+    }
     ring[ring_head] = e;
     __atomic_thread_fence(__ATOMIC_RELEASE);
     ring_head = next;
+    uint32_t used=(next+RING-ring_tail)%RING;
+    if (used>ring_peak) ring_peak=used;
 }
 
 typedef struct {
@@ -57,6 +68,7 @@ typedef struct {
     // the first reports as they came, for the log (usbhid_scan prints them)
     uint8_t raw[4][9];
     volatile uint32_t reports, errors;
+    uint32_t other_reports;
     uint32_t raw_shown;
     // when reports come: how many this second and the longest gap between two
     volatile uint32_t cb_n, cb_gap_max;
@@ -195,7 +207,7 @@ static EFI_STATUS mouse_cb(void *data, uint64_t len, void *ctx, uint32_t status)
     const mouse_layout_t *L = &layouts[d - devs];
     if (L->valid) {
         if (L->id) {
-            if (r[0] != L->id) return EFI_SUCCESS;          // another report of the device
+            if (r[0] != L->id) { d->other_reports++;return EFI_SUCCESS; }
             r++;
         }
         uint8_t buttons = 0;
@@ -456,6 +468,12 @@ void usbhid_report(void) {
     if (EFI_ERROR(gBS->LocateHandleBuffer(ByProtocol, &usbio_guid, NULL, &count, &handles))) count = 0;
     printf("usbhid: %d devices, %llu USB interfaces, %u released so far\n", ndevs, (unsigned long long)count,
            g_usbhid_gone);
+    printf("motion: HID submitted %u groups %u merged %u disabled %u, ring %u peak %u drops %u (mouse %u)\n",
+        mouse_submitted,mouse_groups,mouse_merged,mouse_disabled,
+        (ring_head+RING-ring_tail)%RING,ring_peak,ring_dropped,mouse_dropped);
+    printf("motion: HID xy in %lld/%lld out %lld/%lld dropped %lld/%lld disabled %lld/%lld\n",
+        (long long)mouse_in_x,(long long)mouse_in_y,(long long)mouse_out_x,(long long)mouse_out_y,
+        (long long)mouse_drop_x,(long long)mouse_drop_y,(long long)mouse_disabled_x,(long long)mouse_disabled_y);
     for (int i = 0; i < 8; i++) {
         hid_dev_t *d = &devs[i];
         if (!d->handle) continue;
@@ -465,6 +483,7 @@ void usbhid_report(void) {
         printf("usbhid: slot %d %s ep %02x, %u reports, %u errors, last %llu ms ago, handle %s\n", i,
                d->mouse ? "mouse" : "keyboard", d->ep, d->reports, d->errors, (unsigned long long)idle,
                there ? "present" : "GONE");
+        if (d->mouse) printf("motion: slot %d reports for other IDs %u\n",i,d->other_reports);
     }
     for (uint64_t k = 0; k < count; k++) {
         bool known = false;
@@ -541,9 +560,14 @@ int usbhid_poll(PC *pc) {
                 e.dy = (int16_t)ny;
                 e.dz = (int16_t)nz;
                 ring_tail = (ring_tail + 1) % RING;
+                mouse_merged++;
             }
-            if (pc->mouse_enabled)
+            if (pc->mouse_enabled) {
+                mouse_groups++;mouse_out_x+=e.dx;mouse_out_y+=e.dy;
                 ps2_mouse_event(pc->mouse, e.dx, e.dy, e.dz, e.code & 7);
+            } else {
+                mouse_disabled++;mouse_disabled_x+=e.dx;mouse_disabled_y+=e.dy;
+            }
             continue;
         }
         // the modifiers as they were at this event, not as they are now: a

@@ -5,7 +5,7 @@ the newly prepared guest FAT32 partition. Drivers are not installed into
 Windows automatically. Install an operating system first.
 
 VGA      VMDisp9x 1.2025.0.119b, 2D. In Display Properties select the
-         adapter driver VMDISP9X.INF. Tested on Win98 FE at 800x600.
+         adapter driver VMDISP9X.INF. Tested on Win98 FE and SE at 800x600.
 USBDOS   Bret Johnson's DOS USB drivers, including their documentation.
          In real DOS run C:\DRIVERS\USBON.BAT. USB flash disks receive a
          free drive letter automatically, without choosing them in OSD.

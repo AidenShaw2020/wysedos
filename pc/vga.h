@@ -34,9 +34,8 @@ void vbe_write(VGAState *s, uint32_t offset, uint32_t val);
 uint32_t vbe_read(VGAState *s, uint32_t offset);
 
 void vga_mem_write(VGAState *s, uint32_t addr, uint8_t val);
-/* Bumped by everything that writes video memory - the VGA window here and the
- * linear framebuffer in pc.c - so a refresh can tell that nothing was drawn
- * since the last one without looking at the memory. */
+/* Emulated VGA-window and framebuffer writes increment this counter. Native
+ * mappings bypass it and must set direct_vram so refresh compares memory. */
 extern uint32_t g_vram_writes;
 extern uint32_t g_vga_refresh_skips;
 uint8_t vga_mem_read(VGAState *s, uint32_t addr);
@@ -163,6 +162,9 @@ struct VGAState {
     /* wyseDOS: A0000 is the Atom's own VGA (hwvga.c); register writes go there too
      * and the display reads its memory into vga_ram */
     uint8_t hw_mem;
+    /* A native CPU can write the linear framebuffer without a model callback.
+     * The renderer must compare rows even if g_vram_writes did not change. */
+    bool direct_vram;
     /* wyseDOS: the DAC writes of a display period, each with the time since
      * that period began (the end of the vertical retrace), and the palette at
      * its start: a palette changed part-way down the screen - Lemmings swaps

@@ -17,7 +17,37 @@ void pci_register_bar(PCIDevice *d,unsigned int num,uint32_t size,int type,
 }
 #define CHECK(x) do { if (!(x)) { printf("FAIL line %d\n",__LINE__); return 1; } } while (0)
 static int redraws;
-static void redraw(void *o,int x,int y,int w,int h) { (void)o;(void)x;(void)y;(void)w;(void)h;redraws++; }
+static int last_y,last_h;
+static void redraw(void *o,int x,int y,int w,int h) { (void)o;(void)x;(void)w;last_y=y;last_h=h;redraws++; }
+static int native_cursor(void) {
+    uint32_t vram[32]={0},surface[32]={0};
+    FBDevice fb={0};fb.width=8;fb.height=4;fb.stride=32;fb.fb_data=(uint8_t *)surface;
+    VGAState s={0};s.fb_dev=&fb;s.graphic_mode=2;s.ar_index=0x20;
+    s.gr[6]=1;s.sr[4]=8;s.cr[0x17]=3;
+    s.vga_ram=(uint8_t *)vram;s.vga_ram_size=sizeof(vram);
+    s.vbe_regs[VBE_DISPI_INDEX_ENABLE]=VBE_DISPI_ENABLED|VBE_DISPI_LFB_ENABLED;
+    s.vbe_regs[VBE_DISPI_INDEX_XRES]=8;s.vbe_regs[VBE_DISPI_INDEX_YRES]=4;
+    s.vbe_regs[VBE_DISPI_INDEX_BPP]=32;s.vbe_line_offset=32;
+    vbe_update_vgaregs(&s);
+    s.direct_vram=true;
+    vga_refresh(&s,redraw,NULL,0);
+    unsigned writes=g_vram_writes;int before=redraws;
+    /* The guest draws directly then halts: no emulated write or later CPU
+     * epilogue invalidates the cache. The next refresh must show the cursor. */
+    vram[11]=0x123456;
+    vga_refresh(&s,redraw,NULL,0);
+    CHECK(surface[11]==0x123456 && redraws==before+1 && last_y==1 && last_h==1);
+    CHECK(g_vram_writes==writes);
+    before=redraws;vga_refresh(&s,redraw,NULL,0);CHECK(redraws==before);
+    vram[11]=0;vram[25]=0xabcdef;
+    vga_refresh(&s,redraw,NULL,0);
+    CHECK(surface[11]==0 && surface[25]==0xabcdef && last_y==1 && last_h==3);
+    s.direct_vram=false;
+    unsigned skips=g_vga_refresh_skips;before=redraws;
+    vga_refresh(&s,redraw,NULL,0);
+    CHECK(g_vga_refresh_skips==skips+1 && redraws==before);
+    free(s.vbe_shadow);return 0;
+}
 int main(void) {
     uint32_t pixels[4] = {0x78563412,0,0,0};
     VGAState s = {0};
@@ -45,6 +75,7 @@ int main(void) {
     uint32_t skips0=g_vga_refresh_skips;
     vga_refresh(&s,redraw,NULL,0);
     CHECK(g_vga_refresh_skips==skips0+1 && redraws==1);
-    puts("PASS: planar latch copy, masked write, text/graphics sequencer blanking");
+    CHECK(native_cursor()==0);
+    puts("PASS: planar/blanking; native cursor writes visible after halt; unchanged rows and emulated cache still skipped");
     return 0;
 }

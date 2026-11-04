@@ -217,8 +217,6 @@ void wyse_a20_changed(int enabled) {
     vm_map(&vm, 0x100000, vm.ram + (enabled ? 0x100000 : 0), 0x10000, true);
 }
 
-static uint32_t lfb_mapped_len;
-
 void wyse_map_edid(uint32_t addr,int enabled) {
     const uint8_t *guest_edid_page(void);
     static uint32_t old;
@@ -245,9 +243,9 @@ void wyse_map_lfb(uint32_t addr, uint32_t len, void *ptr, int enabled) {
         if (mapped_addr != bochs) vm_map(&vm, bochs, NULL, mapped_len, false);
     }
     mapped_len = 0;
-    lfb_mapped_len = 0;
+    __atomic_store_n(&g_pc->vga->direct_vram, false, __ATOMIC_RELEASE);
     if (enabled && addr && ptr && len) {
-        lfb_mapped_len = len;
+        __atomic_store_n(&g_pc->vga->direct_vram, true, __ATOMIC_RELEASE);
         vm_map(&vm, addr, ptr, len, true);
         if (addr != bochs && (uint64_t)g_pc->phys_mem_size <= bochs) vm_map(&vm, bochs, ptr, len, true);
         mapped_addr = addr;
@@ -1067,11 +1065,9 @@ void wyse_cpu_step(PC *pc) {
             plane_flushed_at = t;
         }
     }
-    // Stores into the linear framebuffer go straight to memory and count as no
-    // VRAM write; the renderer skips comparing a VBE picture nobody wrote to,
-    // so PC Player Benchmark at 640x480 showed its first few rows and then
-    // nothing. While the window is mapped, the guest may have written.
-    if (lfb_mapped_len) g_vram_writes++;
+    // Native LFB stores bypass g_vram_writes. direct_vram makes the renderer
+    // check its row shadow independently of this epilogue: HLT and other
+    // early exits can occur after drawing a cursor without reaching here.
     g_vmx_guest_tsc += rdtsc_() - start;
 }
 

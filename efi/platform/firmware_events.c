@@ -44,10 +44,29 @@ static EFI_TPL application_priority(void) {
     return old;
 }
 
-void firmware_events_init(void) {
+void firmware_events_init(uint32_t max_period_us) {
     static const EFI_GUID guid={0x26baccb3,0x6f42,0x11d4,{0xbc,0xe7,0,0x80,0xc7,0x3c,0x88,0x81}};
     EFI_TPL initial=application_priority();
-    if (!EFI_ERROR(gBS->LocateProtocol(&guid,NULL,(void **)&timer))) timer->GetTimerPeriod(timer,&period);
+    if (!EFI_ERROR(gBS->LocateProtocol(&guid,NULL,(void **)&timer)) &&
+        !EFI_ERROR(timer->GetTimerPeriod(timer,&period)) && max_period_us) {
+        /* USB completion notifications share the firmware's hardware tick.
+         * A 54.9 ms tick batches mouse reports at ~18 Hz even when the USB
+         * endpoint runs at 125 Hz. A shorter SetTimer event alone cannot
+         * improve that resolution. Only shorten the hardware period when
+         * explicitly requested; preserve an already faster timer. */
+        uint64_t requested=(uint64_t)max_period_us*10;
+        if (period>requested) {
+            uint64_t previous=period;
+            EFI_STATUS st=timer->SetTimerPeriod(timer,requested);
+            if (!EFI_ERROR(st)) period=requested;
+            uint64_t actual;
+            EFI_STATUS readback=timer->GetTimerPeriod(timer,&actual);
+            if (!EFI_ERROR(readback)) period=actual;
+            printf("firmware events: hardware timer %llu -> %llu x100 ns, requested %llu, status %llx, readback %llx\n",
+                (unsigned long long)previous,(unsigned long long)period,
+                (unsigned long long)requested,(unsigned long long)st,(unsigned long long)readback);
+        }
+    }
     EFI_STATUS r=gBS->CreateEvent(EVT_TIMER|EVT_NOTIFY_SIGNAL,TPL_NOTIFY,tick,NULL,&heartbeat);
     if (!EFI_ERROR(r)) r=gBS->SetTimer(heartbeat,TimerPeriodic,100000);
     tick_at=wyse_ticks_us();

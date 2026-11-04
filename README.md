@@ -134,6 +134,7 @@ bios=bios.bin
 vga_bios=vgabios.bin
 hda=host:emmc
 timezone=cet
+firmware_timer_us=5000
 
 [X86Pi]
 volume=12
@@ -158,6 +159,11 @@ joystick=0
 power_restore=1
 power_button=0
 ```
+
+`firmware_timer_us` defaults to 5000 (5 ms). It shortens a slower firmware
+hardware timer so USB mouse completions are delivered more regularly; an
+already faster timer is preserved. Set it to `0` to retain the firmware's
+original timing. See [input timing and diagnostics](docs/input-timing.md).
 
 ## Building from source
 

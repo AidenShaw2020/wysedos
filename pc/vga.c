@@ -1222,13 +1222,17 @@ static void vga_graphic_refresh(VGAState *s,
          *
          * Even word at a time, looking at 600 KB to learn that a desktop
          * nobody touched is still the same costs about a millisecond a
-         * frame.  Every path that stores into VRAM counts itself in
-         * g_vram_writes, and the start address, pitch, depth and size are
-         * what else could make the same memory show differently.
+         * frame. Model-mediated stores count themselves in g_vram_writes;
+         * native mappings must still compare rows. The start address,
+         * pitch, depth and size can also change the displayed memory.
          */
         const uint32_t key[5] = { addr1, line_offset, (uint32_t)bpp,
                                   (uint32_t)w, (uint32_t)h };
+        /* Direct native LFB writes are invisible to the emulated-write
+         * counter, including when Windows draws its cursor then halts.
+         * Keep the per-row comparison; skip converting unchanged rows. */
         if (!full_update && s->vbe_shadow &&
+            !__atomic_load_n(&s->direct_vram, __ATOMIC_ACQUIRE) &&
             s->vbe_shadow_writes == g_vram_writes &&
             memcmp(key, s->vbe_shadow_key, sizeof key) == 0) {
             g_vga_refresh_skips++;
@@ -3275,6 +3279,8 @@ int vga_dump_state(VGAState *s, char *buf, int size)
     DUMP("msr=%02x graphic_mode=%d gr6=%02x ar10=%02x sr1=%02x sr3=%02x sr4=%02x force_8dm=%d fb=%dx%d\n",
          s->msr, s->graphic_mode, s->gr[6], s->ar[0x10], s->sr[1], s->sr[3], s->sr[4],
          s->force_8dm, s->fb_dev->width, s->fb_dev->height);
+    DUMP("native_vram=%u (direct writes checked on every refresh)\n",
+         (unsigned)__atomic_load_n(&s->direct_vram, __ATOMIC_ACQUIRE));
     DUMP("cr:");
     for (int i = 0; i < 0x19; i++) DUMP(" %02x", s->cr[i]);
     DUMP("\nsr:");

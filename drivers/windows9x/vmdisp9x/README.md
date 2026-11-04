@@ -17,11 +17,15 @@ guest. The package INF matches that PCI ID directly and installs `qemumini.drv` 
 `qemumini.vxd` for the emulated card; Windows never touches the physical Intel
 display hardware on the Wyse 3040.
 
+Tested on Windows 98 FE and Windows 98 SE, including 800x600 in 32-bit colour.
+The monitor's native-framebuffer refresh must remain active while Windows is
+idle so software cursor updates are not held until unrelated guest activity.
+
 ## Installation in Windows 95 / 98 / Me
 
 1. Complete the Windows installation first with the standard VGA driver.
-2. Copy the `.ima` image into the `386/` folder on the runtime medium (or onto a
-   USB stick, e.g. as `vmdisp.ima`).
+2. Copy the `.ima` image onto an external FAT16/FAT32 USB drive, e.g. as
+   `vmdisp.ima`, or use the unpacked driver in `C:\DRIVERS\VGA`.
 3. Press **Win+F12** → **FDD-0**: eject any current floppy, pick `vmdisp.ima`,
    and choose **Save and Exit**.
 4. In Windows, open **Display Properties → Settings → Advanced → Adapter → Change**.

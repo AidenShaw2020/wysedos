@@ -193,6 +193,7 @@ int load_rom(void *phys_mem, const char *file, uword addr, int backward) {
 void hostblk_list(void);
 void hostblk_usb_start(void (*change)(int port, BlockDev *dev, unsigned serial));
 static int usb_storage_enabled = 1;
+static uint32_t firmware_timer_us = 5000; /* 0: retain firmware's hardware timer period */
 static void guest_usb_change(int port, BlockDev *dev, unsigned serial) {
     extern PC *g_wyse_pc;
     if (g_wyse_pc) uhci_attach(g_wyse_pc->uhci, port, dev, serial);
@@ -275,8 +276,9 @@ static void local_to_rtc(const CmosDateTime *dt, EFI_TIME *t) {
 
 // The [pc] keys only wyseDOS reads, for config_save.c to write back
 const char *config_platform_lines(void) {
-    static char lines[96];
-    snprintf(lines, sizeof(lines), "timezone=%s\nusb_storage=%d\n%s", tz_cet ? "cet" : "utc", usb_storage_enabled,
+    static char lines[128];
+    snprintf(lines, sizeof(lines), "timezone=%s\nusb_storage=%d\nfirmware_timer_us=%u\n%s", tz_cet ? "cet" : "utc", usb_storage_enabled,
+             firmware_timer_us,
              g_net_accept_broadcast ? "devctl=1\n" : "");
     return lines;
 }
@@ -324,6 +326,11 @@ static int cfg_handler(void *user, const char *section, const char *name, const 
     cfg_t *c = user;
     if (!strcmp(name, "devctl")) g_net_accept_broadcast = atoi(value) != 0;
     else if (!strcmp(name, "usb_storage")) usb_storage_enabled = atoi(value) != 0;
+    else if (!strcmp(name, "firmware_timer_us")) {
+        char *end;
+        unsigned long us=strtoul(value,&end,10);
+        if (end!=value && !*end && us<=1000000) firmware_timer_us=(uint32_t)us;
+    }
     else if (!strcmp(name, "hwvga")) {
         extern int g_hwvga_wanted;
         g_hwvga_wanted = atoi(value) != 0;
@@ -994,6 +1001,7 @@ static void poll_control(PC *pc) {
     } else if (!strncmp(cmd, "hid", 3)) {
         void usbhid_report(void);
         usbhid_report();
+        ps2_mouse_report(pc->mouse);
     } else if (!strncmp(cmd, "gtt", 3)) {
         void hwvga_gtt(uint32_t first);
         hwvga_gtt((uint32_t)strtoul(cmd + 3, NULL, 10));
@@ -1320,9 +1328,9 @@ void wyse_main(void) {
     printf("config: bios %s, vga bios %s, hda %s, %ld MB, cpu %d, fpu %d\n", conf.bios, conf.vga_bios,
            conf.ata[0], conf.mem_size >> 20, conf.cpu_gen, conf.fpu);
 
-    void firmware_events_init(void);
+    void firmware_events_init(uint32_t max_period_us);
     void firmware_events_poll(uint64_t now);
-    firmware_events_init();
+    firmware_events_init(firmware_timer_us);
     int hid = usbhid_init();
     display_init();
     splash_show();

@@ -8,8 +8,9 @@ EFI_HANDLE gImage=(void *)42;
 uint64_t wyse_ticks_us(void) { return 100; }
 uint8_t g_kbd_typematic;
 void ps2_put_keycode(PS2KbdState *s,int down,int key) { (void)s;(void)down;(void)key;abort(); }
+static int sent_x,sent_y;static unsigned sent_groups;
 void ps2_mouse_event(PS2MouseState *s,int dx,int dy,int dz,int buttons) {
-    (void)s;(void)dx;(void)dy;(void)dz;(void)buttons;abort();
+    (void)s;(void)dz;(void)buttons;sent_x+=dx;sent_y+=dy;sent_groups++;
 }
 bool settingsui_is_open(void) { abort(); }
 bool diskui_is_open(void) { abort(); }
@@ -63,5 +64,18 @@ int main(void) {
     binding_stop(&binding,(void *)1,0,NULL);CHECK(ndevs==0 && opens==closes);
     for (int i=0;i<100;i++) { attach((void *)1);CHECK(ndevs==1);binding_stop(&binding,(void *)1,0,NULL); }
     CHECK(ndevs==0 && opens==closes && !devs[0].handle);
-    puts("PASS: idle preserved, STALL recovery, retry, failed attach cleanup, 100 reconnects balanced");return 0;
+    PC pc={0};pc.mouse_enabled=1;
+    push((hid_event_t){.kind=1,.dx=3,.dy=2});
+    push((hid_event_t){.kind=1,.dx=4,.dy=-1});
+    push((hid_event_t){.kind=1,.dx=-2,.dy=5});
+    usbhid_poll(&pc);CHECK(sent_x==5 && sent_y==6 && sent_groups==1 && mouse_merged==2);
+    for(int i=0;i<RING+1;i++) push((hid_event_t){.kind=1,.dx=1,.dy=-1});
+    CHECK(ring_peak==RING-1 && mouse_dropped==2 && ring_dropped==2);
+    usbhid_poll(&pc);
+    CHECK(mouse_in_x==mouse_out_x+mouse_drop_x && mouse_in_y==mouse_out_y+mouse_drop_y);
+    pc.mouse_enabled=0;push((hid_event_t){.kind=1,.dx=-7,.dy=9});usbhid_poll(&pc);
+    CHECK(mouse_disabled==1 && mouse_disabled_x==-7 && mouse_disabled_y==9);
+    CHECK(mouse_in_x==mouse_out_x+mouse_drop_x+mouse_disabled_x);
+    CHECK(mouse_in_y==mouse_out_y+mouse_drop_y+mouse_disabled_y);
+    puts("PASS: HID recovery/ownership; coalesced motion conservation; ring overflow and disabled-input accounting");return 0;
 }

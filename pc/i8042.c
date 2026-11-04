@@ -485,6 +485,7 @@ typedef struct {
     uint8_t dev[PS2_QUEUE_SIZE];    /* 1: clocked in from the device (key/mouse data) */
 #endif
     int rptr, wptr, count;
+    uint32_t peak, dropped, produced, consumed;
 #ifdef BUILD_ESP32
     SemaphoreHandle_t mutex;
 #elif !defined(__wasm__) && !defined(CIRCLE_BUILD)
@@ -535,6 +536,9 @@ struct PS2MouseState {
     int mouse_dy;
     int mouse_dz;
     uint8_t mouse_buttons;
+    uint32_t motion_events, motion_disabled, motion_packets;
+    int64_t motion_in_x,motion_in_y,motion_out_x,motion_out_y;
+    int64_t motion_disabled_x,motion_disabled_y;
 };
 
 void ps2_queue(void *opaque, int b)
@@ -549,6 +553,7 @@ void ps2_queue(void *opaque, int b)
 #endif
 
     if (q->count >= PS2_QUEUE_SIZE) {
+        q->dropped++;
 #ifdef BUILD_ESP32
         xSemaphoreGive(q->mutex);
 #elif !defined(__wasm__) && !defined(CIRCLE_BUILD)
@@ -564,6 +569,8 @@ void ps2_queue(void *opaque, int b)
     if (++q->wptr == PS2_QUEUE_SIZE)
         q->wptr = 0;
     q->count++;
+    q->produced++;
+    if ((uint32_t)q->count>q->peak) q->peak=(uint32_t)q->count;
 
 #ifdef BUILD_ESP32
     xSemaphoreGive(q->mutex);
@@ -712,6 +719,7 @@ uint32_t ps2_read_data(void *opaque)
         if (++q->rptr == PS2_QUEUE_SIZE)
             q->rptr = 0;
         q->count--;
+        q->consumed++;
         s->hold_until = get_uticks() + 1000;
         s->update_irq(s->update_arg, 0);     /* kbd_step() raises the next one */
         return val;
@@ -730,6 +738,7 @@ uint32_t ps2_read_data(void *opaque)
         if (++q->rptr == PS2_QUEUE_SIZE)
             q->rptr = 0;
         q->count--;
+        q->consumed++;
         /* reading deasserts IRQ */
         s->update_irq(s->update_arg, 0);
         /* reassert IRQs if data left */
@@ -869,6 +878,7 @@ static void ps2_mouse_send_packet(PS2MouseState *s)
     }
 
     /* update deltas */
+    s->motion_packets++;s->motion_out_x+=dx1;s->motion_out_y+=dy1;
     s->mouse_dx -= dx1;
     s->mouse_dy -= dy1;
     s->mouse_dz -= dz1;
@@ -890,8 +900,12 @@ void ps2_mouse_event(PS2MouseState *s,
 #endif
 {
     /* check if deltas are recorded when disabled */
-    if (!(s->mouse_status & MOUSE_STATUS_ENABLED))
+    if (!(s->mouse_status & MOUSE_STATUS_ENABLED)) {
+        s->motion_disabled++;s->motion_disabled_x+=dx;s->motion_disabled_y-=dy;
         return;
+    }
+
+    s->motion_events++;s->motion_in_x+=dx;s->motion_in_y-=dy;
 
     s->mouse_dx += dx;
     s->mouse_dy -= dy;
@@ -912,6 +926,17 @@ void ps2_mouse_event(PS2MouseState *s,
                 break;
         }
     }
+}
+
+void ps2_mouse_report(PS2MouseState *s) {
+    if (!s) return;
+    printf("motion: PS2 events %u packets %u disabled %u type %u rate %u status %x, queue %d peak %u dropped-bytes %u bytes queued/read %u/%u\n",
+        s->motion_events,s->motion_packets,s->motion_disabled,s->mouse_type,s->mouse_sample_rate,
+        s->mouse_status,s->common.queue.count,s->common.queue.peak,s->common.queue.dropped,
+        s->common.queue.produced,s->common.queue.consumed);
+    printf("motion: PS2 xy in %lld/%lld packetized %lld/%lld pending %d/%d disabled %lld/%lld\n",
+        (long long)s->motion_in_x,(long long)s->motion_in_y,(long long)s->motion_out_x,(long long)s->motion_out_y,
+        s->mouse_dx,s->mouse_dy,(long long)s->motion_disabled_x,(long long)s->motion_disabled_y);
 }
 
 void ps2_write_mouse(void *opaque, int val)
