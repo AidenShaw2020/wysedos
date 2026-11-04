@@ -27,6 +27,21 @@ This remains a frame snapshot renderer, not cycle-accurate CRT beam emulation.
 It does not guarantee coherent output from arbitrary writes to the visible
 page throughout a display period or from a renderer slower than a frame.
 
+## Wide virtual planar surfaces
+
+Commander Keen 4's opening letters exposed a separate, pre-existing native
+VGA problem: horizontal damage and trails remained with the original 1.1.7
+firmware and with corrected page selection. A full software VGA A/B run was
+clean and was confirmed by the user. Cherry Trail's legacy aperture is known
+to drop bitmap word stores crossing an eight-byte boundary; wide planar
+bitmap drawing already uses the software backend for Windows VGA modes.
+
+That backend selection now considers the virtual row pitch as well as the
+visible width. Keen's 320-pixel intro uses 1984-pixel virtual rows (CR13=7Ch),
+so it takes the same safe path. Its game uses 336-pixel rows (CR13=15h) and
+returns to native VGA. Text, Bash's 384-pixel virtual rows and 256-colour
+modes keep their existing backend. No game name or executable is detected.
+
 ## Regression test
 
 `tools/tests/vga_page_flip.c` exercises the real retrace state machine and

@@ -355,16 +355,9 @@ void hwvga_fetch(VGAState *s);
 void hwvga_store_chain4(const uint8_t *src);
 void hwvga_store_planar(const uint8_t *src);
 
-/* High-resolution 16-colour VGA drivers use word bitmap copies at arbitrary
- * byte positions. Cherry Trail drops words crossing an 8-byte boundary.
- * Keep the accelerated path for text, low-resolution EGA and 256-colour games. */
-static bool hires_planar(VGAState *v) {
-    return (v->gr[6]&3)==1 && !(v->sr[4]&8) && !(v->gr[5]&0x60) && v->cr[1]>=79;
-}
-
 static void hw_update(bool resync) {
     VGAState *v = g_pc->vga;
-    int want = vga_vbe_on(v) || (safe_planar && hires_planar(v)) ? WIN_EMU
+    int want = vga_vbe_on(v) || (safe_planar && vga_native_planar_needs_software(v)) ? WIN_EMU
              : (v->sr[4] & 0x08) ? (vga_chain4_simple(v) ? WIN_RAM : WIN_EMU)
              : g_hwvga_on ? WIN_HW : WIN_EMU;
     if (want == win_mode) {
@@ -419,7 +412,7 @@ static void plane_update(void) {
     /* A direct page mapping cannot load the VGA latches on reads. Windows'
      * planar driver reads pixels in mode 0 before using those latches for
      * masked drawing and screen copies. Keep that path fully interpreted. */
-    int p = safe_planar && hires_planar(g_pc->vga) ? -1 : vga_simple_plane(g_pc->vga, &base);
+    int p = safe_planar && vga_native_planar_needs_software(g_pc->vga) ? -1 : vga_simple_plane(g_pc->vga, &base);
     if (p == plane_cur && (p < 0 || base == plane_base)) return;
     plane_release();
     if (p >= 0) {

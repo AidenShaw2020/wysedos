@@ -3672,6 +3672,17 @@ int vga_vbe_on(VGAState *s)
     return vbe_enabled(s);
 }
 
+/* The Intel legacy aperture drops unaligned bitmap words at an 8-byte
+ * boundary. The existing wide-planar fallback must consider the virtual
+ * row as well as the visible width: Keen 4's intro has a 320-pixel viewport
+ * into a 1984-pixel row (CR13=7Ch). Its game returns to a 336-pixel row.
+ * Keep byte-oriented low-resolution EGA and all 256-colour modes native. */
+int vga_native_planar_needs_software(const VGAState *s)
+{
+    return (s->gr[6] & 3) == 1 && !(s->sr[4] & 8) &&
+           !(s->gr[5] & 0x60) && (s->cr[1] >= 79 || s->cr[0x13] >= 40);
+}
+
 /* Chain 4 (mode 13h) with nothing between a CPU byte and its pixel: all planes
  * enabled, write mode 0 without rotation, logic or set/reset, the full bit mask,
  * read mode 0, A0000 for 64 KB. The window is then plain memory, vga_ram. */

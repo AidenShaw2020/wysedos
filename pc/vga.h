@@ -72,6 +72,8 @@ int vga_simple_plane(VGAState *s, uint32_t *base);
 int vga_vbe_on(VGAState *s);
 /* wyseDOS: mode 13h with no write mode, logic or masks in the way (vga.c) */
 int vga_chain4_simple(VGAState *s);
+/* Native VGA bitmap safety, including a wide virtual row behind a small viewport. */
+int vga_native_planar_needs_software(const VGAState *s);
 /* wyseDOS, hwvga.c: a register write passed on to the real VGA, and its memory
  * fetched into vga_ram for the display */
 void hwvga_reg(uint16_t port, uint8_t index, uint8_t val);

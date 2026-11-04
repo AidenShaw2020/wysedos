@@ -35,6 +35,18 @@ static void mode(VGAState *s) {
 static int advance(VGAState *s,uint32_t t) { now=t;return vga_step(s); }
 int main(void) {
     VGAState s;mode(&s);
+    CHECK(!vga_native_planar_needs_software(&s)); /* Bash: 320 / virtual 384 */
+    s.cr[0x13]=0x7c;
+    CHECK(vga_native_planar_needs_software(&s)); /* Keen intro: virtual 1984 */
+    s.cr[0x13]=0x15;
+    CHECK(!vga_native_planar_needs_software(&s)); /* Keen game: virtual 336 */
+    s.cr[1]=79;s.cr[0x13]=40;
+    CHECK(vga_native_planar_needs_software(&s)); /* Windows VGA 640 */
+    s.gr[5]=0x40;CHECK(!vga_native_planar_needs_software(&s)); /* Mode X */
+    s.gr[5]=0;s.sr[4]=0x0e;CHECK(!vga_native_planar_needs_software(&s)); /* chain 4 */
+    mode(&s);s.gr[6]=0x0e;s.cr[1]=79;
+    CHECK(!vga_native_planar_needs_software(&s)); /* text */
+    mode(&s);
     CHECK(vga_native_pages_disjoint(&s,0,0x8000));
     CHECK(vga_native_pages_disjoint(&s,0x2300,0x6300)); /* intro pages + scrolling */
     CHECK(vga_native_pages_disjoint(&s,0xf000,0x7000)); /* wrapped first page */
@@ -83,6 +95,6 @@ int main(void) {
     mode(&s);s.hw_mem=0;s.cr[0x0c]=0x80;
     CHECK(advance(&s,1000)==0);s.ar[0x13]=3;
     CHECK(advance(&s,1833)==1 && s.lat_start==0x8000 && s.lat_pan==3);
-    puts("PASS: native page lifetime, paired fine pan, wrap, split/banked/overlap fallback, software timing");
+    puts("PASS: native page lifetime, paired fine pan, wrap, split/banked/overlap fallback, software timing, virtual-pitch safety");
     return 0;
 }
