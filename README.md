@@ -89,6 +89,8 @@ https://github.com/user-attachments/assets/5645a36b-19c8-43b2-8efc-84873c90fd31
 Timing notes cover [display-derived audio clocks](docs/audio-clock.md) and
 [Sound Blaster DMA synchronization](docs/sound-dma.md), including hardware
 validation and regression tests.
+The [native VGA page-flip notes](docs/vga-page-flips.md) explain frame lifetime,
+fine panning and the regression test for incomplete moving sprites.
 
 ## How the Wyse 3040 is used
 

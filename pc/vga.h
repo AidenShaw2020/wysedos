@@ -158,11 +158,11 @@ struct VGAState {
     uint16_t lat_start;
     uint8_t lat_pan;
     uint8_t lat_valid;
-    /* with the real VGA the frame is drawn as its display period ends: the
-     * start address and panning that period showed */
-    uint16_t rend_start;
-    uint8_t rend_pan;
-    uint8_t rend_valid;
+    /* Native scanout request: start[15:0], pan[23:16], valid[24]. Publish
+     * together so the display core cannot combine two different frames. */
+    uint32_t rend_frame;
+    /* Disjoint front/back pages: wait for the new front page's pan latch. */
+    uint8_t native_page_pending;
     /* wyseDOS: A0000 is the Atom's own VGA (hwvga.c); register writes go there too
      * and the display reads its memory into vga_ram */
     uint8_t hw_mem;

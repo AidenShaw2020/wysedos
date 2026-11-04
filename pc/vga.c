@@ -1017,9 +1017,10 @@ static void vga_graphic_refresh(VGAState *s,
         start_addr = s->lat_start;
         pan = s->lat_pan;
     }
-    if (s->hw_mem && s->rend_valid) {
-        start_addr = s->rend_start;
-        pan = s->rend_pan;
+    const uint32_t frame = __atomic_load_n(&s->rend_frame, __ATOMIC_ACQUIRE);
+    if (s->hw_mem && (frame & (1u << 24))) {
+        start_addr = frame & 0xffff;
+        pan = (frame >> 16) & 0xff;
     }
 #endif
     uint32_t line_offset = s->cr[0x13];
@@ -1749,6 +1750,39 @@ static void simplefb_clear(FBDevice *fb_dev,
  * measured ninety-two.  One read serves both: no two parts of a single port
  * read need to disagree about what time it is.
  */
+#if defined(WYSE_BUILD)
+/* Can the next visible page be read while the guest reuses the old one?
+ * Count plane addresses, not display dots: both sixteen-colour and Mode X
+ * CRTC character clocks consume one four-plane group. Include the extra
+ * group fine panning can expose. Overlapping scroll windows, banked CGA and
+ * split screens keep the earlier single-buffer snapshot timing. */
+static int vga_native_pages_disjoint(const VGAState *s, uint16_t a, uint16_t b)
+{
+    const unsigned shift = (s->gr[5] >> 5) & 3;
+    if (!s->lat_valid || (s->gr[6] & 3) != 1 || (s->sr[4] & 8) ||
+        (shift != 0 && shift != 2) || (s->cr[0x17] & 3) != 3)
+        return 0;
+    const unsigned h = 1 + (s->cr[0x12] | ((s->cr[7] & 2) << 7) |
+                                               ((s->cr[7] & 0x40) << 3));
+    const unsigned lc = s->cr[0x18] | ((s->cr[7] & 0x10) << 4) |
+                                           ((s->cr[9] & 0x40) << 3);
+    if (lc < h - 1) return 0; /* shared bottom panel */
+    const unsigned repeat = ((s->cr[9] & 31) + 1) << (s->cr[9] >> 7);
+    const unsigned rows = (h + repeat - 1) / repeat;
+    const unsigned span = (rows - 1) * ((unsigned)s->cr[0x13] * 2) +
+                                                   s->cr[1] + 2;
+    const unsigned distance = (uint16_t)(b - a);
+    return span <= 0x8000 && distance >= span && 0x10000 - distance >= span;
+}
+
+static void vga_native_frame(VGAState *s)
+{
+    const uint32_t frame = s->lat_start | ((uint32_t)s->lat_pan << 16) |
+                                            ((uint32_t)!!s->lat_valid << 24);
+    __atomic_store_n(&s->rend_frame, frame, __ATOMIC_RELEASE);
+}
+#endif
+
 static int vga_update_retrace_at(VGAState *s, uint32_t now)
 {
     int ret = 0;
@@ -1790,18 +1824,19 @@ static int vga_update_retrace_at(VGAState *s, uint32_t now)
             __atomic_thread_fence(__ATOMIC_RELEASE);
             s->pal_seq++;
             /*
-             * With the real VGA (hw_mem) the frame is taken here, as the
-             * period it was shown in ends, with that period's start address
-             * and panning. Taken at the retrace's end, the 3.5 ms copy of the
-             * VGA's memory ran into the next frame's drawing: Prince of
-             * Persia, which draws straight after the retrace, showed lines
-             * through the prince as he rose. A CRT reads each line at its
-             * own moment, the lower ones long after the game is done.
+             * A single-buffer picture is read at the end of its display
+             * period, before drawing after retrace can overwrite it. But a
+             * page-flipping game immediately reuses that OLD front page as
+             * its back buffer (Monster Bash erased parts of moving sprites
+             * while core 2 copied them). A disjoint NEW front page stays
+             * intact throughout the next display period. Read that one at
+             * retrace end, after its pixel panning has also been latched.
              */
-            if (s->hw_mem) {
-                s->rend_start = s->lat_start;
-                s->rend_pan = s->lat_pan;
-                s->rend_valid = s->lat_valid;
+            const uint16_t next_start = (uint16_t)(s->cr[0x0d] | (s->cr[0x0c] << 8));
+            s->native_page_pending = s->hw_mem &&
+                vga_native_pages_disjoint(s, s->lat_start, next_start);
+            if (s->hw_mem && !s->native_page_pending) {
+                vga_native_frame(s);
                 s->retrace_pending = 1;
                 ret = 1;
             }
@@ -1822,10 +1857,13 @@ static int vga_update_retrace_at(VGAState *s, uint32_t now)
             if (s->retrace_phase == 2) {
                 s->lat_pan = s->ar[0x13];
                 s->lat_valid = 1;
-                if (!s->hw_mem) {
+                if (s->hw_mem && s->native_page_pending)
+                    vga_native_frame(s);
+                if (!s->hw_mem || s->native_page_pending) {
                     s->retrace_pending = 1;
                     ret = 1;
                 }
+                s->native_page_pending = 0;
                 /* a display period begins: the palette it starts with, and
                  * its DAC writes timed from here */
                 memcpy(s->pal_start, s->palette, sizeof(s->pal_start));
