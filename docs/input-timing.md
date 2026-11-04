@@ -35,6 +35,26 @@ it does not establish the timing of individual Windows cursor updates.
 
 ## Development diagnostics
 
+### PS/2 input after long idle periods
+
+A 32-bit microsecond deadline used for the 1 ms PS/2 byte hold was left
+armed after queues emptied. After more than half the clock range
+(35 minutes 47 seconds), a signed deadline comparison could classify that
+old deadline as still in the future. USB reports continued to arrive, while
+both PS/2 queues filled and the guest stopped reading port 60h.
+
+The hold now has an explicit active flag, uses unsigned elapsed time, and
+is retired by the device poll even while its queue is empty. The genuine
+1 ms hold for chained keyboard interrupt handlers is retained. Tests cover
+first input with a high clock value, keyboard and mouse input after a long
+idle gap, and a live byte hold across 32-bit clock wrap. The old code failed
+the new regression; the corrected code passes it and the existing movement
+conservation and framing tests. Reconnection of the user's keyboard and
+mouse alongside PicoHID was also checked on the patched PXE build. A real
+35-minute idle hardware soak is separate from these accelerated clock tests.
+
+### Runtime counters
+
 With the development control port enabled, `hostirq` reads the active hardware
 timer period in 100 ns units. `hid` also reports bounded cumulative `motion:`
 counters: submitted events, merged events, ring peak/overflow, disabled input,

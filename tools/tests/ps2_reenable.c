@@ -9,7 +9,38 @@ static int lines[16];
 static void irq(void *p,int n,int on) { (void)p;lines[n]=on; }
 static void reset(void *p) { (void)p;abort(); }
 #define CHECK(x) do { if (!(x)) { printf("FAIL line %d\n",__LINE__);return 1; } } while(0)
+static int idle_clock_regression(void) {
+    PS2KbdState *k; PS2MouseState *m;
+    now=0x80000010u;
+    KBDState *s=i8042_init(&k,&m,1,12,NULL,irq,NULL,reset);
+    ps2_put_keycode(k,1,30);
+    CHECK(lines[1]); CHECK(kbd_read_data(s,0)==30);
+    kbd_write_command(s,0,0xd4);kbd_write_data(s,0,0xf4);
+    CHECK(kbd_read_data(s,0)==0xfa);
+    now+=1000;kbd_step(s);
+    /* Both devices were drained, then idle for more than the signed
+     * half-range of the 32-bit microsecond clock (35m47s). */
+    now+=0x80000001u;
+    ps2_put_keycode(k,0,30);kbd_step(s);
+    CHECK(lines[1]);CHECK(kbd_read_data(s,0)==0x9e);
+    ps2_mouse_event(m,1,-1,0,0);kbd_step(s);
+    CHECK(lines[12]);CHECK(kbd_read_data(s,0)==8);
+    now+=1000;kbd_step(s);CHECK(kbd_read_data(s,0)==1);
+    now+=1000;kbd_step(s);CHECK(kbd_read_data(s,0)==1);
+    now+=1000;kbd_step(s);
+    /* The real 1ms device-byte hold must still work across clock wrap. */
+    now=0xffffff80u;
+    ps2_put_keycode(k,1,31);kbd_step(s);
+    CHECK(lines[1]);CHECK(kbd_read_data(s,0)==31);
+    ps2_put_keycode(k,0,31);CHECK(!lines[1]);
+    now=0x100;kbd_step(s);CHECK(!lines[1]);
+    now=0x400;kbd_step(s);CHECK(lines[1]);CHECK(kbd_read_data(s,0)==0x9f);
+    puts("PASS: high-uptime first input, long-idle keyboard/mouse, 1ms hold across clock wrap");
+    return 0;
+}
 int main(void) {
+    CHECK(idle_clock_regression()==0);
+    memset(lines,0,sizeof(lines));now=0;
     PS2KbdState *k;PS2MouseState *m;
     KBDState *s=i8042_init(&k,&m,1,12,NULL,irq,NULL,reset);
     kbd_write_command(s,0,0xad);CHECK(s->mode&0x10);

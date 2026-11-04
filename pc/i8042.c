@@ -507,10 +507,23 @@ typedef struct {
      * not advance on every read the way it did under the interpreter.
      * Controller and command responses are not held: those are immediate
      * on real hardware too, and the BIOS reads them back to back. */
-    uint32_t hold_until;
+    uint32_t hold_since;
+    bool hold_active;
     int dev_mark;           /* set while key or mouse data is being queued */
 #endif
 } PS2State;
+
+#if defined(WYSE_BUILD)
+static bool ps2_device_held(PS2State *s, uint32_t now)
+{
+    /* A stale deadline must not become a future deadline after 35 minutes
+     * idle. Measure the bounded 1ms interval as unsigned elapsed time and
+     * retire it even while the queue is empty, before a full clock wrap. */
+    if (s->hold_active && (uint32_t)(now - s->hold_since) >= 1000)
+        s->hold_active = false;
+    return s->hold_active;
+}
+#endif
 
 struct  PS2KbdState {
     PS2State common;
@@ -588,7 +601,7 @@ void ps2_queue(void *opaque, int b)
      * the byte waited. It took a two-byte key (E0 and a code: PgUp, PgDn,
      * the arrows) or quick typing, as in M602 and the boot menu.
      */
-    if (!(s->dev_mark && (int32_t)(get_uticks() - s->hold_until) < 0))
+    if (!(s->dev_mark && ps2_device_held(s, get_uticks())))
         s->update_irq(s->update_arg, 1);
 #else
     s->update_irq(s->update_arg, 1);
@@ -675,7 +688,8 @@ void kbd_step(void *opaque)
     PS2State *ps[2] = {&s->kbd->common, &s->mouse->common};
     for (int i = 0; i < 2; i++) {
         PS2Queue *q = &ps[i]->queue;
-        if (q->count && (!q->dev[q->rptr] || (int32_t)(now - ps[i]->hold_until) >= 0))
+        bool held = ps2_device_held(ps[i], now);
+        if (q->count && (!q->dev[q->rptr] || !held))
             ps[i]->update_irq(ps[i]->update_arg, 1);
     }
     if ((s->mouse->mouse_status & MOUSE_STATUS_ENABLED) &&
@@ -705,7 +719,7 @@ uint32_t ps2_read_data(void *opaque)
     pthread_mutex_lock(&q->mutex);
 #endif
 #if defined(WYSE_BUILD)
-    if (q->count != 0 && q->dev[q->rptr] && (int32_t)(get_uticks() - s->hold_until) < 0) {
+    if (q->count != 0 && q->dev[q->rptr] && ps2_device_held(s, get_uticks())) {
         /* the next byte is still on its way: the last one again, and the
          * line down, so that kbd_step() raises a fresh edge for the next */
         index = q->rptr - 1;
@@ -720,7 +734,8 @@ uint32_t ps2_read_data(void *opaque)
             q->rptr = 0;
         q->count--;
         q->consumed++;
-        s->hold_until = get_uticks() + 1000;
+        s->hold_since = get_uticks();
+        s->hold_active = true;
         s->update_irq(s->update_arg, 0);     /* kbd_step() raises the next one */
         return val;
     }
