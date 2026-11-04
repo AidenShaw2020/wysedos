@@ -2196,6 +2196,12 @@ static int SB_read_DMA (void *opaque, int nchan, int dma_pos, int dma_len)
     SB16State *s = opaque;
     int till, copy, written, free;
 
+#if defined(WYSE_BUILD)
+    /* Only core 0 owns the DMA controller. Reject a request left over from
+     * a stopped single-cycle transfer rather than copying another block. */
+    if (!s->dma_running) return dma_pos;
+#endif
+
     if (s->block_size <= 0) {
         qemu_log_mask(LOG_GUEST_ERROR, "invalid block size=%d nchan=%d"
                       " dma_pos=%d dma_len=%d\n", s->block_size, nchan,
@@ -3007,11 +3013,16 @@ void sb16_getsample(SB16State *s, int* r_v, int* l_v) {
         break;
     }
 
+#if !defined(WYSE_BUILD)
     if (s->dma_running) {
         int dma = s->use_hdma ? s->hdma : s->dma;
         IsaDma *isa_dma = s->use_hdma ? s->isa_hdma : s->isa_dma;
         i8257_dma_hold_DREQ(isa_dma, dma);
     }
+#endif
+    /* On Wyse, control() keeps DREQ asserted until core 0 stops the DSP.
+     * Reasserting here on core 1 can race with that stop and resurrect it.
+     * Ring consumption frees space; core 0 refills it in pc_step(). */
 
     /*
      * A byte the DMA has not delivered is not silence.

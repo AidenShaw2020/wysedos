@@ -86,6 +86,10 @@ https://github.com/user-attachments/assets/5645a36b-19c8-43b2-8efc-84873c90fd31
 | **Input** | i8042 AT/PS/2 keyboard and 3-button PS/2 Intellimouse with scroll wheel, dual analogue gameport at `0x201` |
 | **Clock** | MC146818 CMOS RTC fed from the hardware RTC |
 
+Timing notes cover [display-derived audio clocks](docs/audio-clock.md) and
+[Sound Blaster DMA synchronization](docs/sound-dma.md), including hardware
+validation and regression tests.
+
 ## How the Wyse 3040 is used
 
 The Dell Wyse 3040 has a quad-core Intel Atom x5-Z8350 (Cherry Trail, 1.44 GHz /
