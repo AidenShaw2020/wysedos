@@ -24,6 +24,7 @@ and physical output matter.
 | Title | Recorded observation |
 |---|---|
 | Doom, Quake, Duke Nukem 3D, Tyrian | Demo/gameplay showcase with sound; measurements below |
+| Blood 1.21 / Setup 1.10 | 640x480/8-bit attract gameplay and menus; clean nested text dialogs after VBE address and byte-safe aperture fixes; 32 MB RAM |
 | Monster Bash | Intro and scrolling demo after completed-front-page snapshot correction |
 | Commander Keen 4 | Clean intro and attract gameplay; wide intro uses software VGA, gameplay returns to native |
 | Prince of Persia | Walking, crouching and jumping checked with VGA changes |

@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include "pc.h"
 #include "../src/vm.h"
+#include "hwvga_access.h"
 
 uint64_t wyse_tsc_khz(void);
 static inline uint64_t rdmsr_(uint32_t msr) {
@@ -68,6 +69,7 @@ static CPU_CB orig_cb;
 // With the real VGA in use (hw_on) the interpreter reaches it too: A0000-BFFFF
 // is uncached in the host's map (hwvga.c)
 static bool hw_on;
+static bool text_trapped; /* Native VGA storage, byte-safe interpreted text accesses. */
 #define HWVGA(a) (hw_on && (uint32_t)(a) - 0xa0000u < 0x20000u)
 static u8 cb_mr8(void *o, uword a) {
     icpu->burst_mmio++;
@@ -79,19 +81,23 @@ static void cb_mw8(void *o, uword a, u8 v) {
 }
 static u16 cb_mr16(void *o, uword a) {
     icpu->burst_mmio++;
-    return HWVGA(a) ? *(volatile u16 *)(uintptr_t)a : orig_cb.iomem_read16(o, a);
+    return HWVGA(a) ? (text_trapped ? hwvga_load_bytes(a,2) : *(volatile u16 *)(uintptr_t)a) : orig_cb.iomem_read16(o, a);
 }
 static void cb_mw16(void *o, uword a, u16 v) {
     icpu->burst_mmio++;
-    if (HWVGA(a)) *(volatile u16 *)(uintptr_t)a = v; else orig_cb.iomem_write16(o, a, v);
+    if (HWVGA(a)) {
+        if (text_trapped) hwvga_store_bytes(a,v,2); else *(volatile u16 *)(uintptr_t)a = v;
+    } else orig_cb.iomem_write16(o, a, v);
 }
 static u32 cb_mr32(void *o, uword a) {
     icpu->burst_mmio++;
-    return HWVGA(a) ? *(volatile u32 *)(uintptr_t)a : orig_cb.iomem_read32(o, a);
+    return HWVGA(a) ? (text_trapped ? hwvga_load_bytes(a,4) : *(volatile u32 *)(uintptr_t)a) : orig_cb.iomem_read32(o, a);
 }
 static void cb_mw32(void *o, uword a, u32 v) {
     icpu->burst_mmio++;
-    if (HWVGA(a)) *(volatile u32 *)(uintptr_t)a = v; else orig_cb.iomem_write32(o, a, v);
+    if (HWVGA(a)) {
+        if (text_trapped) hwvga_store_bytes(a,v,4); else *(volatile u32 *)(uintptr_t)a = v;
+    } else orig_cb.iomem_write32(o, a, v);
 }
 static bool cb_mws(void *o, uword a, uint8_t *b, int l) {
     icpu->burst_mmio++;
@@ -360,7 +366,14 @@ static void hw_update(bool resync) {
     int want = vga_vbe_on(v) || (safe_planar && vga_native_planar_needs_software(v)) ? WIN_EMU
              : (v->sr[4] & 0x08) ? (vga_chain4_simple(v) ? WIN_RAM : WIN_EMU)
              : g_hwvga_on ? WIN_HW : WIN_EMU;
+    const bool trap_text = want == WIN_HW && safe_planar && !(v->gr[6] & 1);
     if (want == win_mode) {
+        if (trap_text != text_trapped) {
+            if (trap_text) vm_map(&vm,0xa0000,NULL,0x20000,false);
+            else vm_map_mmio(&vm,0xa0000,0xa0000,0x20000);
+            text_trapped = trap_text;
+            printf("vmx: text VGA byte-safe access %s\n",trap_text?"on":"off");
+        }
         if (want == WIN_HW && resync) {
             io_pass_off();
             hwvga_sync(v);
@@ -387,7 +400,8 @@ static void hw_update(bool resync) {
     }
     if (want == WIN_HW) {
         hwvga_sync(v);
-        vm_map_mmio(&vm, 0xa0000, 0xa0000, 0x20000);
+        if (trap_text) vm_map(&vm,0xa0000,NULL,0x20000,false);
+        else vm_map_mmio(&vm, 0xa0000, 0xa0000, 0x20000);
     } else {
         vm_map(&vm, 0xa0000, NULL, 0x20000, false);
         if (want == WIN_RAM) vm_map(&vm, 0xa0000, v->vga_ram, 0x10000, true);
@@ -396,8 +410,9 @@ static void hw_update(bool resync) {
     ram_planar = want == WIN_EMU && !vga_vbe_on(v) && !(v->sr[4]&8) && !(v->gr[6]&2);
     win_mode = want;
     hw_on = want == WIN_HW;
+    text_trapped = trap_text;
     v->hw_mem = hw_on;
-    printf("vmx: VGA window %s\n", want == WIN_HW ? "on the real VGA" : want == WIN_RAM ? "in memory (13h)" : "emulated");
+    printf("vmx: VGA window %s\n", want == WIN_HW ? (trap_text ? "on the real VGA (byte-safe text)" : "on the real VGA") : want == WIN_RAM ? "in memory (13h)" : "emulated");
 }
 
 void wyse_cpu_vga_changed(void) { hw_update(true); }

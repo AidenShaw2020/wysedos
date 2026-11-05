@@ -32,6 +32,7 @@ hardware. Detailed engineering reports retain their original test conditions.
 - [Sound Blaster DMA ownership](sound-dma.md)
 - [Analog headphone volume and codec routing](headphone-volume.md)
 - [VGA page flips and wide virtual surfaces](vga-page-flips.md)
+- [VBE protected-mode addresses and text screen copies](vbe-protected-mode.md)
 
 Reports describe specific runs, not universal compatibility. Earlier pending
 installation steps in a dated report are historical; consult the guides for

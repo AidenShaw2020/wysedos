@@ -385,6 +385,39 @@ void hwvga_unaligned(void) {
     for (unsigned i=0;i<16;i++) planes_put(vga,a+i,saved[i]);
     for (int i=0;i<5;i++) hwvga_reg(0x3c4,(uint8_t)i,sr[i]);
     for (int i=0;i<9;i++) hwvga_reg(0x3ce,(uint8_t)i,gr[i]);
+    if (!(gr[6]&1) && ((gr[6]>>2)&3)==3) {
+        // Text-mode screen save/restore also uses word/dword copies. Probe
+        // every alignment in an off-screen page, then restore every byte.
+        volatile uint8_t *text=(volatile uint8_t *)0xbf000;
+        uint8_t keep[16];
+        for (unsigned i=0;i<16;i++) keep[i]=text[i];
+        for (unsigned size=2;size<=4;size+=2) {
+            unsigned badread=0,badwrite=0;
+            for (unsigned off=0;off<8;off++) {
+                for (unsigned i=0;i<16;i++) text[i]=(uint8_t)(0x20+i);
+                uint32_t expected=0;
+                for (unsigned i=0;i<size;i++) expected|=(0x20u+off+i)<<(i*8);
+                uint32_t got=size==2?*(volatile uint16_t *)(text+off):*(volatile uint32_t *)(text+off);
+                if (got!=expected) {
+                    badread++;
+                    printf("hwvga unaligned: text %u-byte read +%u: %08x expected %08x\n",size,off,got,expected);
+                }
+                if (size==2) *(volatile uint16_t *)(text+off)=0x6655;
+                else *(volatile uint32_t *)(text+off)=0x88776655;
+                bool wrong=false;
+                for (unsigned i=0;i<16;i++) {
+                    uint8_t want=i>=off && i<off+size?(uint8_t)(0x55+0x11*(i-off)):(uint8_t)(0x20+i);
+                    if (text[i]!=want) wrong=true;
+                }
+                if (wrong) {
+                    badwrite++;
+                    printf("hwvga unaligned: text %u-byte write +%u: DROPPED\n",size,off);
+                }
+            }
+            printf("hwvga unaligned: text %u-byte: %u bad reads, %u bad writes\n",size,badread,badwrite);
+        }
+        for (unsigned i=0;i<16;i++) text[i]=keep[i];
+    }
     outb(0x3c4,si); outb(0x3ce,gi);
 }
 

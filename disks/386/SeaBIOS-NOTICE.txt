@@ -27,7 +27,7 @@ Distributed ROM SHA-256:
 bios.bin:
 54999d10d5460ac5c8df105ab73d812e80841245a629f510a72feec9623cb8d2
 vgabios.bin:
-d43a12414ed619216dcc268f353bd0812ec940be00bc7122e7a5ae9f738c0b6c
+cb8dd1dc261c247807b6986b515662eda7d2a626ff30c01af6fe9734767165c2
 
 wyseDOS VGA modification
 -----------------------
@@ -35,7 +35,7 @@ The repository's tools/vgabios/patch.py and vbe_pm.S add a VBE 2.0 protected-
 mode interface and VBE/DPMS display-power control to the preserved original
 SeaVGABIOS ROM. Reapplying these
 sources reproduces the distributed vgabios.bin byte for byte (verified
-2026-11-04). These local modifications are under the project's GPLv3 terms.
+2026-11-05). These local modifications are under the project's GPLv3 terms.
 
 Preserved original VGA ROM SHA-256:
 484e5b70263312379ee4b7d078741f0de6d93e762759ca1e4407b9dea08fedd2

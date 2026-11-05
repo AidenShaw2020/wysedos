@@ -61,7 +61,7 @@ Quote `'-Wl,/opt:ref'` in PowerShell to prevent comma argument splitting.
 | Image ownership and IDE lifecycle | `image_media.c`, `ide_media.c` |
 | HID/PS2/firmware events | `usbhid_recovery.c`, `ps2_reenable.c`, `firmware_events.c` |
 | PnP/ROM protection/EDID | `ne2000_pnp.c`, `pam.c`, `edid.c` |
-| Generated media/BIOS | `driver_floppy.py`, `vgabios_dpms.py` (check dependencies) |
+| Generated media/BIOS | `driver_floppy.py`, `vgabios_dpms.py`, `vgabios_pm.py` (check dependencies) |
 
 ## Hardware and releases
 
@@ -79,3 +79,6 @@ keyboard/monitor; they should not be told to run missing rig utilities.
 Record build hash, guest CPU/RAM, media backend, output, driver versions,
 steps and results. Compare capture with direct output where possible: a
 grabber's damaged MJPEG frame does not prove guest video-memory corruption.
+
+`python tools/tests/hwvga_access.py` checks the actual compiled byte-safe MMIO
+transaction widths with LLVM and Unicorn, including old wide-access controls.

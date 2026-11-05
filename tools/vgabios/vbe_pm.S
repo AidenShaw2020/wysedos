@@ -154,17 +154,19 @@ set_display_start:
         push    %edx
         push    %esi
         push    %edi
+        // Capture DX:CX before DX becomes the retrace-status port. BL=80h
+        // callers otherwise get 03DAh as their address's high word.
+        shl     $16, %edx
+        movzwl  %cx, %ecx
+        or      %edx, %ecx
+        shl     $2, %ecx                // bytes
         test    %bl, %bl
         jz      1f
         mov     $0x3da, %dx
 2:      in      %dx, %al
         test    $8, %al
         jz      2b
-1:      shl     $16, %edx
-        movzwl  %cx, %ecx
-        or      %edx, %ecx
-        shl     $2, %ecx                // bytes
-        mov     $DISPI_INDEX, %dx
+1:      mov     $DISPI_INDEX, %dx
         mov     $DISPI_VIRT_WIDTH, %ax
         out     %ax, %dx
         inc     %dx
