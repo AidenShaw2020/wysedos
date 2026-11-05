@@ -17,6 +17,7 @@ and physical output matter.
 | Power | Normal Windows shutdown reached physical power-off; DPMS blanks guest pixels/cursor, retaining the host signal |
 | HID | Physical keyboard/mouse with PicoHID; KVM reconnect and long-idle PS/2 correction; possible enumeration pauses remain |
 | USB floppy | Physical 1.44 MB boot/read/write; separate from flash and image ownership paths |
+| USB CD-ROM | Physical USB CD drive with a real disc supported and tested; presented to the guest as an ATAPI CD-ROM |
 
 ## Games and programs
 
@@ -51,8 +52,9 @@ need matching game versions, scenes, detail, CPU profile and sound settings.
 - CPU profiles approximate execution rates, not instruction/bus cycles.
 - Firmware USB enumeration can pause input. Orderly Stop/Eject has stronger
   qualification than abrupt removal with open files or DOS reconnect.
-- Physical HDD/CD image-source combinations need more hardware coverage than
-  their local lifecycle tests provide.
+- External HDD-backed image-source combinations need more hardware coverage
+  than their local lifecycle tests provide. This concerns image-file sources,
+  not the tested physical USB CD-ROM path.
 - Snapshot rendering is not cycle-accurate CRT scanout; arbitrary visible-page
   writes can exceed its coherence guarantees.
 - Older local notes report Epic Pinball graphics and Blockout background

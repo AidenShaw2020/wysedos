@@ -95,7 +95,7 @@ Start with the [documentation index](docs/index.md):
 | **Memory** | Configurable conventional + extended RAM (default 16 MB, up to 256 MB), LIM EMS 4.0 at `0xD000` |
 | **Video** | IBM VGA (text, CGA, EGA, Mode X, 256-colour) and VESA VBE 2.0 LFB modes up to 1280x1024 in 8/15/16/24/32 bpp with 8 MB VRAM |
 | **Sound** | AdLib / Dual OPL2 / OPL3 ([Nuked OPL3](https://github.com/nukeykt/Nuked-OPL3)), Sound Blaster 16 (DSP 4.05, 8-bit and 16-bit DMA, mixer, auto-init), MPU-401 General MIDI ([TinySoundFont](https://github.com/schellingb/TinySoundFont)), Tandy 3-voice (SN76489), Covox Speech Thing & Disney Sound Source on LPT1, PC speaker (PIT channel 2) |
-| **Disks** | Dual IDE/ATA channels (hard disks and ATAPI CD-ROMs, either backed by the native eMMC partition or `.img`/`.iso` files), two 3.5" floppy drives (`.img`/`.ima` or a physical USB floppy drive) |
+| **Disks** | Dual IDE/ATA channels (hard disks and ATAPI CD-ROMs, using the native eMMC guest disk, `.img`/`.iso` files or a physical USB CD-ROM drive as appropriate), two 3.5" floppy drives (`.img`/`.ima` or a physical USB floppy drive) |
 | **Network** | NE2000 ISA / ISA PnP Ethernet adapter bridged to the USB/on-board Ethernet |
 | **Input** | i8042 AT/PS/2 keyboard and 3-button PS/2 Intellimouse with scroll wheel, dual analogue gameport at `0x201` |
 | **Clock** | MC146818 CMOS RTC fed from the hardware RTC |
@@ -150,8 +150,12 @@ driven by the RT5672/I2S backend on the qualified unit.
 Because the guest `C:` drive lives on the internal eMMC (`hda=host:emmc`), you
 can install an operating system onto it just as on a real PC:
 
-- **Physical USB floppy or CD/USB stick**: plug a USB floppy drive or FAT32 USB
-  stick holding `.img` / `.iso` installation media into the Wyse 3040.
+- **Physical USB floppy and USB CD-ROM (tested)**: connect a USB floppy or
+  USB CD-ROM drive with real installation media. The physical CD drive is
+  presented as an ATAPI CD-ROM; no ISO conversion or guest USB flash driver
+  is required. In DOS, load the usual ATAPI CD driver and MSCDEX.
+- **Image files on USB storage**: connect a FAT32 USB stick holding `.img` /
+  `.iso` installation media. See [physical drives and image sources](docs/storage.md).
 - **Disk Manager (`Win + F12`)**: open the on-screen disk manager at any time to
   mount floppy images (`.img` / `.ima`) in `A:` / `B:`, CD-ROM images (`.iso`)
   on the secondary IDE channel, or pick a boot device and restart.
@@ -182,7 +186,7 @@ DOS:
 
 | Key | Action |
 |---|---|
-| `Win + F12` | Open the **Disk Manager** (mount/eject floppy, HDD and CD-ROM images, attach physical USB floppy, select one-shot boot drive) |
+| `Win + F12` | Open the **Disk Manager** (mount/eject floppy, HDD and CD-ROM images, attach physical USB floppy/CD-ROM, select one-shot boot drive) |
 | `Win + F11` | Open the **Settings** menu (CPU speed, RAM, audio cards, per-channel volumes, mouse speed, power behaviour) |
 | `Win + Delete` | Reset the guest PC (unsaved guest work is lost) |
 | `Win + R` | Reboot the physical Wyse (shut down Windows first) |

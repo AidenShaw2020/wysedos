@@ -42,8 +42,10 @@ It is outside the disk presented to the guest. See [storage](storage.md).
 
 ## Install your operating system
 
-1. Connect a supported USB floppy, or put floppy images (`.img`/`.ima`) and
-   CD images (`.iso`) on external FAT media.
+1. Connect a physical USB floppy or USB CD-ROM drive with your installation
+   media, or put floppy images (`.img`/`.ima`) and CD images (`.iso`) on
+   external FAT media. Physical USB CD-ROM support has been tested; an ISO
+   image is an alternative, not a requirement.
 2. Open Win+F12 and select the media and boot device. Stop/eject a disk in
    Windows before granting it to Disk Manager as an image source.
 3. Boot your DOS media. Transfer the system using that DOS version's procedure,

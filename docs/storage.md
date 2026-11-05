@@ -46,9 +46,24 @@ and must be made again after a monitor restart.
   low-memory options. Read their bundled documentation for prerequisites.
 - Use USBOFF before starting Windows USB drivers, avoiding competing stacks.
 - Public releases do not supply Windows USB storage driver packages.
-- Physical USB floppy/CD handling is separate from ordinary flash exposure.
-  A physical 1.44 MB floppy was qualified for boot/read/write.
+- Physical USB floppy and USB CD-ROM handling is separate from ordinary flash
+  exposure. A physical 1.44 MB floppy was qualified for boot/read/write.
+  A physical USB CD-ROM drive with a real disc is also supported and tested.
 - DOS live reconnect and abrupt removal are less qualified than orderly
   Windows Stop/Eject. Do not infer hotplug support solely from boot-time access.
+
+## Physical USB CD-ROM
+
+Connect the USB CD drive and insert the disc. The monitor exposes the physical
+optical drive through the guest ATAPI CD-ROM model; converting the disc to an
+ISO is not required. Disk Manager offers it as **USB CD-ROM drive 1**
+(`usb:ucd1`). It is automatically assigned to the secondary IDE master when
+that slot has no configured media; use Win+F12 to select it otherwise.
+
+The configuration form is `[pc] cdc=usb:ucd1`. DOS requires its normal
+IDE/ATAPI CD driver plus MSCDEX or a compatible replacement. Windows uses its
+normal ATAPI CD-ROM support; this path does not require the guest USB flash
+storage driver. Reading a real disc and mounting an ISO file are separate
+supported ways to provide CD media.
 
 See [USB validation](usb-validation.md) for exact conditions, tests and limits.

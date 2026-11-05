@@ -80,8 +80,13 @@ is recorded below.
   Ejecting an empty floppy cannot fall through to ejecting native C:.
 - Real IDE lifecycle tests cover old-backend flush, busy/error refusal,
   empty slots and HDD/CD personality changes without replaying old buffers.
-- Physical CD/HDD image use remains additional hardware qualification; their
-  implemented lifecycle paths passed local tests.
+- External image-source combinations remain additional hardware qualification;
+  their implemented lifecycle paths passed local tests. This concerns files
+  used as virtual media, not the separately supported physical USB CD-ROM.
+- Documentation clarification, 2026-11-05: the user confirms that the physical
+  USB CD drive with a real disc has been tested and is supported. It is exposed
+  as an ATAPI CD-ROM (`usb:ucd1`); do not classify this path as untested merely
+  because some external image-source combinations need further qualification.
 - Our test files WYIMGA.IMG and VALID.IMG are old invalid fixtures; DOSVAL2.IMG
   is the working image containing the Windows-written WINWRITE test line.
 
