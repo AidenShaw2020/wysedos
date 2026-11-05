@@ -733,7 +733,7 @@ static void run_upgrade(EFI_BLOCK_IO_PROTOCOL *disk,const WyseInstallLayout *kno
     fatvol_detach(FATVOL_TARGET_ESP);
     if (!upgrade_flush(disk)) stop("Final upgrade flush failed");
     last_step_us=0;
-    step("wyseDOS upgrade complete","C: and settings preserved. Remove USB, press any key.",100);
+    step("wyseDOS upgrade complete","Remove USB and press any key to reboot",100);
     printf("upgrade: COMPLETE; guest LBA %llu + %llu unchanged; config.ini preserved\n",
            (unsigned long long)current.guest_first,(unsigned long long)current.guest_count);
     wait_key();

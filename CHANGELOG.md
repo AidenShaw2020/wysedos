@@ -3,6 +3,11 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.12 — 2026-11-05
+
+- Clarify the upgrade confirmation on two lines and simplify the completion
+  instruction to “Remove USB and press any key to reboot”.
+
 ## v1.1.11 — 2026-11-05
 
 - Offer Upgrade alongside New install when a supported native eMMC installation
