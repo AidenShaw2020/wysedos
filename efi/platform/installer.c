@@ -2,8 +2,9 @@
 // root holds install.ini (a USB stick made by tools/installer, or netfs on
 // the development PC).
 //
-// It checks that the machine is a Dell Wyse 3040, finds the eMMC, and after
-// the user confirms with Y it
+// It checks the Dell Wyse 3040 and eMMC, offers firmware-only upgrade for a
+// qualified existing native installation, or a new install. New install after
+// explicit I selection and Y erase confirmation:
 //   - writes a GPT with a 128 MiB firmware partition and a private guest container,
 //   - creates a guest MBR and full-capacity FAT32 inside that container,
 //   - copies only runtime assets onto the firmware partition (no disk images),
@@ -21,6 +22,7 @@
 #include "installer.h"
 #include "delltoken.h"
 #include "native_disk.h"
+#include "installer_upgrade.h"
 
 extern EFI_SYSTEM_TABLE *gST;
 extern EFI_BOOT_SERVICES *gBS;
@@ -664,6 +666,81 @@ bool installer_wanted(void) {
     return f_stat("install.ini", &fi) == FR_OK;
 }
 
+static bool native_marker_matches(const WyseInstallLayout *layout) {
+    FIL f; char text[256]; UINT got=0;
+    if (f_open(&f,"2:386/native.ini",FA_READ)!=FR_OK) return false;
+    bool ok=f_size(&f)<sizeof(text) && f_read(&f,text,sizeof(text)-1,&got)==FR_OK;
+    if (f_close(&f)!=FR_OK || !ok) return false;
+    text[got]=0;
+    uint64_t version=0,first=0,count=0; unsigned seen=0;
+    for (char *line=text;*line;) {
+        char *next=strchr(line,'\n'); if (next) *next=0;
+        size_t n=strlen(line); if (n && line[n-1]=='\r') line[n-1]=0;
+        const char *value=NULL; unsigned bit=0;
+        if (!strncmp(line,"version=",8)) { value=line+8; bit=1; }
+        else if (!strncmp(line,"guest_first=",12)) { value=line+12; bit=2; }
+        else if (!strncmp(line,"guest_blocks=",13)) { value=line+13; bit=4; }
+        if (bit) {
+            char *end; uint64_t v=strtoull(value,&end,10);
+            if (seen&bit || end==value || *end) return false;
+            seen|=bit;
+            if (bit==1) version=v; else if (bit==2) first=v; else count=v;
+        }
+        if (!next) break;
+        line=next+1;
+    }
+    return seen==7 && version==1 && first==layout->guest_first && count==layout->guest_count;
+}
+
+/* Qualify a known layout, not merely a FAT volume containing a BOOTX64 name. */
+static bool existing_install(EFI_BLOCK_IO_PROTOCOL *disk,WyseInstallLayout *layout) {
+    if (!installer_read_layout(disk,layout) ||
+        fatvol_attach(FATVOL_TARGET_ESP,disk,layout->esp_first,layout->esp_count)!=FR_OK) return false;
+    FILINFO info;
+    bool ok=native_marker_matches(layout) && f_stat("2:386/config.ini",&info)==FR_OK &&
+            !(info.fattrib&AM_DIR) && info.fsize>0;
+    bool interrupted=installer_upgrade_pending();
+    static const char *required[]={"2:EFI/BOOT/BOOTX64.EFI","2:386/bios.bin","2:386/vgabios.bin"};
+    for (unsigned i=0;i<sizeof(required)/sizeof(required[0]) && ok;i++) {
+        char backup[96]; snprintf(backup,sizeof(backup),"%s.wup-old",required[i]);
+        ok=(f_stat(required[i],&info)==FR_OK && !(info.fattrib&AM_DIR) && info.fsize>0) ||
+           (interrupted && f_stat(backup,&info)==FR_OK && !(info.fattrib&AM_DIR) && info.fsize>0);
+    }
+    fatvol_detach(FATVOL_TARGET_ESP);
+    return ok;
+}
+
+static bool upgrade_flush(void *context) {
+    EFI_BLOCK_IO_PROTOCOL *disk=context;
+    return !EFI_ERROR(blkcache_flush(disk)) && !EFI_ERROR(bio_flush(disk));
+}
+static void upgrade_progress(const char *file,unsigned percent) {
+    printf("upgrade: %u%% %s\n",percent,file);
+    if (graphical) installer_ui_status("Upgrading wyseDOS - C: and settings preserved",file,percent);
+}
+static void run_upgrade(EFI_BLOCK_IO_PROTOCOL *disk,const WyseInstallLayout *known) {
+    WyseInstallLayout current;
+    if (!existing_install(disk,&current) || memcmp(&current,known,sizeof(current)))
+        stop("Installation changed - upgrade refused");
+    if (fatvol_attach(FATVOL_TARGET_ESP,disk,current.esp_first,current.esp_count)!=FR_OK)
+        stop("Cannot open existing firmware partition");
+    /* Only this bounded firmware range is mounted. Never attach guest volume 3,
+     * rewrite GPT/MBR, format, copy guest drivers or replace configuration. */
+    const char *error=NULL;
+    step("Upgrading existing wyseDOS","Preparing and verifying monitor files; C: remains untouched",2);
+    if (!installer_upgrade_files(upgrade_flush,disk,upgrade_progress,&error))
+        stop(error?error:"Firmware upgrade failed");
+    fatvol_detach(FATVOL_TARGET_ESP);
+    if (!upgrade_flush(disk)) stop("Final upgrade flush failed");
+    last_step_us=0;
+    step("wyseDOS upgrade complete","C: and settings preserved. Remove USB, press any key.",100);
+    printf("upgrade: COMPLETE; guest LBA %llu + %llu unchanged; config.ini preserved\n",
+           (unsigned long long)current.guest_first,(unsigned long long)current.guest_count);
+    wait_key();
+    gST->RuntimeServices->ResetSystem(EfiResetCold,0,0,NULL);
+    for (;;) __asm__ volatile("hlt");
+}
+
 void installer_run(void) {
     wyse_console_log(false);
     gBS->SetWatchdogTimer(0,0,0,NULL);
@@ -676,6 +753,20 @@ void installer_run(void) {
     if (!emmc) stop("No eMMC found");
     uint64_t blocks=emmc->Media->LastBlock+1;
     if (blocks<2048*MB_BLOCKS || blocks>0xffffffffull) stop("Unsupported eMMC capacity");
+    WyseInstallLayout installed;
+    bool can_upgrade=existing_install(emmc,&installed);
+    step("Choose installation mode",can_upgrade?
+         "U: Upgrade (keep data)   I: New install (erase)   Esc: Cancel":
+         "No supported installation found. I: New install   Esc: Cancel",0);
+    int mode=wait_key(); last_step_us=0;
+    if ((mode=='u' || mode=='U') && can_upgrade) {
+        step("Keep drive C: and current settings intact",
+             "Press \"U\" to start upgrade, or \"Esc\" to cancel",0);
+        int confirm=wait_key(); last_step_us=0;
+        if (confirm!='u' && confirm!='U') stop("Cancelled - eMMC unchanged");
+        run_upgrade(emmc,&installed);
+    }
+    if (mode!='i' && mode!='I') stop("Cancelled - eMMC unchanged");
     if (f_stat("EFI/BOOT/BOOTX64.EFI",NULL)!=FR_OK || f_stat("386/config.ini",NULL)!=FR_OK ||
         f_stat("386/guest_mbr.bin",NULL)!=FR_OK || f_stat("386/bios.bin",NULL)!=FR_OK ||
         f_stat("386/vgabios.bin",NULL)!=FR_OK) stop("Installation files missing");

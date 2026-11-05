@@ -1,6 +1,6 @@
 # wyseDOS documentation
 
-These guides describe the v1.1.10 implementation on the Dell Wyse 3040.
+These guides describe the v1.1.11 implementation on the Dell Wyse 3040.
 They distinguish supported mechanisms from configurations actually tested on
 hardware. Detailed engineering reports retain their original test conditions.
 
@@ -8,7 +8,7 @@ hardware. Detailed engineering reports retain their original test conditions.
 
 | Guide | Contents |
 |---|---|
-| [Installation](installation.md) | Release files, eMMC preparation, DOS and Windows setup |
+| [Installation](installation.md) | Release files, New installation, data-preserving upgrade, DOS and Windows setup |
 | [Configuration](configuration.md) | Controls, persistent settings, CPU, RAM and sound |
 | [Storage](storage.md) | Native C:, USB disks, images and exclusive ownership |
 | [Compatibility](compatibility.md) | Tested systems/games, performance and limits |
@@ -20,7 +20,7 @@ hardware. Detailed engineering reports retain their original test conditions.
 |---|---|
 | [Architecture](architecture.md) | VT-x, firmware dependencies, core allocation and source map |
 | [Development](development.md) | Build requirements, regression tests and release verification |
-| [Release history](../CHANGELOG.md) | Selected verified changes through v1.1.8 |
+| [Release history](../CHANGELOG.md) | Selected verified release changes |
 | [Third-party notices](../README.md#acknowledgements-and-licence) | Bundled components and excluded packages |
 | [SeaBIOS provenance](../LICENSES/seabios.md) | Licence texts, ROM hashes and remaining source gap |
 

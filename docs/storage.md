@@ -14,6 +14,10 @@ This protects monitor boot files, not C: from guest FORMAT/FDISK or deletion.
 `386/config.ini` configures the monitor. `C:\CONFIG.SYS`, `AUTOEXEC.BAT` and
 `MSDOS.SYS` configure the guest. BootGUI is a guest setting.
 
+The installer offers a firmware-only Upgrade for an existing supported layout.
+It preserves this guest region, its operating system and files, plus the current
+monitor configuration. See [upgrade instructions](installation.md#upgrade-an-existing-installation).
+
 ## External disk ownership
 
 | Use | Filesystem owner | Guest view |

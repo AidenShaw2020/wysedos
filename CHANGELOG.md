@@ -3,6 +3,17 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.11 — 2026-11-05
+
+- Offer Upgrade alongside New install when a supported native eMMC installation
+  is detected. Upgrade replaces firmware runtime files, preserving C:, settings,
+  layout and the boot entry; clean installation retains a separate erase prompt.
+- Stage and read back the complete firmware set, activate EFI last and journal
+  activation for retry after interruption. Test layout rejection, preservation,
+  I/O failures and interrupted update steps.
+- Fix VBE protected-mode page addressing in Blood and use byte-safe physical VGA
+  accesses for text mode, preventing corrupted saved/restored Setup dialogs.
+
 ## v1.1.10 — 2026-11-05
 
 - Route RT5672 headphone playback through its powered volume stages instead

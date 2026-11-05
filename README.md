@@ -132,8 +132,10 @@ driven by the RT5672/I2S backend on the qualified unit.
    Rufus in DD mode, balenaEtcher or `dd`).
 3. Plug the USB stick into the Wyse 3040, power it on, press **F12** at the Dell
    splash screen and select the USB stick in the UEFI boot menu.
-4. Confirm the installation prompt. The installer partitions the internal 8 GB
-   eMMC with a dual-view hybrid MBR/GPT layout:
+4. Select **U — Upgrade** to update an existing supported installation while
+   keeping C: and settings (confirm with U again), or **I — New install** to
+   erase and prepare eMMC (separate Y confirmation). Esc cancels.
+   A new installation partitions the internal 8 GB eMMC as follows:
    - **System partition (`WYSEDOS`, 128 MB FAT32, hidden `0x1C` in MBR)** —
      stores `\EFI\BOOT\BOOTX64.EFI` and `\386\` (`bios.bin`, `vgabios.bin`,
      `config.ini`, `gm.sf2`, `logo.bin`), and registers the `wyseDOS` UEFI boot
@@ -142,8 +144,12 @@ driven by the RT5672/I2S backend on the qualified unit.
      to the guest PC as the primary master IDE hard disk (`hda=host:emmc`), with
      the system partition hidden outside the guest disk bounds so DOS `FDISK`,
      `FORMAT` and Windows 98 Setup see a clean single-disk PC.
-5. Remove the USB stick when prompted (`wyseDOS installation complete`) and press
+5. Remove the USB stick when installation or upgrade completes and press
    any key to reboot into **wyseDOS**.
+
+See [installation and upgrade details](docs/installation.md) for detection,
+retained settings and interrupted-update recovery. Upgrade does not replace
+guest drivers or operating system files.
 
 ## Installing DOS or Windows 9x
 

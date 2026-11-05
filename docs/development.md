@@ -82,3 +82,22 @@ grabber's damaged MJPEG frame does not prove guest video-memory corruption.
 
 `python tools/tests/hwvga_access.py` checks the actual compiled byte-safe MMIO
 transaction widths with LLVM and Unicorn, including old wide-access controls.
+
+## Installer upgrade checks
+
+Run `clang -O2 -Ipc tools/tests/installer_layout.c -o work/installer_layout.exe`
+and `clang -O2 tools/tests/installer_upgrade.c -o work/installer_upgrade.exe`,
+then run both programs. The first exercises the real read-only GPT qualifier;
+the second runs the transaction core against an instrumented mock filesystem,
+checks the fixed write allowlist and preserved configuration/guest sentinels,
+and retries at every injected I/O failure and process-interruption point.
+These tests model operation boundaries, not torn FAT sectors or controller
+power-loss behavior. Hardware qualification must include installer detection,
+confirmation, progress and a successful native boot with retained settings.
+
+On 2026-11-05 a Dell Wyse 3040 qualified its existing native eMMC layout,
+completed the upgrade and booted DOS/M602 from eMMC afterwards. The existing
+32 MB, 486/66 MHz and audio settings remained visible; Windows/game directories
+remained available. Hardware execution used the installer path over PXE with
+the same firmware payload as the USB build; it did not erase or reinstall C:.
+The transaction mock exercised 251 I/O failure points and 77 process cuts.
