@@ -3,6 +3,15 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.9 — 2026-11-05
+
+- Save menu settings under `[wyseDOS]`; continue reading legacy `[X86Pi]`
+  configurations. Existing values are retained when saving with the new monitor.
+- Use `[wyseDOS]` in the default configuration and rebuilt installer.
+- Expand installation, configuration, storage, architecture, compatibility,
+  troubleshooting and build documentation, correcting earlier platform claims.
+- Document tested physical USB CD-ROM support separately from ISO image sources.
+
 ## v1.1.8 — 2026-11-04
 
 - Capture the completed front page for disjoint native VGA page flips and
