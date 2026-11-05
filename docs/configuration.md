@@ -17,10 +17,14 @@ Save in the menu to persist changes in `386/config.ini` on the firmware
 partition. Identity/RAM changes can require a guest restart; the menu reports
 this. Reset/reboot loses unsaved guest work: shut down Windows normally first.
 
+The current section name is `[wyseDOS]`. Older `[X86Pi]` sections remain
+readable for backward compatibility. Saving from either menu rewrites the
+settings under `[wyseDOS]` with the same values; no manual migration is needed.
+
 ## CPU and memory
 
 `[pc] cpu=3`, `4`, `5` selects 386, 486 or Pentium identity. The installer
-starts with 16 MB RAM. `[X86Pi] speed` selects approximate MHz; `0` means
+starts with 16 MB RAM. `[wyseDOS] speed` selects approximate MHz; `0` means
 unrestricted and omission uses the generation default. Choose the menu's
 supported values. Identity, FPU and rate limiting are separate settings, not
 cycle-accurate CPU models. Wrong audio clocks can also accelerate game timers;
@@ -39,12 +43,12 @@ see [audio-clock.md](audio-clock.md).
 | `[pc] usb_storage=1` | Automatic guest USB disk exposure |
 | `[pc] timezone=cet` | Central European RTC conversion including summer time; `utc` disables conversion |
 | `[pc] firmware_timer_us=5000` | Requested firmware timer period; `0` preserves firmware timing |
-| `[X86Pi] speed` | Approximate execution-rate profile |
-| `[X86Pi] volume`, `vol_*` | Master and per-source levels, 0–16 |
-| `[X86Pi] pcspeaker`, `adlib`, `soundblaster`, `mpu401` | Audio enable flags |
-| `[X86Pi] tandy`, `covox`, `dss` | Optional audio sources |
-| `[X86Pi] mouse`, `mouse_speed`, `mouse_invert_y` | Mouse enable, percent scaling, Y inversion |
-| `[X86Pi] picture` | Layout: choose aspect/fill/integer options in Settings |
+| `[wyseDOS] speed` | Approximate execution-rate profile |
+| `[wyseDOS] volume`, `vol_*` | Master and per-source levels, 0–16 |
+| `[wyseDOS] pcspeaker`, `adlib`, `soundblaster`, `mpu401` | Audio enable flags |
+| `[wyseDOS] tandy`, `covox`, `dss` | Optional audio sources |
+| `[wyseDOS] mouse`, `mouse_speed`, `mouse_invert_y` | Mouse enable, percent scaling, Y inversion |
+| `[wyseDOS] picture` | Layout: choose aspect/fill/integer options in Settings |
 
 `[pc] hwvga=0` is a diagnostic startup override, not a prerequisite for
 automatic safe per-mode fallback. Not every debug key survives menu saving.

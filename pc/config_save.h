@@ -133,5 +133,5 @@ void config_note_machine(int mem_mb, int cpu_gen);
 void config_note_vga_mem(int kb);
 void config_note_fpu(int fpu);
 
-/* Set from the ini at boot; the name is the key inside [X86Pi]. */
+/* Set from the ini at boot; the name is the key inside [wyseDOS]. */
 void config_set_from_ini(const char *name, const char *value);

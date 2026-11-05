@@ -18,7 +18,7 @@ static PC *bound_pc;
 static bool changed;
 static bool restart_needed;
 
-/* Defaults match what pc_new() sets up, so a machine with no [X86Pi]
+/* Defaults match what pc_new() sets up, so a machine with no [wyseDOS]
  * section in its ini behaves exactly as it did before there was a menu. */
 static int cfg_volume       = 16;
 static int cfg_mem_mb       = 8;
@@ -347,7 +347,7 @@ static bool write_config(void)
     /* Keys only the platform knows (wyseDOS: timezone, devctl), so a save
      * from the menu keeps them. */
     ok &= put(&fp, config_platform_lines());
-    ok &= put(&fp, "\n[X86Pi]\n");
+    ok &= put(&fp, "\n[wyseDOS]\n");
     ok &= putf(&fp, "volume", cfg_volume);
     for (int i = 0; i < MIX_COUNT; i++) ok &= putf(&fp, mix_keys[i], cfg_mix[i]);
     ok &= putf(&fp, "pcspeaker", cfg_pcspeaker);

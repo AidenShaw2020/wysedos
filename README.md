@@ -208,7 +208,7 @@ hda=host:emmc
 timezone=cet
 firmware_timer_us=5000
 
-[X86Pi]
+[wyseDOS]
 volume=12
 vol_pcspeaker=16
 vol_adlib=16

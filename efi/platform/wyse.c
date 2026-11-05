@@ -294,7 +294,7 @@ uint32_t wyse_fat_time(void) {
 }
 
 //--------------------------------------------------------------------+
-// configuration (same keys as X86Pi's 386/config.ini)
+// configuration ([pc] and [wyseDOS], with legacy [X86Pi] input support)
 //--------------------------------------------------------------------+
 
 typedef struct {
