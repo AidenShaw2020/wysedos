@@ -1,6 +1,6 @@
 # wyseDOS documentation
 
-These guides describe the v1.1.9 implementation on the Dell Wyse 3040.
+These guides describe the v1.1.10 implementation on the Dell Wyse 3040.
 They distinguish supported mechanisms from configurations actually tested on
 hardware. Detailed engineering reports retain their original test conditions.
 
@@ -30,6 +30,7 @@ hardware. Detailed engineering reports retain their original test conditions.
 - [Input timing and PS/2 idle handling](input-timing.md)
 - [Display-derived audio clocks](audio-clock.md)
 - [Sound Blaster DMA ownership](sound-dma.md)
+- [Analog headphone volume and codec routing](headphone-volume.md)
 - [VGA page flips and wide virtual surfaces](vga-page-flips.md)
 
 Reports describe specific runs, not universal compatibility. Earlier pending

@@ -3,6 +3,15 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.10 — 2026-11-05
+
+- Route RT5672 headphone playback through its powered volume stages instead
+  of the direct DAC bypass. Headphones now changes analog loudness independently
+  of master Volume and HDMI/DisplayPort PCM.
+- Read back headphone volume writes and report failures.
+- Add real codec-initialization/I2C regression coverage, including a failing
+  original-bypass control, and document hardware listening/HDMI measurements.
+
 ## v1.1.9 — 2026-11-05
 
 - Save menu settings under `[wyseDOS]`; continue reading legacy `[X86Pi]`

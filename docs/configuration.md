@@ -61,3 +61,6 @@ at 330h. Do not select 8-bit DMA 1 for 16-bit PCM just because an 8-bit test wor
 NE2000 ISA PnP advertises 300h–31Fh, IRQ 3. Guest Windows detects this model,
 not the host Ethernet adapter. Install [VMDisp9x](../drivers/windows9x/vmdisp9x/README.md)
 for high-colour Windows modes and CuteMouse for DOS mouse applications.
+
+Master **Volume** affects display audio and analog sound. **Headphones** adjusts
+only the analog jack through the codec volume stage. See [headphone routing](headphone-volume.md).

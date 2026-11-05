@@ -56,7 +56,7 @@ Quote `'-Wl,/opt:ref'` in PowerShell to prevent comma argument splitting.
 | Area | Files under `tools/tests/` |
 |---|---|
 | VGA/blanking/page lifetime | `vga_planar.c`, `vga_page_flip.c` |
-| Audio clocks and DMA ownership | `lpe_clock.c`, `sb_dma_ownership.c` |
+| Audio clocks, DMA and headphone routing | `lpe_clock.c`, `sb_dma_ownership.c`, `analog_volume.c` |
 | USB/bounds/media identity | `usb_storage.c`, `hostblk.c`, `native_bounds.c` |
 | Image ownership and IDE lifecycle | `image_media.c`, `ide_media.c` |
 | HID/PS2/firmware events | `usbhid_recovery.c`, `ps2_reenable.c`, `firmware_events.c` |

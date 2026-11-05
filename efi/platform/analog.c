@@ -38,8 +38,10 @@ void wyse_udelay(uint32_t us);
 
 static uint32_t pmc_base;
 
+#ifndef WYSE_ANALOG_TEST
 static inline uint32_t r32(uint32_t a) { return *(volatile uint32_t *)(uint64_t)a; }
 static inline void w32(uint32_t a, uint32_t v) { *(volatile uint32_t *)(uint64_t)a = v; }
+#endif
 
 static inline uint32_t pci_read(int bus, int dev, int fn, int reg) {
     uint32_t addr = 0x80000000u | (bus << 16) | (dev << 11) | (fn << 8) | (reg & 0xfc);
@@ -140,7 +142,7 @@ static void analog_probe(void) {
 }
 
 //--------------------------------------------------------------------+
-// codec set-up: playback DAC1 -> HPO mixer -> headphone amp, I2S1 master
+// codec set-up: playback DAC1 -> HPOVOL -> HPO mixer -> headphone amp, I2S1 master
 //--------------------------------------------------------------------+
 
 #define SSP2_BASE   (LPE_BASE + 0xa2000)
@@ -202,7 +204,11 @@ static bool codec_init(void) {
     // routing (mute bits are active high): DAC1 source IF1, DAC1 mixer, stereo DAC mixer, HPO mixer
     ok &= codec_update(0x29, (1 << 14) | (1 << 6) | (3 << 8) | (3 << 10), 0);
     ok &= codec_update(0x2a, (1 << 14) | (1 << 6), 0);
-    ok &= codec_update(0x45, (1 << 13), 0);
+    // HPO MIX has a direct DAC1 input which bypasses HP_VOL (02h).
+    // Mute that bypass and DAC2, enable HPVOL, and route DAC L1/R1 into
+    // HPOVOL MIXL/R while keeping the analog INL/INR inputs muted.
+    // RT5670/72 HPMIX 45h mute bits are active high (Linux rt5670.h).
+    ok &= codec_update(0x45, 0xe00f, 0xa00a);
     ok &= codec_write(0x19, 0xafaf);                          // DAC1 digital volume 0 dB
 
     // headphone amp power-up and unmute (hp_power_event / hp_event)
@@ -381,14 +387,17 @@ void analog_feed(void) {
 // a negative step mutes.
 void analog_set_volume(int step) {
     if (!analog_on) return;
-    if (step < 0) {
-        codec_write(0x02, 0x8080 | 39 << 8 | 39);
-        printf("analog: headphones muted\n");
+    if (step > 39) step = 39;
+    uint16_t wanted = step < 0 ? (0x8080 | 39 << 8 | 39) : (uint16_t)(step << 8 | step);
+    uint16_t actual = 0;
+    if (!codec_write(0x02, wanted) || !codec_read(0x02, &actual) || actual != wanted) {
+        printf("analog: headphone volume write/readback failed (wanted %04x, read %04x)\n", wanted, actual);
         return;
     }
-    if (step < 0) step = 0;
-    if (step > 39) step = 39;
-    codec_write(0x02, (uint16_t)(step << 8 | step));
+    if (step < 0) {
+        printf("analog: headphones muted (HP_VOL %04x)\n", actual);
+        return;
+    }
     int db10 = 120 - 15 * step, mag = db10 < 0 ? -db10 : db10;
     printf("analog: headphone volume %d (%c%d.%d dB)\n", step, db10 < 0 ? '-' : '+', mag / 10, mag % 10);
 }
@@ -440,10 +449,12 @@ bool analog_init(void) {
         return false;
     }
     ssp_init();
-    uint16_t pll = 0, glb = 0, pa = 0;
+    uint16_t pll = 0, glb = 0, pa = 0, hp_mix = 0;
     codec_read(0x80, &glb);
     codec_read(0x81, &pll);
     codec_read(0x63, &pa);
+    codec_read(0x45, &hp_mix);
+    printf("analog: headphone route HPMIX %04x (DAC1 via HPVOL, direct bypass muted)\n", hp_mix);
     printf("analog: codec ready (glb %04x pll %04x anlg1 %04x), ssp2 cr0 %08x cr1 %08x sr %08x\n", glb, pll, pa,
            r32(SSP2_BASE + SSCR0), r32(SSP2_BASE + SSCR1), r32(SSP2_BASE + SSSR));
     analog_on = true;
