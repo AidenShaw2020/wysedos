@@ -28,7 +28,7 @@ without consumer request assertions.
 Run from the repository root with LLVM on Windows:
 
 ```powershell
-clang -O2 -ffunction-sections -DCIRCLE_BUILD -DWYSE_BUILD=1 -DSOUND_FREQUENCY=48000 -Ipc -Iefi/platform tools/tests/sb_dma_ownership.c -Wl,/opt:ref -o work/sb_dma_ownership.exe
+clang -O2 -ffunction-sections -DCIRCLE_BUILD -DWYSE_BUILD=1 -DSOUND_FREQUENCY=48000 -Ipc -Iefi/platform tools/tests/sb_dma_ownership.c '-Wl,/opt:ref' -o work/sb_dma_ownership.exe
 ./work/sb_dma_ownership.exe
 ```
 

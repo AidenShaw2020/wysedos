@@ -9,10 +9,11 @@
 ---
 
 **wyseDOS** turns a Dell Wyse 3040 thin client into a dedicated DOS and Windows 9x
-machine. There is no Linux kernel or host operating system underneath: the UEFI
-firmware loads `BOOTX64.EFI`, which calls `ExitBootServices`, sets up its own
-page tables, GDT/IDT and APIC timer, drives the Cherry Trail hardware directly,
-and boots the guest PC into MS-DOS, FreeDOS or Windows 95/98.
+machine. There is no Linux kernel or host operating system underneath: UEFI
+loads `BOOTX64.EFI`, which runs the guest PC using VT-x and emulated peripherals.
+The monitor keeps UEFI Boot Services active for firmware-backed USB, storage,
+networking and events, alongside direct Cherry Trail VGA and audio access.
+See [architecture](docs/architecture.md) for the hardware/firmware boundary.
 
 The emulator core and peripheral set come from
 [X86Pi](https://github.com/AidenShaw2020/x86pi) (itself built on the PC
@@ -73,6 +74,19 @@ https://github.com/user-attachments/assets/5645a36b-19c8-43b2-8efc-84873c90fd31
 
 </details>
 
+## Documentation
+
+Start with the [documentation index](docs/index.md):
+
+- [Installation and guest OS setup](docs/installation.md)
+- [Configuration and controls](docs/configuration.md)
+- [Storage, USB and image mounting](docs/storage.md)
+- [Architecture and source map](docs/architecture.md)
+- [Compatibility and known limits](docs/compatibility.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Building and testing](docs/development.md)
+- [Release history](CHANGELOG.md)
+
 ## What is inside
 
 | Component | Emulated hardware |
@@ -96,18 +110,18 @@ fine panning and the regression test for incomplete moving sprites.
 
 The Dell Wyse 3040 has a quad-core Intel Atom x5-Z8350 (Cherry Trail, 1.44 GHz /
 1.92 GHz burst), 2 GB DDR3L RAM, 8 GB on-board eMMC, DisplayPort outputs, four
-USB ports (one USB 3.0, three USB 2.0), Gigabit Ethernet, and a Nuvoton NAU88L24
-headphone/headset codec attached to the Intel SST audio DSP.
+USB ports (one USB 3.0, three USB 2.0), Gigabit Ethernet, and an analog headphone codec
+driven by the RT5672/I2S backend on the qualified unit.
 
 | Part | Role |
 |---|---|
 | **Core 0** | Runs the guest CPU (Intel VT-x VMX non-root mode with EPT and I/O + MMIO trapping, or the software interpreter), hardware I/O emulation, storage and USB polling |
-| **Core 1** | Runs the cycle-accurate Nuked OPL3 FM synthesiser |
-| **Core 2** | Runs the TinySoundFont General MIDI synthesiser (up to 48 simultaneous voices) |
-| **Core 3** | Mixes OPL3, General MIDI, Sound Blaster 16 PCM, PC speaker, Tandy and Covox/DSS, and feeds the Intel SST / I2S2 DMA ring (`nau8824` headphone jack + DisplayPort audio) |
-| **Display** | Native Intel Gen8 (Cherryview) display pipe (`chvdisp.c`) with hardware cursor plane and nearest/crisp scaling to the monitor's native EDID resolution (1080p, 1440p, 4K, ultrawide) |
-| **Storage** | Bare-metal SDHCI eMMC driver (`sdhci.c`) with ADMA2/PIO and native partition pass-through (`host:emmc`) |
-| **USB** | Bare-metal xHCI host controller (`usbhid.c`, `hostblk.c`) for keyboards, high-rate mice, gamepads, USB flash drives and USB floppy drives |
+| **Core 1** | OPL synthesis, audio mixing and display-audio pumping |
+| **Core 2** | VGA snapshots, rendering and copying to the display framebuffer |
+| **Core 3** | General MIDI synthesis, analog headphone FIFO feeding and hang monitoring |
+| **Display** | UEFI GOP framebuffer with monitor-side rendering/scaling; native legacy VGA for suitable guest modes |
+| **Storage** | UEFI Block I/O with caching and a bounded native eMMC guest disk (`host:emmc`) |
+| **USB** | Firmware USB I/O for physical HID/storage; virtual UHCI/BOT for guest USB disks |
 
 ## Installing on the Wyse 3040
 
@@ -170,12 +184,8 @@ DOS:
 |---|---|
 | `Win + F12` | Open the **Disk Manager** (mount/eject floppy, HDD and CD-ROM images, attach physical USB floppy, select one-shot boot drive) |
 | `Win + F11` | Open the **Settings** menu (CPU speed, RAM, audio cards, per-channel volumes, mouse speed, power behaviour) |
-| `Ctrl + F1` | Cycle CPU speed preset (`Native`, `386SX ~16 MHz`, `386DX ~33 MHz`, `486DX ~66 MHz`, `Pentium ~100 MHz`) |
-| `Ctrl + F2` | Cycle Sound Blaster / AdLib mode |
-| `Ctrl + F3` / `F4` | Fine-adjust emulated CPU speed down / up |
-| `Ctrl + F9` | Mute / unmute audio |
-| `Ctrl + F10` / `F11` | Master volume down / up |
-| `Ctrl + F12` | Reset the guest PC |
+| `Win + Delete` | Reset the guest PC (unsaved guest work is lost) |
+| `Win + R` | Reboot the physical Wyse (shut down Windows first) |
 
 ## Configuration (`386/config.ini`)
 
@@ -225,8 +235,8 @@ original timing. See [input timing and diagnostics](docs/input-timing.md).
 
 ## Building from source
 
-Building requires **Clang** and **lld-link** with the `x86_64-pc-win32-coff`
-target (standard LLVM installation on Windows or Linux) and **Python 3**.
+Building requires **Clang** and **lld-link** with the `x86_64-unknown-windows`
+target (Windows LLVM installation with Git Bash) and **Python 3**.
 
 ### Build the UEFI monitor (`bootx64.efi`)
 
@@ -261,7 +271,7 @@ them. Windows USB storage requires a separately supplied compatible driver.
 
 | Directory | Contents |
 |---|---|
-| `efi/` | UEFI bootstrap, page tables, SMP core bring-up, Intel VT-x hypervisor (`cpuvmx.c`), Cherry Trail display (`chvdisp.c`), SST/NAU8824 audio (`audio.c`), SDHCI eMMC (`sdhci.c`), xHCI USB (`usbhid.c`, `hostblk.c`), installer (`installer.c`) |
+| `efi/` | UEFI bootstrap, page tables, SMP core bring-up, Intel VT-x hypervisor (`cpuvmx.c`), GOP display (`wyse.c`), LPE/RT5672 audio (`audio.c`, `lpe.c`, `analog.c`), firmware-backed storage (`bio.c`, `hostblk.c`), USB HID (`usbhid.c`), installer (`installer.c`) |
 | `pc/` | Shared PC emulator and peripherals: i386/486/Pentium core and FPU, VGA/VBE, IDE/ATAPI, floppy, i8254 PIT, i8259 PIC, i8257 DMA, i8042 PS/2 keyboard & mouse, SB16, AdLib/Nuked OPL3, MPU-401/TinySoundFont, SN76489, Covox/DSS, NE2000, PCI, ACPI, OSD menus |
 | `disks/386/` | Runtime assets installed to `\386\`: SeaBIOS (`bios.bin`), SeaVGABios (`vgabios.bin`), General MIDI soundfont (`gm.sf2`), boot logo (`logo.bin`), guest MBR template (`guest_mbr.bin`) and default `config.ini` |
 | `drivers/windows9x/` | [VMDisp9x](https://github.com/JHRobotics/vmdisp9x) 2D VBE display driver (`1234:1111`) for Windows 95/98/Me |
