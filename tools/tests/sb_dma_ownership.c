@@ -7,7 +7,8 @@
 #undef i8257_dma_hold_DREQ
 #include "../../pc/i8257.c"
 
-uint32_t time_us_32(void) { return 1000000; }
+static uint32_t test_time=1000000;
+uint32_t time_us_32(void) { return test_time; }
 int get_core_num(void) { return 0; }
 void cpu_prefetch_invalidate(CPUI386 *cpu) { (void)cpu; }
 void *pcmalloc(size_t size) { return calloc(1,size); }
@@ -57,10 +58,29 @@ static int run_case(int high) {
     for(int i=0;i<480;i++){l=r=0;sb16_getsample(&card,&r,&l);}
     i8257_dma_run(&dma);
     CHECK(card.audio_q>before,"DMA failed to refill without consumer reassertion");
+    card.dma_auto=1;card.owed_head=1;card.owed_tail=0;
+    card.irq_fallback_us=time_us_32()+250000;
+    before=card.audio_q;i8257_dma_run(&dma);
+    CHECK(card.audio_q==before,"DMA crossed pending completion with IRQ barrier enabled");
+    card.owed_tail=1;card.owed_unacked=1;i8257_dma_run(&dma);
+    CHECK(card.audio_q==before,"DMA crossed unacknowledged completion");
+    card.mixer_regs[0x82]=high?2:1;
+    card.port=0x220;
+    sb16_dsp_read(&card,high?0x22f:0x22e);
+    CHECK(!card.owed_unacked,"guest acknowledge did not release completion");
+    card.audio_p=card.audio_q;
+    i8257_dma_run(&dma);
+    CHECK(card.audio_q>before,"DMA failed to resume after guest IRQ acknowledge");
+    before=card.audio_q;card.audio_p=card.audio_q;
+    card.owed_unacked=1;card.owed_head=card.owed_tail;
+    test_time=card.irq_fallback_us+1;
+    i8257_dma_run(&dma);
+    CHECK(card.audio_q>before,"unanswered guest blocked DMA beyond recovery deadline");
+    card.owed_unacked=0;test_time=1000000;
     return 0;
 }
 int main(void) {
     if (run_case(0) || run_case(1)) return 1;
-    puts("PASS: 8/16-bit stopped DSP, stale DREQ, active transfer and producer-only refill");
+    puts("PASS: 8/16-bit DMA ownership, auto-init IRQ barrier, acknowledge resume and timeout recovery");
     return 0;
 }

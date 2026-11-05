@@ -2195,6 +2195,15 @@ static int SB_read_DMA (void *opaque, int nchan, int dma_pos, int dma_len)
     g_sb16_dma_calls++;
     SB16State *s = opaque;
     int till, copy, written, free;
+#if defined(WYSE_BUILD)
+    /* The completed block and its IRQ must remain associated with the DMA
+     * cursor until the guest services it. Otherwise a 512-frame audio batch
+     * frees several DSP blocks at once: we copy into the next block while
+     * the guest ISR is clearing/refilling it (Blood's Multivoc mixer).
+     * Keep DREQ owned by core 0 and retain the raw transfer cursor. */
+    if(s->dma_auto && (s->owed_unacked || s->owed_head!=s->owed_tail) &&
+       (int32_t)(time_us_32()-s->irq_fallback_us)<0) return dma_pos;
+#endif
 
 #if defined(WYSE_BUILD)
     /* Only core 0 owns the DMA controller. Reject a request left over from

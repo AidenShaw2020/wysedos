@@ -10,6 +10,7 @@
 #include <ctype.h>
 #include <time.h>
 #include "pc.h"
+#include "sb16.h"
 #include "edid.h"
 #include "ini.h"
 #include "config_save.h"
@@ -863,6 +864,17 @@ static void poll_control(PC *pc) {
         pc->reset_request = 1;
     } else if (!strncmp(cmd, "stats", 5)) {
         report(pc, 10000000);
+    } else if (!strcmp(cmd, "sbstats")) {
+        uint32_t d[8], starves, minfill;
+        char state[384];
+        int sb16_diag_line(char *out, int cap);
+        sb16_starve_snapshot(&starves, &minfill);
+        sb16_diag_snapshot(d);
+        sb16_diag_line(state, sizeof(state));
+        printf("sb: %s\n", state);
+        printf("sb playback: empty %u frames in %u runs, worst %u frames; minfill %u; "
+               "refills %u bytes %u gap %u us; rate %u freq %u fmt %x\n",
+               starves, d[0], d[1], minfill, d[2], d[3], d[4], d[5], d[6], d[7]);
     } else if (!strncmp(cmd, "clock", 5)) {
         CmosDateTime dt;
         EFI_TIME t;

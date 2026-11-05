@@ -3,6 +3,17 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.13 — 2026-11-05
+
+- Keep Wyse Sound Blaster auto-init DMA completion and its raw transfer cursor
+  associated until the guest acknowledges the interrupt. Prevents copying a
+  buffer while Blood's mixer clears/refills it; retains 250 ms recovery.
+- Qualify the minimal build with matched Blood voice recordings and user
+  listening confirmation. User also confirms Tyrian runs correctly.
+- Add actual-code DMA completion/acknowledgment, timeout, ring-wrap and PCM
+  rate regressions; run Duke3D and Doom demo playback without starvation.
+- Keep raw DMA register behavior and producer-only DREQ ownership unchanged.
+
 ## v1.1.12 — 2026-11-05
 
 - Clarify the upgrade confirmation on two lines and simplify the completion
