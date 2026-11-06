@@ -30,7 +30,7 @@ and physical output matter.
 | Prince of Persia | Walking, crouching and jumping checked with VGA changes |
 | Teenagent | Braking intro PCM corrected through DMA ownership; capture and direct listening confirmed |
 | One Must Fall | Menu sound/animation tempo checked with display-audio clock correction |
-| Avoid the Noid | EGA gameplay, building entry and automatic info transitions; direct PC-speaker laughter restored and heard; Pentium/166, 32 MB, native eMMC, software 16-color VGA window |
+| Avoid the Noid | EGA gameplay, building entry and automatic info transitions; direct PC-speaker laughter restored and heard; gate-low samples respect terminal-high PIT2 mode 0 inherited after Lotus III; Pentium/166 and 486/66, 32 MB, native eMMC, software 16-color VGA window |
 | Lotus III | Startup without divide overflow, original manual-code acceptance, menus and actual driving; Pentium/166, 32 MB, native eMMC |
 | Paranoia | Startup hang and stale-image flash corrected; intro, story, map/gameplay and menu reached with the patched VGA BIOS and monitor |
 | Settlers II Gold 1.51 | VBE splash/menu reached; brief old-title/new-menu-palette transition independently reproduced in the original on DOS Zone, not hidden by a monitor workaround |

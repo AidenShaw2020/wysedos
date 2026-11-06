@@ -18,6 +18,8 @@ See the [documentation](docs/index.md) for current usage and architecture.
   building-entry and automatic info transitions are responsive.
 - Preserve timestamped direct PC-speaker bit writes across burst mixing,
   restoring NOID's laughter samples; retain ordinary PIT tones and mute.
+  Respect PIT2's output for gate-low samples, including terminal-high mode 0
+  inherited after Lotus III, so launching another game does not silence them.
 - Qualify NOID's fast countdown and Settlers II Gold's brief old-title/new-
   palette transition against independent originals. Do not slow global clocks
   or blank game frames to hide those original behaviors.

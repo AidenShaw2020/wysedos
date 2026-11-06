@@ -5,8 +5,8 @@
 
 static uint32_t now_us;
 uint32_t get_uticks(void) { return now_us; }
-struct PITState { int mode, gate, count; };
-int pit_get_out(PITState *pit, int channel) { (void)pit; (void)channel; return 1; }
+struct PITState { int mode, gate, count, out; };
+int pit_get_out(PITState *pit, int channel) { (void)channel; return pit->out; }
 int pit_get_gate(PITState *pit, int channel) { (void)channel; return pit->gate; }
 int pit_get_initial_count(PITState *pit, int channel) { (void)channel; return pit->count; }
 int pit_get_mode(PITState *pit, int channel) { (void)channel; return pit->mode; }
@@ -14,7 +14,7 @@ void pit_set_gate(PITState *pit, int channel, int value) { (void)channel; pit->g
 
 int main(void)
 {
-    PITState pit = {3, 0, 1};
+    PITState pit = {3, 0, 1, 0};
     PCSpkState *speaker = pcspk_init(&pit);
     assert(speaker);
     assert(pcspk_sample(NULL) == 0);
@@ -69,6 +69,25 @@ int main(void)
     pit.mode = 2;
     pcspk_ioport_write(speaker, 3);
     assert(pcspk_sample(speaker) == 0);
+    pcspk_ioport_write(speaker, 0);
+    for (unsigned index = 0; index < 2048; index++) pcspk_sample(speaker);
+    pcspk_ioport_write(speaker, 2);
+    bool direct_mode2 = false;
+    for (unsigned index = 0; index < 2048; index++)
+        direct_mode2 |= pcspk_sample(speaker) > 1024;
+    assert(direct_mode2);
+    pcspk_ioport_write(speaker, 0);
+    for (unsigned index = 0; index < 8192; index++) pcspk_sample(speaker);
+    pit.mode = 0;
+    pit.out = 1;
+    pcspk_ioport_write(speaker, 2);
+    bool direct_mode0 = false;
+    for (unsigned index = 0; index < 2048; index++)
+        direct_mode0 |= pcspk_sample(speaker) > 1024;
+    assert(direct_mode0);
+    pit.out = 0;
+    for (unsigned index = 0; index < 8192; index++) pcspk_sample(speaker);
+    assert(pcspk_sample(speaker) >= -2 && pcspk_sample(speaker) <= 2);
     free(speaker);
     pit.mode = 3;
     speaker = pcspk_init(&pit);
@@ -88,6 +107,8 @@ int main(void)
     assert(speaker->render_bits == 2);
     free(speaker);
     puts("PASS actual PC speaker: 127 timed bit edges survive burst mixing; DC decays; mute and PIT tone unchanged");
+    puts("PASS inherited PIT mode 2: gate-low direct samples remain audible");
+    puts("PASS inherited PIT mode 0: terminal OUT permits samples; low OUT remains silent");
     puts("PASS queue overflow: final mute retained and ring reuse succeeds");
     return 0;
 }

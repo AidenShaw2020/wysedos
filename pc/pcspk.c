@@ -270,8 +270,10 @@ int16_t pcspk_sample(PCSpkState *s)
     gate = s->render_bits & 1;
     data_on = (s->render_bits >> 1) & 1;
 #endif
-    if (!gate && pit_get_mode(s->pit, 2) == 3) {
-        int sample = data_on ? (int)PCSPK_BL_PEAK : 0;
+    const int mode = pit_get_mode(s->pit, 2);
+    if (!gate) {
+        const int timer_out = mode == 2 || mode == 3 || pit_get_out(s->pit, 2);
+        int sample = data_on && timer_out ? (int)PCSPK_BL_PEAK : 0;
 #ifdef WYSE_BUILD
         s->direct_dc += ((sample << 8) - s->direct_dc) >> 9;
         sample -= s->direct_dc >> 8;
@@ -279,8 +281,7 @@ int16_t pcspk_sample(PCSpkState *s)
         return (int16_t)sample;
     }
     if (!data_on) return 0;
-    if (pit_get_mode(s->pit, 2) != 3) return 0;
-    if (!gate) return 0;
+    if (mode != 3) return 0;
 
     uint32_t count = pit_get_initial_count(s->pit, 2);
     if (count < PCSPK_MIN_COUNT) return 0;

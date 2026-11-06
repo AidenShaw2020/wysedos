@@ -75,6 +75,11 @@ writing bit 1 of port 61h. Sampling only the latest latch once per mixed
 frame loses intermediate writes, since the guest and mixer run on different
 cores and the mixer produces bursts.
 
+The direct signal is gated by PIT2's output, not by requiring mode 3. Modes
+2 and 3 force that output high while the gate is low; other modes use the
+timer's output level. In particular, terminal-high mode 0 left by an earlier
+program must not silence later samples, while a low output still blocks them.
+
 On Wyse, changed gate/data bits are queued with the existing monotonic audio
 clock and consumed at their output frame. A DC blocker removes the direct
 signal's constant component. The bounded queue retains the latest state on
