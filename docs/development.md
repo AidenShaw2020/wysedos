@@ -53,6 +53,28 @@ clang -O2 -ffunction-sections -DBPP=32 -DWYSE_BUILD=1 tools/tests/vga_page_flip.
 
 Quote `'-Wl,/opt:ref'` in PowerShell to prevent comma argument splitting.
 
+The focused game-regression runners compile actual source with clock/firmware
+stubs; run both optimization levels where changing timing or shared state:
+
+```powershell
+./tools/tests/vmx_speed.ps1 -Optimization -O0
+./tools/tests/vmx_speed.ps1 -Optimization -O2
+./tools/tests/hwvga_transfer.ps1 -Optimization -O0
+./tools/tests/hwvga_transfer.ps1 -Optimization -O2
+./tools/tests/pcspk_direct.ps1 -Optimization -O0
+./tools/tests/pcspk_direct.ps1 -Optimization -O2
+python tools/tests/vgabios_bankcall.py disks/386/vgabios.bin
+python tools/tests/vgabios_text_clear.py disks/386/vgabios.bin
+python tools/tests/vgabios_pm.py disks/386/vgabios.bin
+python tools/tests/vgabios_dpms.py disks/386/vgabios.bin
+```
+
+The ROM checks require Unicorn. The CPU runner deliberately expects failures
+from missing-cycle-limit and host-accounting negative controls. VGA tests also
+retain explicitly marked historical counterexamples; these are not enabled
+monitor workarounds. Speaker checks cover timed edges, DC decay, mute, PIT
+tones, overflow and ring reuse.
+
 | Area | Files under `tools/tests/` |
 |---|---|
 | VGA/blanking/page lifetime | `vga_planar.c`, `vga_page_flip.c` |

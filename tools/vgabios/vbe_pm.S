@@ -253,3 +253,36 @@ ports:
         .word   0x1ce, 0x1cf, 0x3c8, 0x3c9, 0x3da, 0xffff
         .word   0xffff
 table_end:
+        .code16
+bankcall_flags:
+        pushf
+        lcall   $0xc000, $0x5597
+        popf
+        lret
+text_mode_cached:
+        pushf
+        push    %eax
+        push    %ecx
+        push    %edx
+        mov     %es:0x49, %al
+        and     $0x7f, %al
+        cmp     %es:0xba, %al
+        je      text_mode_ready
+        movzbl  %al, %eax
+        push    %ax
+        .byte   0xe8
+        .word   0x2a3f - (BASE + (1f - start))
+1:
+        test    %eax, %eax
+        jz      text_mode_ready
+        mov     %ax, %es:0xbc
+        mov     %es:0x49, %al
+        and     $0x7f, %al
+        mov     %al, %es:0xba
+text_mode_ready:
+        pop     %edx
+        pop     %ecx
+        pop     %eax
+        popf
+        mov     %es:0xbc, %bx
+        ret

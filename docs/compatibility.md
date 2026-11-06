@@ -2,7 +2,7 @@
 
 [Documentation index](index.md)
 
-Observations through v1.1.8 on the Wyse 3040 are not complete certification.
+Observations through v1.1.14 on the Wyse 3040 are not complete certification.
 Many tests used 16 MB guest RAM and native eMMC. CPU profile, guest drivers
 and physical output matter.
 
@@ -30,6 +30,10 @@ and physical output matter.
 | Prince of Persia | Walking, crouching and jumping checked with VGA changes |
 | Teenagent | Braking intro PCM corrected through DMA ownership; capture and direct listening confirmed |
 | One Must Fall | Menu sound/animation tempo checked with display-audio clock correction |
+| Avoid the Noid | EGA gameplay, building entry and automatic info transitions; direct PC-speaker laughter restored and heard; Pentium/166, 32 MB, native eMMC, software 16-color VGA window |
+| Lotus III | Startup without divide overflow, original manual-code acceptance, menus and actual driving; Pentium/166, 32 MB, native eMMC |
+| Paranoia | Startup hang and stale-image flash corrected; intro, story, map/gameplay and menu reached with the patched VGA BIOS and monitor |
+| Settlers II Gold 1.51 | VBE splash/menu reached; brief old-title/new-menu-palette transition independently reproduced in the original on DOS Zone, not hidden by a monitor workaround |
 | M602 | Native-disk file manager, input and idle/screen-saver use |
 | Lemmings | Historical raster-palette work; latest VGA regression reached menus, not newly qualified gameplay |
 
@@ -45,8 +49,17 @@ game frame rate. Separate historical measurements were:
 | Duke3D DNRATE | Scene-dependent | Counter in the separately marked final showcase scene |
 | Tyrian | 31.2 FPS | Early-level debug sample, normal speed/low detail; not an unlocked benchmark |
 
-These are not fresh v1.1.8 benchmarks or performance guarantees. Comparisons
+These are historical benchmarks, not fresh v1.1.14 performance guarantees. Comparisons
 need matching game versions, scenes, detail, CPU profile and sound settings.
+
+NOID's countdown also runs faster than wall time in the original DOSBox
+reference. A no-input Wyse interval lost 47 displayed seconds over 20.42 real
+seconds; the reference lost 11 over 5.11 seconds measured from its own BIOS
+ticks, avoiding the browser's background slowdown. The user confirmed the
+fast countdown in the original. Global PIT/audio clocks were not retuned.
+A temporary 386/16 test made the game excessively slow and was withdrawn;
+the Pentium/166 test profile was restored. A possible slight slowing of the
+laughter remains a subjective observation, not a measured pitch correction.
 
 ## Limits and open verification
 

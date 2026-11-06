@@ -10,6 +10,13 @@ and EPT. I/O and selected memory/system operations exit to PC device models.
 Interpreter helpers handle operations requiring software treatment. CPU
 identities and instruction-rate limits approximate older PCs, not their cycles.
 
+The native limiter also budgets actual guest core cycles to bound short loops.
+Supported VM-entry/exit controls enable the fixed instruction and cycle
+counters only in the guest; monitor/device work is not charged to its budget.
+Cycle credit is capped at 50 microseconds of the selected rate. This prevents
+accumulated I/O/idle credit from letting a short calibration loop run at the
+Atom's full speed, but does not provide historical cycle-accurate execution.
+
 The current monitor **keeps UEFI Boot Services active** for firmware USB I/O,
 block access, networking and timer/event services alongside direct hardware
 access. There is no Linux or Windows host, but firmware drivers remain runtime
@@ -35,8 +42,11 @@ The guest sees VGA/EGA and a Bochs-compatible VBE PCI device (`1234:1111`).
 DOS accesses VGA directly; Windows can use VMDisp9x. Guest drivers never
 control the physical Intel display hardware.
 
-Suitable modes use Cherry Trail's legacy VGA aperture/registers. Chain-4,
-unsafe planar layouts and VBE have RAM/software paths. The display core takes
+Suitable modes use Cherry Trail's legacy VGA aperture/registers. Ordinary
+16-color planar graphics use the software VGA window by default, preserving
+native CPU execution and avoiding costly physical read/latch-copy transitions.
+Native text, existing chain4 and 256-color Mode X choices remain separate;
+the explicit native override is retained. VBE uses software memory. The display core takes
 snapshots and renders/scales them into the UEFI GOP framebuffer in `wyse.c`.
 Firmware establishes the physical display mode; guest resolution is separate.
 There is no `chvdisp.c` implementing independent native display initialization.
@@ -45,6 +55,10 @@ Automatic planar fallback accounts for both visible width and virtual pitch.
 Double-buffer requests latch start address and fine pan atomically. See
 [VGA page flips](vga-page-flips.md) for hardware limits and snapshot timing.
 This is not cycle-accurate CRT beam emulation.
+
+VBE enable/fixup/clear holds the display core. A clearing mode change must not
+fetch the previous physical VGA contents back over the new frame from either
+the CPU handoff or renderer; `NOCLEARMEM` still preserves the existing pixels.
 
 ## Audio and input
 

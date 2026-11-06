@@ -26,6 +26,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pico.h>
+#ifdef WYSE_BUILD
+#include "audioclock.h"
+#define PCSPK_EDGE_SLOTS 4096u
+#endif
 
 #if defined(BUILD_ESP32)
 void *pcmalloc(long size);
@@ -63,6 +67,15 @@ struct PCSpkState {
     int data_on;
     int dummy_refresh_clock;
     int active_out;
+#ifdef WYSE_BUILD
+    AudioClock clock;
+    int64_t consumed;
+    uint32_t edge_write, edge_read;
+    struct { uint32_t frame, bits; } edges[PCSPK_EDGE_SLOTS];
+    uint32_t render_bits, queued_bits, overflow_bits;
+    uint32_t overflow_write, overflow_read;
+    int32_t direct_dc;
+#endif
 };
 
 static inline void generate_samples(PCSpkState *s)
@@ -154,6 +167,24 @@ void pcspk_ioport_write(void *opaque, uint32_t val)
     if (oldout != newout) {
         AUD_set_active_out(s, gate & s->data_on);
     }
+#ifdef WYSE_BUILD
+    const uint32_t bits = val & 3;
+    if (bits != s->queued_bits) {
+        const uint32_t written = __atomic_load_n(&s->edge_write, __ATOMIC_RELAXED);
+        const uint32_t read = __atomic_load_n(&s->edge_read, __ATOMIC_ACQUIRE);
+        if (written - read < PCSPK_EDGE_SLOTS) {
+            uint32_t frame;
+            if (!audioclock_read(&s->clock, &frame)) frame = 0;
+            s->edges[written & (PCSPK_EDGE_SLOTS - 1u)].frame = frame + AUDIOCLOCK_STAMP_LEAD(0);
+            s->edges[written & (PCSPK_EDGE_SLOTS - 1u)].bits = bits;
+            __atomic_store_n(&s->edge_write, written + 1u, __ATOMIC_RELEASE);
+        } else {
+            __atomic_store_n(&s->overflow_bits, bits, __ATOMIC_RELAXED);
+            __atomic_fetch_add(&s->overflow_write, 1u, __ATOMIC_RELEASE);
+        }
+        s->queued_bits = bits;
+    }
+#endif
 }
 
 int pcspk_get_active_out(PCSpkState *s)
@@ -215,9 +246,41 @@ static inline float pcspk_poly_blep(float t, float dt)
 
 int16_t pcspk_sample(PCSpkState *s)
 {
-    if (!s || !s->data_on) return 0;
+    if (!s) return 0;
+    int gate = pit_get_gate(s->pit, 2), data_on = s->data_on;
+#ifdef WYSE_BUILD
+    if (!(s->consumed & 63)) audioclock_steer(&s->clock, s->consumed);
+    const uint32_t frame = (uint32_t)s->consumed++;
+    uint32_t read = __atomic_load_n(&s->edge_read, __ATOMIC_RELAXED);
+    const uint32_t written = __atomic_load_n(&s->edge_write, __ATOMIC_ACQUIRE);
+    const uint32_t overflow = __atomic_load_n(&s->overflow_write, __ATOMIC_ACQUIRE);
+    if (overflow != s->overflow_read) {
+        s->render_bits = __atomic_load_n(&s->overflow_bits, __ATOMIC_RELAXED);
+        s->overflow_read = overflow;
+        read = written;
+    } else {
+        while (read != written) {
+            const uint32_t slot = read & (PCSPK_EDGE_SLOTS - 1u);
+            if ((int32_t)(s->edges[slot].frame - frame) > 0) break;
+            s->render_bits = s->edges[slot].bits;
+            read++;
+        }
+    }
+    __atomic_store_n(&s->edge_read, read, __ATOMIC_RELEASE);
+    gate = s->render_bits & 1;
+    data_on = (s->render_bits >> 1) & 1;
+#endif
+    if (!gate && pit_get_mode(s->pit, 2) == 3) {
+        int sample = data_on ? (int)PCSPK_BL_PEAK : 0;
+#ifdef WYSE_BUILD
+        s->direct_dc += ((sample << 8) - s->direct_dc) >> 9;
+        sample -= s->direct_dc >> 8;
+#endif
+        return (int16_t)sample;
+    }
+    if (!data_on) return 0;
     if (pit_get_mode(s->pit, 2) != 3) return 0;
-    if (!pit_get_gate(s->pit, 2)) return 0;
+    if (!gate) return 0;
 
     uint32_t count = pit_get_initial_count(s->pit, 2);
     if (count < PCSPK_MIN_COUNT) return 0;

@@ -32,6 +32,17 @@ def main():
     rom = bytearray(open(os.path.join(HERE, "seavgabios.orig.bin"), "rb").read())
     assert len(rom) == BASE and rom[2] * 512 == BASE, "not the SeaVGABIOS build this was made for"
     blob = assemble()
+    bank_hook = blob.find(b"\x9c\x9a\x97\x55\x00\xc0\x9d\xcb")
+    assert bank_hook >= 0, "missing real-mode bank flags hook"
+    assert rom[0x40b1:0x40b5] == b"\x97\x55\x00\x00", "unexpected WinFuncPtr offset"
+    assert rom[0x5597:0x559b] == b"\xfa\xfc\x66\x50", "unexpected bank callback"
+    rom[0x40b1:0x40b5] = (BASE + bank_hook).to_bytes(4, "little")
+    mode_hook = blob.find(b"\x9c\x66\x50\x66\x51\x66\x52\x26\xa0\x49\x00")
+    assert mode_hook >= 0, "missing legacy mode cache hook"
+    assert rom[0x1c96:0x1c9b] == b"\x26\x8b\x1e\xbc\x00", "unexpected clear mode getter"
+    assert rom[0x2a3f:0x2a44] == b"\x66\x55\x66\x89\xe5", "unexpected mode lookup"
+    offset = (BASE + mode_hook - 0x1c99) & 0xffff
+    rom[0x1c96:0x1c9b] = b"\xe8" + offset.to_bytes(2, "little") + b"\x90\x90"
     # hook_10, hook_10_extrastack: cmp ax, 4F0Ah; je pm_info; jmp entry
     hooks = [BASE, BASE + blob.find(b"\x3d\x0a\x4f\x74", 1)]
     for i, ((at, entry), hook) in enumerate(zip(VECTOR_IMM.items(), hooks)):

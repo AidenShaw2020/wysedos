@@ -23,6 +23,9 @@ disks/recovery/
 disks/FDDUSB/
 work/
 recordings/
+*game-findings*
+*gamefindings*
+*gamefindigs*
 tools/hdmi-live/
 tools/pico-hid/
 tools/pxe/

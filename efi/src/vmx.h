@@ -34,8 +34,10 @@
 #define VMCS_GUEST_DEBUGCTL         0x2802
 #define VMCS_GUEST_PAT              0x2804
 #define VMCS_GUEST_EFER             0x2806
+#define VMCS_GUEST_PERF_GLOBAL_CTRL 0x2808
 #define VMCS_HOST_PAT               0x2C00
 #define VMCS_HOST_EFER              0x2C02
+#define VMCS_HOST_PERF_GLOBAL_CTRL  0x2C04
 
 // 32-bit fields
 #define VMCS_PIN_CTLS               0x4000
@@ -165,6 +167,7 @@
 // exit controls
 #define EXIT_SAVE_DEBUG             (1u << 2)
 #define EXIT_HOST_64BIT             (1u << 9)
+#define EXIT_LOAD_PERF_GLOBAL_CTRL  (1u << 12)
 #define EXIT_ACK_INTR               (1u << 15)
 #define EXIT_SAVE_PAT               (1u << 18)
 #define EXIT_LOAD_PAT               (1u << 19)
@@ -175,6 +178,7 @@
 // entry controls
 #define ENTRY_LOAD_DEBUG            (1u << 2)
 #define ENTRY_IA32E_GUEST           (1u << 9)
+#define ENTRY_LOAD_PERF_GLOBAL_CTRL (1u << 13)
 #define ENTRY_LOAD_PAT              (1u << 14)
 #define ENTRY_LOAD_EFER             (1u << 15)
 

@@ -1951,7 +1951,7 @@ void vga_refresh(VGAState *s,
 #if defined(WYSE_BUILD)
     /* what the guest wrote into the real VGA, into vga_ram the way the
      * model lays it out */
-    if (s->hw_mem && s->graphic_mode)
+    if (s->hw_mem && !vbe_enabled(s) && s->graphic_mode)
         hwvga_fetch(s);
 #endif
     if (s->graphic_mode == 2) {
@@ -2353,6 +2353,11 @@ void vbe_write(VGAState *s, uint32_t offset, uint32_t val)
     if (offset == 0) {
         s->vbe_index = val;
     } else {
+#ifdef WYSE_BUILD
+        void pc_vga_hold(int on);
+        const bool mode_change = s->vbe_index == VBE_DISPI_INDEX_ENABLE;
+        if (mode_change) pc_vga_hold(1);
+#endif
 #ifdef DEBUG_VBE
         printf("VBE write: index=0x%04x val=0x%04x\n", s->vbe_index, val);
 #endif
@@ -2407,6 +2412,9 @@ void vbe_write(VGAState *s, uint32_t offset, uint32_t val)
             s->bank_offset = (val << 16);
             break;
         }
+#ifdef WYSE_BUILD
+        if (mode_change) pc_vga_hold(0);
+#endif
     }
 }
 

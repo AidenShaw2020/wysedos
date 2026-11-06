@@ -363,7 +363,8 @@ void hwvga_store_planar(const uint8_t *src);
 
 static void hw_update(bool resync) {
     VGAState *v = g_pc->vga;
-    int want = vga_vbe_on(v) || (safe_planar && vga_native_planar_needs_software(v)) ? WIN_EMU
+    const bool planar_16 = !(v->sr[4] & 8) && (v->gr[6] & 1) && !(v->gr[5] & 0x60);
+    int want = vga_vbe_on(v) || (safe_planar && (planar_16 || vga_native_planar_needs_software(v))) ? WIN_EMU
              : (v->sr[4] & 0x08) ? (vga_chain4_simple(v) ? WIN_RAM : WIN_EMU)
              : g_hwvga_on ? WIN_HW : WIN_EMU;
     const bool trap_text = want == WIN_HW && safe_planar && !(v->gr[6] & 1);
@@ -385,7 +386,8 @@ static void hw_update(bool resync) {
     if (win_mode == WIN_HW) {
         // what the guest drew, into vga_ram the way it is laid out from now on
         pc_vga_hold(1);
-        hwvga_fetch(v);
+        if (!vga_vbe_on(v) || (v->vbe_regs[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_NOCLEARMEM))
+            hwvga_fetch(v);
         v->hw_mem = 0;
         pc_vga_hold(0);
     } else if (want == WIN_HW && ram_13h && v->vga_ram_size >= 0x10000) {
@@ -783,6 +785,10 @@ static uint64_t target_ipms;                // the chosen part's; 0 = no limit
 static int64_t credit;                      // guest instructions earned
 static uint64_t credit_at;
 static uint64_t run_overhead = UINT64_MAX;  // instructions an entry and exit count with no guest work
+static uint64_t target_cpms;
+static int64_t cycle_credit;
+static uint64_t cycle_overhead = UINT64_MAX;
+static bool cycle_counter_checked, cycle_guest_only;
 
 static inline void wrmsr_(uint32_t msr, uint64_t v) {
     __asm__ volatile("wrmsr" :: "c"(msr), "a"((uint32_t)v), "d"((uint32_t)(v >> 32)));
@@ -794,10 +800,16 @@ static inline uint64_t instr_retired(void) {
     return (uint64_t)hi << 32 | lo;
 }
 
+static inline uint64_t core_cycles(void) {
+    uint32_t lo, hi;
+    __asm__ volatile("rdpmc" : "=a"(lo), "=d"(hi) : "c"((1u << 30) | 1u));
+    return (uint64_t)hi << 32 | lo;
+}
+
 static void calibrate_speed(void) {
     // fixed counter 0 counting in every ring, globally on, frozen in SMM
-    wrmsr_(0x38d, (rdmsr_(0x38d) & ~0xfull) | 3);
-    wrmsr_(0x38f, rdmsr_(0x38f) | (1ull << 32));
+    wrmsr_(0x38d, (rdmsr_(0x38d) & ~0xffull) | 0x33);
+    wrmsr_(0x38f, rdmsr_(0x38f) | (3ull << 32));
     wrmsr_(0x1d9, rdmsr_(0x1d9) | (1ull << 14));
     static volatile uint8_t mem = 0x5a;
     const uint32_t n = 20000000;
@@ -824,11 +836,15 @@ void wyse_cpu_set_speed(int mhz, int gen) {
     static const int loop_clocks[] = {22, 22, 22, 22, 8, 4};   // by generation (3 386, 4 486, 5 Pentium)
     if (!host_ipms) calibrate_speed();
     target_ipms = 0;
+    target_cpms = 0;
     if (mhz > 0) {
         target_ipms = (uint64_t)mhz * 1000 * 5 / loop_clocks[gen < 3 ? 3 : gen > 5 ? 5 : gen];
         if (target_ipms >= host_ipms) target_ipms = 0;
+        if ((!cycle_counter_checked || cycle_guest_only) && (uint64_t)mhz * 1000 < wyse_tsc_khz())
+            target_cpms = (uint64_t)mhz * 1000;
     }
     credit = 0;
+    cycle_credit = 0;
     credit_at = rdtsc_();
     printf("vmx: speed %d MHz (%s), %llu instructions per ms of the Atom's %llu\n", mhz,
            gen == 3 ? "386" : gen == 4 ? "486" : "Pentium", (unsigned long long)target_ipms,
@@ -837,7 +853,39 @@ void wyse_cpu_set_speed(int mhz, int gen) {
 
 static bool dead;   // VM entry failed: the guest stays stopped until reset
 
+static bool configure_guest_cycles(void) {
+    const uint32_t entry_allowed = (uint32_t)(rdmsr_(0x490) >> 32);
+    const uint32_t exit_allowed = (uint32_t)(rdmsr_(0x48f) >> 32);
+    if (!(entry_allowed & ENTRY_LOAD_PERF_GLOBAL_CTRL) || !(exit_allowed & EXIT_LOAD_PERF_GLOBAL_CTRL))
+        return false;
+    const uint64_t guest_counters = 3ull << 32;
+    const uint64_t host_perf = rdmsr_(0x38f) & ~guest_counters;
+    vm_write(VMCS_GUEST_PERF_GLOBAL_CTRL, host_perf | guest_counters);
+    vm_write(VMCS_HOST_PERF_GLOBAL_CTRL, host_perf);
+    vm_write(VMCS_ENTRY_CTLS, vm_read(VMCS_ENTRY_CTLS) | ENTRY_LOAD_PERF_GLOBAL_CTRL);
+    vm_write(VMCS_EXIT_CTLS, vm_read(VMCS_EXIT_CTLS) | EXIT_LOAD_PERF_GLOBAL_CTRL);
+    wrmsr_(0x38f, host_perf);
+    return true;
+}
+
+static bool cycle_budget_ready(int64_t *budget, uint64_t elapsed, uint64_t cpms, uint64_t khz, uint64_t *left) {
+    if (!cpms) return true;
+    *budget += (int64_t)(elapsed * cpms / khz);
+    const int64_t cycle_slice = (int64_t)(cpms / 20);
+    if (*budget > cycle_slice) *budget = cycle_slice;
+    if (*budget < cycle_slice) return false;
+    if (*left > (uint64_t)*budget) *left = (uint64_t)*budget;
+    return true;
+}
+
 void wyse_cpu_step(PC *pc) {
+    if (!cycle_counter_checked && host_ipms) {
+        cycle_guest_only = configure_guest_cycles();
+        cycle_counter_checked = true;
+        if (!cycle_guest_only) target_cpms = 0;
+        else run_overhead = cycle_overhead = 0;
+        printf("vmx: native cycle budget %s\n", cycle_guest_only ? "counts guest-only cycles and instructions" : "disabled: guest-only PMU unavailable");
+    }
     (void)pc;
     if (dead) return;
     if (halted && !irq_pending) return;     // HLT: wait for the devices to raise something
@@ -857,23 +905,29 @@ void wyse_cpu_step(PC *pc) {
         deliver_irq();
         uint64_t now = rdtsc_();
         uint64_t left = deadline > now ? deadline - now : 0;
-        bool limited = target_ipms != 0;
+        bool limited = target_ipms != 0 || target_cpms != 0;
         if (limited) {
             uint64_t khz = wyse_tsc_khz();
-            credit += (int64_t)((now - credit_at) * target_ipms / khz);
+            uint64_t elapsed = now - credit_at;
+            credit += (int64_t)(elapsed * target_ipms / khz);
             credit_at = now;
+            bool cycle_ready = cycle_budget_ready(&cycle_credit, elapsed, target_cpms, khz, &left);
             // runs of at least 50 us of the part's work and at most 1 ms: in
             // smaller ones the entries and exits cost more than the running
             // (4 us pieces made 250,000 preemption exits a second)
             if (credit > (int64_t)target_ipms) credit = (int64_t)target_ipms;
-            if (credit < (int64_t)(target_ipms / 20)) break;     // its share of this moment is spent
+            if (target_ipms && credit < (int64_t)(target_ipms / 20)) break;     // its share of this moment is spent
             // no longer than the earned instructions take at the Atom's pace
-            uint64_t t = (uint64_t)credit * khz / host_ipms + 1;
-            if (left > t) left = t;
+            if (target_ipms) {
+                uint64_t t = (uint64_t)credit * khz / host_ipms + 1;
+                if (left > t) left = t;
+            }
+            if (!cycle_ready) break;
         }
         vm_write(VMCS_PREEMPTION_TIMER, (left >> 6) + 1);
         g_where = 3;
         uint64_t i_in = instr_retired();
+        uint64_t cycles_in = target_cpms ? core_cycles() : 0;
         bool entered = vm_run(&vm);
         if (limited) {
             // what the guest retired, less what getting in and out counts (the
@@ -881,6 +935,11 @@ void wyse_cpu_step(PC *pc) {
             uint64_t used = instr_retired() - i_in;
             if (used < run_overhead) run_overhead = used;
             credit -= (int64_t)(used - run_overhead);
+            if (target_cpms) {
+                uint64_t cycles_used = core_cycles() - cycles_in;
+                if (cycles_used < cycle_overhead) cycle_overhead = cycles_used;
+                cycle_credit -= (int64_t)(cycles_used - cycle_overhead);
+            }
         }
         g_where = 1;
         if (!entered) {

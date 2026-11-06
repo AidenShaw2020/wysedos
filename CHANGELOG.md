@@ -3,6 +3,26 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.14 - 2026-11-06
+
+- Repair the VGA BIOS mode cache after temporary graphics-mode DOS startup,
+  allowing automatic CLS to clear the complete text page instead of leaving
+  old text underneath subsequent output.
+- Preserve IF/DF around the real-mode VBE bank callback, fixing Paranoia's
+  startup hang. Keep cleared VBE frames owned by software across both native
+  fetch paths and display-core handoff, removing the stale startup image.
+- Budget native guest instructions and cycles without charging monitor work;
+  bound short-loop credit, fixing Lotus III's startup divide overflow.
+- Use the software VGA window for 16-color planar graphics while retaining
+  native CPU execution, text and existing chain4/Mode X choices. NOID's
+  building-entry and automatic info transitions are responsive.
+- Preserve timestamped direct PC-speaker bit writes across burst mixing,
+  restoring NOID's laughter samples; retain ordinary PIT tones and mute.
+- Qualify NOID's fast countdown and Settlers II Gold's brief old-title/new-
+  palette transition against independent originals. Do not slow global clocks
+  or blank game frames to hide those original behaviors.
+- Add actual-source speaker, CPU/VGA and actual-ROM regression coverage.
+
 ## v1.1.13 — 2026-11-05
 
 - Keep Wyse Sound Blaster auto-init DMA completion and its raw transfer cursor

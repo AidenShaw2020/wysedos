@@ -43,12 +43,18 @@ and [frame-counter use](https://github.com/torvalds/linux/blob/v6.6/drivers/gpu/
 
 ## CPU profiles
 
-The VT-x limiter budgets retired instructions against wall time. Its nominal
+The VT-x limiter budgets guest-only retired instructions and native cycles
+against wall time. Its nominal
 MHz conversion is based on the Turbo Pascal delay-calibration loop for each
 CPU generation. It does not reproduce the complete pipeline, caches,
 memory/bus waits or instruction timings of the named historical CPU.
 
-An independent DOS test runs an `INC/CMP/JB` loop for 18 BIOS timer ticks
+Native cycle credit is capped at 50 microseconds and limits the next preemption
+deadline as well as the instruction budget. Fixed PMU counters are enabled on
+guest entry and disabled on exit, excluding monitor I/O and emulation work.
+Lotus III's short PIT2 calibration no longer overflows its startup division.
+
+An earlier independent DOS test runs an `INC/CMP/JB` loop for 18 BIOS timer ticks
 (roughly one second), without sound, graphics or I/O in the loop. Measured:
 
 | Profile | Completed loop iterations |
@@ -61,3 +67,21 @@ The two Pentium profiles differ by 2.80x versus the configured 2.77x ratio.
 The short BIOS-tick window introduces start-phase variation. These results
 verify that throttling is active; they do not establish cycle accuracy or
 equivalence to physical machines for every workload.
+
+## Direct PC-speaker samples
+
+Some DOS programs disable PIT2's gate and serialize digital samples by
+writing bit 1 of port 61h. Sampling only the latest latch once per mixed
+frame loses intermediate writes, since the guest and mixer run on different
+cores and the mixer produces bursts.
+
+On Wyse, changed gate/data bits are queued with the existing monotonic audio
+clock and consumed at their output frame. A DC blocker removes the direct
+signal's constant component. The bounded queue retains the latest state on
+overflow, including a final mute, and ordinary PIT square-wave tones keep
+their existing generator. NOID's actual direct-bit sample routine and the
+restored laughter were checked; this is not a claim of support for every
+historical PC-speaker PWM technique.
+
+NOID's fast displayed countdown is also reproduced by the original in
+DOSBox. It is not evidence that the 48 kHz output clock should be slowed.
