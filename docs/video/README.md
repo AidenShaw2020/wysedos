@@ -11,6 +11,23 @@ between the different renderers. Audio is enabled. The videos are 1280x720,
 The capture pipeline can duplicate or drop capture frames. Playback is at
 original speed. Game data is not distributed with the firmware or driver.
 
+## Earlier baselines and comparison still required
+
+Earlier hardware runs recorded **22.2 FPS** in the DOS Tomb Raider level-start
+scene with automatic CPU Boost (2026-11-08), and **29.92 FPS** while driving
+NFS III through the previously selected **DX5** path (601 Flips / 20.086 s,
+G4j, 2026-11-11). These earlier results must not be replaced by the numbers
+below as though they were equivalent repeat measurements.
+
+The new NFS DirectX recording used **DX6**, rather than the earlier DX5 path.
+Its 20.79 FPS does not establish a slowdown on DX5. The new Tomb Raider
+measurement used a moving scene rather than the earlier stationary level-start
+scene. Its lower result is real for that sample, but the size and cause of the
+difference remain unresolved. A matched scene/configuration retest is required
+before claiming either preserved performance or a firmware regression.
+
+## Measurements in the new recordings
+
 | Recording | Game mode | Measurement |
 | --- | --- | --- |
 | [DOS Tomb Raider / Glide](05-tombraider-dos-glide.mp4) | 640x480, Voodoo2 emulation, CPU span renderer | 130 completed swaps / 20.155 s = **6.45 FPS**, moving sample |

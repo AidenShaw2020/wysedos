@@ -30,6 +30,10 @@ source archive. It contains no Windows installation or games.
 All clips are 720p60 with FPS captions. [Measurement details and limitations](docs/video/README.md)
 distinguish game FPS from capture FPS. These are scene-dependent results;
 the NFS samples are not a controlled comparison between APIs.
+Earlier runs reached **22.2 FPS** in the DOS Tomb Raider level-start scene and
+**29.92 FPS** driving NFS III on **DX5**. The new DirectX clip uses DX6;
+the lower new numbers do not constitute matched repeats of those baselines.
+The Tomb Raider difference still requires a matched retest; see the recording notes.
 
 GPU settings provide `CPU Boost DOS: Glide` and
 `CPU Boost Windows: DirectX/Glide/OpenGL`. Windows boost is triggered by
