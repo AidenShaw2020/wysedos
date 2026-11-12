@@ -93,7 +93,7 @@ the NFS clips are not a controlled speed comparison between APIs. See the
 limits. The replacement Tomb Raider and DX5 clips use direct 60 fps capture.
 
 <details>
-<summary><strong>Tomb Raider</strong> · 30 seconds · DOS Glide and automatic CPU Boost</summary>
+<summary><strong>Tomb Raider</strong> Â· 30 seconds Â· DOS Glide and automatic CPU Boost</summary>
 
 The measured section is the original stationary level start, followed by
 unmeasured movement. After using Windows 3D, a repeat through a DOS boot
@@ -104,7 +104,7 @@ measured 21.68 FPS in the same scene.
 </details>
 
 <details>
-<summary><strong>Need for Speed III</strong> · 25 seconds · Windows DirectX / DX5</summary>
+<summary><strong>Need for Speed III</strong> Â· 25 seconds Â· Windows DirectX / DX5</summary>
 
 Hometown / Corvette, driving with the original DX5 renderer, VSync and sound.
 
@@ -113,7 +113,7 @@ Hometown / Corvette, driving with the original DX5 renderer, VSync and sound.
 </details>
 
 <details>
-<summary><strong>Need for Speed III</strong> · 22 seconds · Windows Glide</summary>
+<summary><strong>Need for Speed III</strong> Â· 22 seconds Â· Windows Glide</summary>
 
 Velocity9x Glide3, Hometown / Corvette. The caption reports swap calls;
 it does not independently measure display completion.
@@ -123,7 +123,7 @@ it does not independently measure display completion.
 </details>
 
 <details>
-<summary><strong>Quake II</strong> · 25 seconds · Windows OpenGL</summary>
+<summary><strong>Quake II</strong> Â· 25 seconds Â· Windows OpenGL</summary>
 
 Velocity9x Intel Gen8 OpenGL. The 35.09 FPS result is the separate opening
 rotation benchmark, not the moving footage's average.

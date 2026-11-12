@@ -1,6 +1,6 @@
-# Voodoo2 add-in board (experimental)
+# Voodoo2 and DOS Glide
 
-The 3D clone models an 8 or 12 MB 3dfx Voodoo2 (CVG) PCI add-in board next to the
+wyseDOS models an 8 or 12 MB 3dfx Voodoo2 (CVG) PCI add-in board next to the
 standard VGA. It replaced an earlier Voodoo3 experiment: Voodoo3 Glide on
 Windows 9x finds the board only as an attached Windows display, while a
 Voodoo2 is owned directly by Glide and switches the monitor itself.
