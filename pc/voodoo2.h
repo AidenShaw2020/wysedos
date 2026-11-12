@@ -85,6 +85,7 @@ Voodoo2Stats voodoo2_stats(Voodoo2State *state);
 /* Whether the board drives the monitor now (fbiInit0 VGA pass-through); a
  * lock-free look for the platform's once-a-tick policies. */
 bool voodoo2_owns_display(Voodoo2State *state);
+bool voodoo2_uses_gpu(Voodoo2State *state);
 /* Switch between the x86-64 span recompiler and the C renderer; returns
  * whether the recompiler is active (false when it is unavailable). */
 bool voodoo2_set_jit(Voodoo2State *state, bool enabled);

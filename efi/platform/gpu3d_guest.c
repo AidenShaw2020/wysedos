@@ -64,6 +64,7 @@ static int gg_submit(void *opaque, uint32_t batch_gfx, uint32_t fence_gfx, uint3
 static uint32_t gg_status(void *opaque)
 {
     (void)opaque;
+    if (!gpu3d_open()) return 0;
     gpu3d_poll();
     return (gpu3d_is_open() ? WGPU_STATUS_READY : 0) | (gpu3d_busy() ? WGPU_STATUS_BUSY : 0);
 }

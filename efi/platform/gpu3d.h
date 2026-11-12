@@ -61,6 +61,9 @@ bool gpu3d_execute(uint32_t batch_gpu, uint32_t seqno, uint32_t timeout_us);
 int gpu3d_submit_guest(uint32_t batch_gpu, uint32_t fence_gpu, uint32_t fence_value);
 void gpu3d_poll(void);
 bool gpu3d_busy(void);
+/* Disable a fully drained ring and drop forcewake; resume without resetting
+ * ring contents/positions, fences, allocations or GGTT mappings. */
+void gpu3d_idle_release(void);
 uint32_t gpu3d_resets(void);
 void gpu3d_report(void);
 

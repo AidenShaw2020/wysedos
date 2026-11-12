@@ -1,79 +1,79 @@
 # 3D preview recordings
 
-Recorded on 2026-11-12 with the final G5l firmware and G5j Windows HAL,
-128 MB guest RAM, 8 MB VGA memory, 12 MB Voodoo2 and a 64 MB WGPU workspace.
-The base CPU setting is 133 MHz; each API activates the selected CPU Boost
-automatically. No separate Windows booster program is installed.
+Recorded on 2026-11-12 with 128 MB guest RAM, 8 MB VGA memory, 12 MB
+Voodoo2 and a 64 MB WGPU workspace. The base CPU setting is 133 MHz;
+selected CPU Boost activates automatically for DOS Glide and Windows 3D.
+No separate Windows booster program is installed.
 
 These are scene samples, not whole-game averages or controlled comparisons
-between the different renderers. Audio is enabled. The videos are 1280x720,
-60 fps with captured digital audio; their container frame rate is not game FPS.
-The capture pipeline can duplicate or drop capture frames. Playback is at
-original speed. Game data is not distributed with the firmware or driver.
+between renderers. The videos are 1280x720 at 60 fps with a captured digital
+audio track; container frame rate is not game FPS. Tomb Raider's installed
+configuration has game sound disabled. Game data is not distributed.
 
-## Earlier baselines and comparison still required
-
-Earlier hardware runs recorded **22.2 FPS** in the DOS Tomb Raider level-start
-scene with automatic CPU Boost (2026-11-08), and **29.92 FPS** while driving
-NFS III through the previously selected **DX5** path (601 Flips / 20.086 s,
-G4j, 2026-11-11). These earlier results must not be replaced by the numbers
-below as though they were equivalent repeat measurements.
-
-The new NFS DirectX recording used **DX6**, rather than the earlier DX5 path.
-Its 20.79 FPS does not establish a slowdown on DX5. The new Tomb Raider
-measurement used a moving scene rather than the earlier stationary level-start
-scene. Its lower result is real for that sample, but the size and cause of the
-difference remain unresolved. A matched scene/configuration retest is required
-before claiming either preserved performance or a firmware regression.
-
-## Measurements in the new recordings
-
-**Methodology audit:** the captions below report backend counters or the game's
-rotation benchmark; they are not independently verified display FPS. The
-shared MJPEG input was timestamped on a 1/25-second time base and converted
-to a 60 fps output with dropped/duplicated frames. HTTP streaming also keeps
-only the latest frame. These recordings cannot independently validate frame
-cadence, even though average playback duration followed wall time.
-
-DirectX counts handled Flips; it does not include presentation through a
-DirectDraw fallback copy (`Blt`). Fallback activity was not measured in this
-recording, so 20.79 Flips/s must not be equated unconditionally with all
-presented frames/s. The Windows Glide census counts swap calls before the
-device operation and does not check successful display completion. The DOS
-Voodoo2 sample had matching deltas of 130 swap commands and 130 completed
-buffer changes. Quake II's number is the separate game rotation benchmark.
-
-The DirectX time denominator agrees between host wall time (20.105110 s) and
-guest ticks (20.102 s). The DOS interval is 20.155 s with the host video start
-within approximately 0.12 s of its first counter snapshot. No several-fold
-time-denominator error was found. Pixel-change analysis is only a capture
-cross-check: it cannot recover frames already lost by the capture pipeline
-or distinguish every newly rendered static image.
-
-A replacement comparison must use the earlier DX5 path and the same DOS
-scene/configuration, direct capture with an explicitly negotiated frame rate,
-synchronized host timestamps, and presentation/fallback counters. The current
-MP4 captions remain the original, provisional counter-derived annotations.
+## Replacement measurements
 
 | Recording | Game mode | Measurement |
 | --- | --- | --- |
-| [DOS Tomb Raider / Glide](05-tombraider-dos-glide.mp4) | 640x480, Voodoo2 emulation, CPU span renderer | 130 completed swaps / 20.155 s = **6.45 FPS**, moving sample |
-| [Windows NFS III / DirectX](06-nfs3-directx.mp4) | 640x480, native DX6 renderer, Hometown / Corvette | 418 handled Flips / 20.102 guest seconds = **20.79 FPS**; host wall-time result 20.79 FPS |
-| [Windows NFS III / Glide](07-nfs3-glide.mp4) | 640x480, Velocity9x Glide3, Hometown / Corvette | 247 swaps / 15.001 s = **16.47 FPS**, complete periodic interval inside the marked race sample |
-| [Windows Quake II test / OpenGL](08-quake2-opengl.mp4) | 640x480, Velocity9x Intel Gen8 ICD | Separate opening-scene `timerefresh`: 128 views / 3.647994 s = **35.087779 FPS** |
+| [DOS Tomb Raider / Glide](05-tombraider-dos-glide.mp4) | 640x480, Voodoo2 emulation, CPU span renderer | 437 completed buffer changes / 20.129 s = **21.71 FPS**, original stationary level start; later movement is unmeasured |
+| [Windows NFS III / DirectX](06-nfs3-directx.mp4) | 640x480, native **DX5**, Hometown / Corvette | 621 handled Flips / 20.984 s = **29.59 FPS**, driving; zero declined Flips throughout the run |
+| [Windows NFS III / Glide](07-nfs3-glide.mp4) | 640x480, Velocity9x Glide3, Hometown / Corvette | 247 swap calls / 15.001 s = **16.47 swaps/s**, complete periodic interval inside the marked race sample |
+| [Windows Quake II test / OpenGL](08-quake2-opengl.mp4) | 640x480, Velocity9x Intel Gen8 ICD | Separate opening-scene rotation: 128 views / 3.647994 s = **35.087779 FPS** |
 
-The NFS clips retain medium graphics, mirror, VSync and sound. Their race
-windows contain different geometry and are not a controlled API speed test.
-Quake II's result applies to the opening rotation, not the subsequent moving
-footage. The bundled demo has a malformed ending, so this recording uses a
-loaded map and normal exit instead of claiming a completed demo benchmark.
+NFS retains medium graphics, mirror, VSync and sound. Its clips contain
+different geometry and do not establish an API speed comparison. Quake II's
+number applies to its opening rotation, not the subsequent moving footage.
+Its bundled demo has a malformed ending, so a loaded map and normal exit
+were used instead of claiming a completed demo benchmark.
 
-The DOS recording uses the default Voodoo2 software/span-JIT path. The
-experimental manual Intel GPU backend is not enabled in the released defaults.
-The Windows driver accelerates Windows APIs independently of that DOS path.
+Earlier runs reached 22.2 FPS at the same Tomb Raider level start and
+29.92 FPS driving NFS III on DX5. The replacement tests restore comparable
+paths. The previous DX6 sample (20.79 handled Flips/s) used a different
+renderer and has been replaced. The previous Tomb Raider moving sample
+(6.45 FPS) also ran with a regression now identified and corrected.
 
-All three Windows games returned normally to the desktop after capture.
-Dedicated native 2D, mixed Direct3D, Glide2/3 and OpenGL checks passed separately;
-these recordings do not establish complete API conformance.
+Opening the unused Windows render engine alone reproduced the Tomb Raider
+slowdown, even with no submitted work. Closing it restored performance.
+Releasing forcewake alone did not fix it. The firmware now disables the idle
+command ring only after its fence completes and its hardware head reaches
+the submitted tail. A later Windows request restores the same ring control,
+contents, positions, fences and mappings. The replacement Tomb Raider sample
+ran after two GPU tests with automatic ring suspension; it completed 437
+frames and 437 swaps, at about 377 triangles per frame. Host elapsed time
+independently gives 21.7077 FPS. No CPU-frequency mechanism is inferred from
+this experiment.
 
-See [SHA256SUMS.txt](SHA256SUMS.txt) for the exact published MP4 files.
+The verified DOS launch route is a DOS boot with the CD driver loaded. An
+additional direct launch from Windows' Restart in MS-DOS session stalled
+before Glide initialization; that route is not claimed working. A guest DOS
+boot retains the monitor's GPU state and avoids that session-start issue.
+A repeat after native Windows 2D, Direct3D, Glide2 and OpenGL checks measured
+436 completed frames / 20.115 s = 21.68 FPS in the same level-start scene.
+
+## Measurement and capture limits
+
+The replacement Tomb Raider and DX5 clips use direct digital capture with
+an explicitly negotiated 60 fps input and 48 kHz audio. Host timestamps align
+the counter intervals with capture. The first Tomb Raider section remains
+stationary for the measurement; the final short movement is unmeasured.
+Capture may still lose or duplicate frames and cannot independently prove
+the game's frame cadence. Playback remains at original speed.
+
+DOS counts completed buffer changes, with matching processed swap deltas.
+DirectX counts successfully handled Flips; the new DX5 run also records zero
+declined Flips, so declined-Flip fallback is excluded for that run. Neither
+counter measures physical monitor refresh. Windows Glide counts swap calls
+before the operation without checking successful completion, so its caption
+is a provisional backend rate. Quake II reports its own rotation benchmark.
+
+The retained Windows Glide and OpenGL clips used a shared MJPEG input with
+a 1/25-second time base before conversion to 60 fps. That input could drop
+or duplicate capture frames and retain only the latest frame. Those clips
+cannot independently validate game FPS. Pixel-change analysis is also only
+a capture cross-check, especially for static or partially scanned frames.
+
+DOS uses the default Voodoo2 software/span-JIT path; the experimental manual
+Intel GPU backend remains disabled. Windows Velocity9x accelerates its APIs
+independently. Dedicated native 2D, mixed Direct3D, Glide2/3 and OpenGL checks
+are separate from these scene samples and do not establish full conformance.
+
+See [SHA256SUMS.txt](SHA256SUMS.txt) for the published MP4 files.

@@ -71,8 +71,8 @@ GPU settings menu. These commands are implementation diagnostics.
 ## Limits
 
 - The default DOS renderer runs on CPU cores 3 and 2 with the span JIT.
-  The recorded 640x480 Tomb Raider moving sample gives 6.45 FPS; it is not a
-  general performance range. See the [recording and method](video/README.md).
+  The replacement 640x480 Tomb Raider level-start sample gives 21.71 FPS
+  after the idle Windows GPU ring suspension fix; this is not a whole-game average. See the [recording and method](video/README.md).
 - A manual experimental Intel GPU backend exists in source but is not enabled
   by the shipped defaults or exposed as a supported DOS mode. Windows
   Velocity9x uses Intel Gen8 separately; its performance does not establish

@@ -30,7 +30,8 @@ uint64_t wyse_ticks_us(void);
 #define RCS 0x2000u
 
 static struct {
-    bool open, broken;
+    bool open, broken, awake, suspended;
+    uint32_t suspended_ctl;
     volatile uint8_t *mmio;
     volatile uint64_t *ggtt;
     uint32_t next_index;              /* next free GGTT entry */
@@ -74,6 +75,27 @@ static bool forcewake(uint32_t reg, bool on)
     return false;
 }
 
+/* Resuming an idle engine does not reset its ring, fences or GGTT mappings. */
+static bool wake_existing(void)
+{
+    if (!g.open || g.broken) return false;
+    if (!g.awake) {
+        if (!forcewake(0x1300b0, true) || !forcewake(0x1300b8, true)) {
+            forcewake(0x1300b0, false);
+            forcewake(0x1300b8, false);
+            return false;
+        }
+        g.awake = true;
+    }
+    if (g.suspended) {
+        /* No reset: the completed ring's head, tail and contents survive. */
+        wr(RCS + 0x3c, g.suspended_ctl);
+        if (rd(RCS + 0x3c) != g.suspended_ctl) return false;
+        g.suspended = false;
+    }
+    return true;
+}
+
 /* "gpu coherent 1" sets private PAT entry 0 (the one GGTT entries use) to
  * snoop, as Linux i915 does on Cherryview (the firmware leaves 0x03), and then
  * skips the flushes of memory the GPU only reads (textures, gpu3d_flush_data).
@@ -104,7 +126,7 @@ uint32_t gpu3d_map(const void *cpu, uint32_t bytes)
 {
     uintptr_t first = (uintptr_t)cpu & ~4095ull;
     uint32_t pages = (uint32_t)(((uintptr_t)cpu + bytes - first + 4095) / 4096);
-    if (!g.open || g.next_index + pages > GGTT_BASE_INDEX + GGTT_LIMIT_PAGES || first >= (1ull << 39)) return 0;
+    if (!g.open || !wake_existing() || g.next_index + pages > GGTT_BASE_INDEX + GGTT_LIMIT_PAGES || first >= (1ull << 39)) return 0;
     uint32_t index = g.next_index;
     for (uint32_t i = 0; i < pages; i++) g.ggtt[index + i] = (first + 4096ull * i) | 1u;
     (void)g.ggtt[index + pages - 1];
@@ -174,6 +196,7 @@ static bool ring_start(void)
     wr(RCS + 0x9c, (1u << 8) << 16);  /* MI_MODE: STOP_RING off */
     wr(RCS + 0x3c, (RING_PAGES - 1) << 12 | 1);   /* length, valid */
     g.ring_tail = 0;
+    g.suspended = false;
     g.status[RING_SEQNO] = g.ring_seqno;          /* nothing owed */
     gpu3d_flush_cpu((const void *)(g.status + RING_SEQNO), 4);
     g.watch_since = 0;
@@ -184,7 +207,12 @@ bool gpu3d_is_open(void) { return g.open && !g.broken; }
 
 bool gpu3d_open(void)
 {
-    if (g.open) return !g.broken;
+    if (g.open) {
+        lock();
+        bool ready = wake_existing();
+        unlock();
+        return ready;
+    }
     if (pci_cfg(0) != 0x22b08086u || !(pci_cfg(4) & 4)) {
         printf("gpu3d: no Cherryview graphics with bus mastering\n");
         return false;
@@ -212,6 +240,7 @@ bool gpu3d_open(void)
     }
     g.open = true;
     g.broken = false;
+    g.awake = true;
     if (!g.ring) {                    /* once: a reopen keeps the pages and their GGTT entries */
         g.next_index = GGTT_BASE_INDEX;
         g.ring = alloc_pages(RING_PAGES, &g.ring_gpu);
@@ -238,10 +267,14 @@ bool gpu3d_open(void)
 void gpu3d_close(void)
 {
     if (!g.open) return;
+    /* Diagnostic close must still work on a broken engine. */
+    if (!g.awake && (!forcewake(0x1300b0, true) || !forcewake(0x1300b8, true))) return;
     wr(RCS + 0x3c, 0);
     forcewake(0x1300b0, false);
     forcewake(0x1300b8, false);
     g.open = false;                   /* the pages stay: the GPU may have them cached */
+    g.awake = false;
+    g.suspended = false;
 }
 
 /* ---- batches ---- */
@@ -567,6 +600,7 @@ static bool run_batch(uint32_t batch_gpu, uint32_t seqno, uint32_t timeout_us)
 {
     (void)seqno;                                  /* the batch's own store is not waited for any more */
     lock();
+    if (!wake_existing()) { unlock(); return false; }
     uint32_t mine = g.ring_seqno + 1;
     uint32_t dw[14] = {
         (0x31u << 23) | 1, batch_gpu, 0, 0,       /* MI_BATCH_BUFFER_START (GGTT), MI_NOOP */
@@ -596,6 +630,7 @@ int gpu3d_submit_guest(uint32_t batch_gpu, uint32_t fence_gpu, uint32_t fence_va
 {
     if (!gpu3d_open()) return 2;
     lock();
+    if (!wake_existing()) { unlock(); return 2; }
     uint32_t mine = g.ring_seqno + 1;
     uint32_t dw[24] = {
         GEN6_PIPE_CONTROL | (6 - 2),
@@ -642,13 +677,44 @@ void gpu3d_poll(void)
 }
 
 bool gpu3d_busy(void) { return g.open && !reached(ring_done(), g.ring_seqno); }
+
+/* Main-core DOS policy; serialize against either ring producer. Never drop
+ * forcewake while a fence is pending. Disable the drained ring as well:
+ * forcewake release alone did not restore DOS CPU rendering performance.
+ * Preserve its registers, contents and allocations for the next request. */
+void gpu3d_idle_release(void)
+{
+    lock();
+    if (g.open && !g.broken && g.awake && reached(ring_done(), g.ring_seqno)) {
+        /* The completion store can precede fetching the last ring padding.
+         * Do not disable until the hardware has consumed the entire ring. */
+        if ((rd(RCS + 0x34) & 0x1ffffcu) != g.ring_tail) { unlock(); return; }
+        if (!g.suspended) {
+            g.suspended_ctl = rd(RCS + 0x3c);
+            if (!(g.suspended_ctl & 1u)) { unlock(); return; }
+            wr(RCS + 0x3c, 0);
+            if (rd(RCS + 0x3c) != 0) { unlock(); return; }
+            g.suspended = true;
+        }
+        bool render = forcewake(0x1300b0, false);
+        bool media = forcewake(0x1300b8, false);
+        if (render && media) {
+            g.awake = false;
+            printf("gpu3d: idle DOS ring suspended, forcewake released\n");
+        } else {
+            g.awake = false;
+            (void)wake_existing();
+        }
+    }
+    unlock();
+}
 uint32_t gpu3d_resets(void) { return g.resets; }
 
 void gpu3d_report(void)
 {
     printf("gpu3d: %s, ring seqno %u done %u, tail %05x head %05x, guest submits %u, ring waits %u, resets %u\n",
-           !g.open ? "closed" : g.broken ? "BROKEN" : "open", g.ring_seqno, g.open ? ring_done() : 0, g.ring_tail,
-           g.open ? rd(RCS + 0x34) & 0x1ffffcu : 0, g.guest_submits, g.ring_waits, g.resets);
+           !g.open ? "closed" : g.broken ? "BROKEN" : !g.awake ? "asleep" : "open", g.ring_seqno, g.open ? ring_done() : 0, g.ring_tail,
+           g.open && g.awake ? rd(RCS + 0x34) & 0x1ffffcu : 0, g.guest_submits, g.ring_waits, g.resets);
 }
 
 /* ---- the monitor's test ---- */

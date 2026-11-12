@@ -16,14 +16,14 @@ and [DOS Voodoo2 status and design](docs/voodoo2.md).
 
 ## 3D preview: recordings and downloads
 
-The [2026-11-12 preview image](https://github.com/AidenShaw2020/wysedos/releases/tag/3d-preview-20261112)
+The [2026-11-12 preview image](https://github.com/AidenShaw2020/wysedos/releases/tag/3d-preview-20261112-r2)
 includes the firmware and the full Velocity9x driver, GPL license and matching
 source archive. It contains no Windows installation or games.
 
-| Recording with sound | Measured scene sample |
+| Recording with captured audio | Measured scene sample |
 | --- | --- |
-| [DOS Tomb Raider / Glide](docs/video/05-tombraider-dos-glide.mp4) | **6.45 FPS**, Voodoo2 emulation, 20.155 s movement sample |
-| [Windows NFS III / DirectX](docs/video/06-nfs3-directx.mp4) | **20.79 FPS**, 20.102 s race sample |
+| [DOS Tomb Raider / Glide](docs/video/05-tombraider-dos-glide.mp4) | **21.71 FPS**, Voodoo2 emulation, 20.129 s stationary level-start sample |
+| [Windows NFS III / DirectX](docs/video/06-nfs3-directx.mp4) | **29.59 FPS**, DX5, 20.984 s driving sample |
 | [Windows NFS III / Glide](docs/video/07-nfs3-glide.mp4) | **16.47 FPS**, 15.001 s race interval |
 | [Windows Quake II test / OpenGL](docs/video/08-quake2-opengl.mp4) | **35.09 FPS**, separate opening-scene `timerefresh` |
 
@@ -31,12 +31,12 @@ All clips are 720p60 with FPS captions. [Measurement details and limitations](do
 distinguish game FPS from capture FPS. These are scene-dependent results;
 the NFS samples are not a controlled comparison between APIs.
 Earlier runs reached **22.2 FPS** in the DOS Tomb Raider level-start scene and
-**29.92 FPS** driving NFS III on **DX5**. The new DirectX clip uses DX6;
-the lower new numbers do not constitute matched repeats of those baselines.
-The Tomb Raider difference still requires a matched retest; see the recording notes.
-The [measurement audit](docs/video/README.md) also identifies capture timestamp
-quantization and presentation-counter limits. Treat the clip captions as
-provisional backend-counter measurements, not verified display FPS.
+**29.92 FPS** driving NFS III on **DX5**. The replacement recordings repeat
+these paths. The Tomb Raider regression was traced to the idle Windows GPU
+command ring remaining enabled; the firmware now suspends that ring in DOS
+and restores it on the next Windows GPU request without resetting its state.
+The [measurement notes](docs/video/README.md) distinguish completed DOS frames,
+handled DirectX Flips, Glide swap calls and the separate Quake II benchmark.
 
 GPU settings provide `CPU Boost DOS: Glide` and
 `CPU Boost Windows: DirectX/Glide/OpenGL`. Windows boost is triggered by

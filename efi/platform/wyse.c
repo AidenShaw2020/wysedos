@@ -1744,6 +1744,11 @@ void wyse_main(void) {
              * Windows boost. VBE, GDI and driver probing cannot enable it. */
             bool graphics_active = pc->vga &&
                 (pc->vga->vbe_regs[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_ENABLED) != 0;
+            /* An unused Windows render engine must not keep GT forcewake
+             * asserted during CPU-rendered DOS Glide. The experimental DOS
+             * GPU backend owns its own active engine and is excluded. */
+            if (!graphics_active && !voodoo2_uses_gpu(pc->voodoo2))
+                gpu3d_idle_release();
             int boost_was_active = graphics_boost.active;
             graphics_active = cpu_windows_3d_boost_step(&graphics_boost,
                 (uint32_t)now, pc->vga ? pc->vga->vbe_disable_epoch : 0,

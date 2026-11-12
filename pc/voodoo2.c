@@ -1468,6 +1468,11 @@ bool voodoo2_owns_display(Voodoo2State *state)
     return (init0 & FBIINIT0_VGA_PASS) && !(init1 & FBIINIT1_VIDEO_RESET);
 }
 
+bool voodoo2_uses_gpu(Voodoo2State *state)
+{
+    return state && state->gpu != NULL;
+}
+
 void voodoo2_set_caller_source(Voodoo2CallerSource *source)
 {
     caller_source = source;
