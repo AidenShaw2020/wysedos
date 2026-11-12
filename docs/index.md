@@ -1,6 +1,6 @@
 # wyseDOS documentation
 
-These guides describe the v1.1.12 implementation on the Dell Wyse 3040.
+These guides describe the v1.1.15 implementation on the Dell Wyse 3040.
 They distinguish supported mechanisms from configurations actually tested on
 hardware. Detailed engineering reports retain their original test conditions.
 
@@ -9,7 +9,9 @@ hardware. Detailed engineering reports retain their original test conditions.
 | Guide | Contents |
 |---|---|
 | [Installation](installation.md) | Release files, New installation, data-preserving upgrade, DOS and Windows setup |
-| [Configuration](configuration.md) | Controls, persistent settings, CPU, RAM and sound |
+| [Configuration](configuration.md) | Controls, persistent settings, CPU Boost, GPU memory, RAM and sound |
+| [Windows 98 graphics](../drivers/windows9x/velocity9x/INSTALL.TXT) | Velocity9x installation, Direct3D, Glide and OpenGL |
+| [DOS Glide](voodoo2.md) | Voodoo2 emulation, memory and renderer |
 | [Storage](storage.md) | Native C:, USB disks, images and exclusive ownership |
 | [Compatibility](compatibility.md) | Tested systems/games, performance and limits |
 | [Troubleshooting](troubleshooting.md) | Boot, display, sound, USB and bug reports |

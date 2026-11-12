@@ -1,53 +1,3 @@
-# DOSOnModernPC3D
-
-Experimental wyseDOS 3D support for the Dell Wyse 3040. DOS Glide uses a
-virtual 3dfx Voodoo2; Windows 98 uses the modified
-[Velocity9x driver](drivers/windows9x/velocity9x/README.md) for Direct3D,
-Windows Glide and OpenGL through the monitor's Intel Gen8 WGPU channel.
-
-Windows keeps the emulated VGA/VBE display adapter. The driver submits
-rendering work through WGPU, while the firmware retains the physical GPU's
-display and command ring. Windows Glide and DOS Voodoo2 emulation are separate
-paths; installing the Windows driver does not replace DOS Glide emulation.
-
-This is an experimental build with measured limits, not full API conformance
-or a sustained 30 FPS claim. See [Windows 3D installation and limits](drivers/windows9x/velocity9x/INSTALL.TXT)
-and [DOS Voodoo2 status and design](docs/voodoo2.md).
-
-## 3D preview: recordings and downloads
-
-The [2026-11-12 preview image](https://github.com/AidenShaw2020/wysedos/releases/tag/3d-preview-20261112-r2)
-includes the firmware and the full Velocity9x driver, GPL license and matching
-source archive. It contains no Windows installation or games.
-
-| Recording with captured audio | Measured scene sample |
-| --- | --- |
-| [DOS Tomb Raider / Glide](docs/video/05-tombraider-dos-glide.mp4) | **21.71 FPS**, Voodoo2 emulation, 20.129 s stationary level-start sample |
-| [Windows NFS III / DirectX](docs/video/06-nfs3-directx.mp4) | **29.59 FPS**, DX5, 20.984 s driving sample |
-| [Windows NFS III / Glide](docs/video/07-nfs3-glide.mp4) | **16.47 FPS**, 15.001 s race interval |
-| [Windows Quake II test / OpenGL](docs/video/08-quake2-opengl.mp4) | **35.09 FPS**, separate opening-scene `timerefresh` |
-
-All clips are 720p60 with FPS captions. [Measurement details and limitations](docs/video/README.md)
-distinguish game FPS from capture FPS. These are scene-dependent results;
-the NFS samples are not a controlled comparison between APIs.
-Earlier runs reached **22.2 FPS** in the DOS Tomb Raider level-start scene and
-**29.92 FPS** driving NFS III on **DX5**. The replacement recordings repeat
-these paths. The Tomb Raider regression was traced to the idle Windows GPU
-command ring remaining enabled; the firmware now suspends that ring in DOS
-and restores it on the next Windows GPU request without resetting its state.
-The [measurement notes](docs/video/README.md) distinguish completed DOS frames,
-handled DirectX Flips, Glide swap calls and the separate Quake II benchmark.
-
-GPU settings provide `CPU Boost DOS: Glide` and
-`CPU Boost Windows: DirectX/Glide/OpenGL`. Windows boost is triggered by
-actual 3D driver submissions, needs no separate program or C: utility, and
-returns to the selected base speed after activity ends. Hardware enable
-switches and memory settings are separate: Voodoo2 **8/12 MB**, Windows WGPU
-workspace **32/64/128 MB**. The workspace is host RAM, not additional VGA VRAM.
-
-The older DOS showcase below retains its original configuration and results.
-Those measurements are separate from the Windows/Glide tests of this branch.
-
 <p align="center">
   <img src="docs/img/logo.png" alt="wyseDOS" width="520">
 </p>
@@ -65,6 +15,12 @@ The monitor keeps UEFI Boot Services active for firmware-backed USB, storage,
 networking and events, alongside direct Cherry Trail VGA and audio access.
 See [architecture](docs/architecture.md) for the hardware/firmware boundary.
 
+DOS Glide runs through an emulated **3dfx Voodoo2** with 8 or 12 MB of memory.
+Windows 98 uses the bundled [Velocity9x driver](drivers/windows9x/velocity9x/README.md)
+for the VGA/VBE desktop and **Direct3D, Glide and OpenGL** through the Intel
+Gen8 GPU. The GPU menu provides separate CPU Boost switches for DOS Glide
+and Windows 3D; no separate Windows booster program is required.
+
 The emulator core and peripheral set come from
 [X86Pi](https://github.com/AidenShaw2020/x86pi) (itself built on the PC
 peripherals of [tiny386](https://github.com/hchunhui/tiny386)), adapted for
@@ -74,9 +30,10 @@ emulation.
 
 ## Game showcase
 
-Original DOS games running on a **Dell Wyse 3040**, booted from eMMC with
-**16 MB guest RAM**. All four clips have **720p60 video and captured game
-audio**, at the original game speed.
+DOS and Windows 98 games running on a **Dell Wyse 3040**. The original four
+DOS clips use an eMMC boot and **16 MB guest RAM**; the four 3D clips use
+**128 MB guest RAM**. All clips are **720p60**, played at original speed,
+with captured digital audio. Tomb Raider's game sound is disabled.
 
 | Game | Game resolution | Performance measurement |
 |---|---|---|
@@ -84,8 +41,12 @@ audio**, at the original game speed.
 | **Quake** | 320Ã—200 â†’ 640Ã—480 | **62.4 â†’ 16.6 FPS** â€” separate `demo1` timedemos, sound off |
 | **Duke Nukem 3D** | 320Ã—200 | In-game **DNRATE** counter in the clip's final, separately marked scene |
 | **Tyrian 2000** | 320Ã—200 | **31.2 FPS** â€” separate early-level debug sample, normal speed / low detail |
+| **Tomb Raider / DOS Glide** | 640x480 | **21.71 FPS** - 437 completed frames / 20.129 s at the stationary level start |
+| **NFS III / Windows DirectX (DX5)** | 640x480 | **29.59 FPS** - 621 handled Flips / 20.984 s of driving; zero declined Flips |
+| **NFS III / Windows Glide** | 640x480 | **16.47 swap calls/s** - 247 calls / 15.001 s race interval |
+| **Quake II / Windows OpenGL** | 640x480 | **35.09 FPS** - separate opening-scene rotation benchmark |
 
-Game FPS and capture FPS are different measurements. The footage has sound
+Game FPS and capture FPS are different measurements. The original four DOS clips have sound
 enabled; Doom and Quake benchmark results come from separate no-sound runs.
 Duke3D's counter is scene-dependent, and Tyrian's sample is not an unlocked
 benchmark or the recorded demo's average.
@@ -124,12 +85,61 @@ https://github.com/user-attachments/assets/5645a36b-19c8-43b2-8efc-84873c90fd31
 
 </details>
 
+The 3D clips use 12 MB Voodoo2 memory, a 64 MB Windows GPU workspace and
+a 133 MHz base CPU profile with automatic CPU Boost. NFS III retains medium
+graphics, mirror, VSync and sound. The results apply to the measured scenes;
+the NFS clips are not a controlled speed comparison between APIs. See the
+[3D recording notes](docs/video/README.md) for counter definitions and capture
+limits. The replacement Tomb Raider and DX5 clips use direct 60 fps capture.
+
+<details>
+<summary><strong>Tomb Raider</strong> · 30 seconds · DOS Glide and automatic CPU Boost</summary>
+
+The measured section is the original stationary level start, followed by
+unmeasured movement. After using Windows 3D, a repeat through a DOS boot
+measured 21.68 FPS in the same scene.
+
+[![Tomb Raider / DOS Glide](docs/video/05-tombraider-dos-glide.jpg)](docs/video/05-tombraider-dos-glide.mp4)
+
+</details>
+
+<details>
+<summary><strong>Need for Speed III</strong> · 25 seconds · Windows DirectX / DX5</summary>
+
+Hometown / Corvette, driving with the original DX5 renderer, VSync and sound.
+
+[![NFS III / DirectX DX5](docs/video/06-nfs3-directx.jpg)](docs/video/06-nfs3-directx.mp4)
+
+</details>
+
+<details>
+<summary><strong>Need for Speed III</strong> · 22 seconds · Windows Glide</summary>
+
+Velocity9x Glide3, Hometown / Corvette. The caption reports swap calls;
+it does not independently measure display completion.
+
+[![NFS III / Windows Glide](docs/video/07-nfs3-glide.jpg)](docs/video/07-nfs3-glide.mp4)
+
+</details>
+
+<details>
+<summary><strong>Quake II</strong> · 25 seconds · Windows OpenGL</summary>
+
+Velocity9x Intel Gen8 OpenGL. The 35.09 FPS result is the separate opening
+rotation benchmark, not the moving footage's average.
+
+[![Quake II / OpenGL](docs/video/08-quake2-opengl.jpg)](docs/video/08-quake2-opengl.mp4)
+
+</details>
+
 ## Documentation
 
 Start with the [documentation index](docs/index.md):
 
 - [Installation and guest OS setup](docs/installation.md)
 - [Configuration and controls](docs/configuration.md)
+- [Windows 98 display and 3D driver](drivers/windows9x/velocity9x/INSTALL.TXT)
+- [DOS Glide and Voodoo2](docs/voodoo2.md)
 - [Storage, USB and image mounting](docs/storage.md)
 - [Architecture and source map](docs/architecture.md)
 - [Compatibility and known limits](docs/compatibility.md)
@@ -142,8 +152,9 @@ Start with the [documentation index](docs/index.md):
 | Component | Emulated hardware |
 |---|---|
 | **Processor** | 386 / 486 / Pentium with optional x87 FPU; Intel VT-x execution with configurable instruction-rate limits or unrestricted speed. MHz profiles approximate each generation; they are not cycle-accurate CPU models. |
-| **Memory** | Configurable conventional + extended RAM (default 16 MB, up to 256 MB), LIM EMS 4.0 at `0xD000` |
+| **Memory** | Configurable conventional + extended RAM (installer default 128 MB, up to 256 MB), LIM EMS 4.0 at `0xD000` |
 | **Video** | IBM VGA (text, CGA, EGA, Mode X, 256-colour) and VESA VBE 2.0 LFB modes up to 1280x1024 in 8/15/16/24/32 bpp with 8 MB VRAM |
+| **3D graphics** | DOS Glide through Voodoo2 emulation (8/12 MB); Windows 98 Direct3D, Glide and OpenGL through Velocity9x and Intel Gen8. Windows GPU workspace: 32/64/128 MB, separate from VGA VRAM. |
 | **Sound** | AdLib / Dual OPL2 / OPL3 ([Nuked OPL3](https://github.com/nukeykt/Nuked-OPL3)), Sound Blaster 16 (DSP 4.05, 8-bit and 16-bit DMA, mixer, auto-init), MPU-401 General MIDI ([TinySoundFont](https://github.com/schellingb/TinySoundFont)), Tandy 3-voice (SN76489), Covox Speech Thing & Disney Sound Source on LPT1, PC speaker (PIT channel 2) |
 | **Disks** | Dual IDE/ATA channels (hard disks and ATAPI CD-ROMs, using the native eMMC guest disk, `.img`/`.iso` files or a physical USB CD-ROM drive as appropriate), two 3.5" floppy drives (`.img`/`.ima` or a physical USB floppy drive) |
 | **Network** | NE2000 ISA / ISA PnP Ethernet adapter bridged to the USB/on-board Ethernet |
@@ -176,7 +187,7 @@ driven by the RT5672/I2S backend on the qualified unit.
 ## Installing on the Wyse 3040
 
 1. Download **`wysedos-installer.img`** from
-   [Releases](https://github.com/AidenShaw2020/wysedos/releases) (or build it
+   [wyseDOS v1.1.15](https://github.com/AidenShaw2020/wysedos/releases/tag/v1.1.15) (or build it
    from source with `./tools/installer/build.sh`).
 2. Write `wysedos-installer.img` to a USB flash drive in raw / DD mode (using
    Rufus in DD mode, balenaEtcher or `dd`).
@@ -215,7 +226,7 @@ can install an operating system onto it just as on a real PC:
 - **Disk Manager (`Win + F12`)**: open the on-screen disk manager at any time to
   mount floppy images (`.img` / `.ima`) in `A:` / `B:`, CD-ROM images (`.iso`)
   on the secondary IDE channel, or pick a boot device and restart.
-- **USB flash drives and external hard disks (experimental)**: with
+- **USB flash drives and external hard disks**: with
   `usb_storage=1` (the default), unassigned USB disks attach automatically to
   the guest's virtual PIIX3 UHCI controller. Disk Manager shows their ownership
   and lets you browse image files in arbitrary directories on FAT12/16/32
@@ -252,10 +263,14 @@ changes back to `\386\config.ini` on the `WYSEDOS` system partition:
 
 ```ini
 [pc]
-mem=16M
+mem=128M
 vga_mem=8192K
 cpu=5
 fpu=1
+voodoo2=1
+voodoo2_mem=12
+wgpu=64
+wgpu_enabled=1
 bios=bios.bin
 vga_bios=vgabios.bin
 hda=host:emmc
@@ -263,6 +278,9 @@ timezone=cet
 firmware_timer_us=5000
 
 [wyseDOS]
+speed=133
+voodoo2_turbo=1
+graphics_turbo=1
 volume=12
 vol_pcspeaker=16
 vol_adlib=16
@@ -285,6 +303,13 @@ joystick=0
 power_restore=1
 power_button=0
 ```
+
+In **GPU** settings, `CPU Boost DOS: Glide` enables unrestricted CPU speed
+while DOS Glide owns the display. `CPU Boost Windows: DirectX/Glide/OpenGL`
+activates on accepted 3D driver submissions and returns to the selected base
+speed when activity ends. Both are independent of the hardware enable and
+memory settings. Windows GPU memory is host workspace, not additional VGA
+VRAM. See [GPU settings](docs/configuration.md) for all options.
 
 `firmware_timer_us` defaults to 5000 (5 ms). It shortens a slower firmware
 hardware timer so USB mouse completions are delivered more regularly; an

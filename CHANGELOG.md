@@ -3,6 +3,21 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.15 - 2026-11-12
+
+- Add Windows 98 Direct3D, Glide and OpenGL through the Intel Gen8 WGPU
+  channel and the bundled Velocity9x driver, with corresponding GPL sources,
+  licenses and installer integration.
+- Add DOS Voodoo2 Glide support with 8/12 MB memory and independent Windows
+  GPU workspace settings. Provide CPU Boost switches for DOS Glide and
+  Windows 3D, without a separate Windows program or utility on C:.
+- Suspend the drained Windows GPU ring in DOS and restore its state on the
+  next request, fixing the Tomb Raider slowdown after GPU use.
+- Include measured Tomb Raider, NFS III DirectX/Glide and Quake II OpenGL
+  recordings in the existing game showcase. Repeat Tomb Raider at 21.71 FPS
+  and NFS III on the original DX5 path at 29.59 FPS; document sample limits.
+- Remove obsolete FastVoodoo2, MesaFX and VMDisp9x packages.
+
 ## v1.1.14 - 2026-11-06
 
 - Repair the VGA BIOS mode cache after temporary graphics-mode DOS startup,
