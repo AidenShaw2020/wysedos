@@ -5,8 +5,10 @@
 #include <stdint.h>
 
 typedef struct FPU FPU;
+typedef bool FpuNativeStore(void *cpu, bool wide, bool pop, int seg, uint32_t addr);
 
 FPU *fpu_new();
+void fpu_set_native_store(FPU *fpu, FpuNativeStore *store);
 void fpu_delete(FPU *fpu);
 bool fpu_exec1(FPU *fpu, void *cpu, int op, int group, unsigned int i);
 bool fpu_exec2(FPU *fpu, void *cpu, bool opsz16, int op, int group, int seg, uint32_t addr);

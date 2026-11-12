@@ -11,8 +11,8 @@ and physical output matter.
 | Area | Evidence and scope |
 |---|---|
 | DOS | Boot/file access from image and native storage; DOS 7.1 FAT32 USB read/write |
-| Windows 98 FE | Installation, VMDisp9x, USB read/write and orderly Stop/Eject with a separately supplied driver |
-| Windows 98 SE | Installed system, VMDisp9x 800x600/32-bit desktop and input timing |
+| Windows 98 FE | Installation, historical VBE desktop tests, USB read/write and orderly Stop/Eject with a separately supplied driver |
+| Windows 98 SE | Installed system, historical 800x600/32-bit VBE desktop and input timing; current driver package is Velocity9x |
 | Windows 95 / Me | Model/driver support does not establish equivalent full OS qualification |
 | Power | Normal Windows shutdown reached physical power-off; DPMS blanks guest pixels/cursor, retaining the host signal |
 | HID | Physical keyboard/mouse with PicoHID; KVM reconnect and long-idle PS/2 correction; possible enumeration pauses remain |

@@ -86,6 +86,10 @@ void osd_print_center(int y, const char *str, uint8_t attr);
 #define OSD_MAX_PANELS 4
 void osd_draw_box(int x, int y, int w, int h, uint8_t attr);
 void osd_draw_box_titled(int x, int y, int w, int h, const char *title, uint8_t attr);
+/* For tests: how many panels are open, and the top row of the panel that
+ * owns a cell (the one drawn last over it), or -1 on the backdrop. */
+int osd_panel_count(void);
+int osd_cell_panel_y(int col, int row);
 
 void osd_fill(int x, int y, int w, int h, char ch, uint8_t attr);
 uint8_t *osd_get_buffer(void);

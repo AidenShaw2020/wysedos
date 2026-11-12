@@ -14,8 +14,10 @@ disks/386/*.iso
 disks/386/*.ima
 disks/386/*.orig
 disks/386/*.partial
+disks/386/poc-before-*
 disks/EFI/
 GAMES/
+3d mark/
 
 # Local development rig state, logs, captures and scratch files
 backups/

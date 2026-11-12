@@ -79,6 +79,9 @@ struct PCIDevice {
     char *name; /* for debug only */
     PCIIORegion io_regions[PCI_NUM_REGIONS];
     uint8_t fixed_irq_plus_one;
+    uint64_t config_reads;
+    PCIConfigHook *config_hook;
+    void *config_hook_opaque;
 };
 
 struct PCIBus {
@@ -90,6 +93,9 @@ struct PCIBus {
 //    IRQSignal irq[4];
 };
 uint8_t pci_device_get_config8(PCIDevice *d, uint8_t addr) { return d->config[addr]; }
+void pci_device_set_config_hook(PCIDevice *d, PCIConfigHook *hook, void *opaque) {
+    d->config_hook=hook; d->config_hook_opaque=opaque;
+}
 void pci_device_set_fixed_irq(PCIDevice *d, uint8_t irq) {
     d->fixed_irq_plus_one=irq+1; d->config[0x3c]=irq;
 }
@@ -183,6 +189,7 @@ static uint32_t pci_device_config_read(PCIDevice *d, uint32_t addr,
                                        int size_log2)
 {
     uint32_t val;
+    d->config_reads++;
     switch(size_log2) {
     case 0:
         val = *(uint8_t *)(d->config + addr);
@@ -265,9 +272,8 @@ static void pci_update_mappings(PCIDevice *d)
         new_addr = get_le32(&d->config[offset]);
         new_enabled = false;
         if (r->size != 0) {
-            if ((r->type & PCI_ADDRESS_SPACE_IO) &&
-                (cmd & PCI_COMMAND_IO)) {
-                new_enabled = true;
+            if (r->type & PCI_ADDRESS_SPACE_IO) {
+                new_enabled = (cmd & PCI_COMMAND_IO) != 0;
             } else {
                 if (cmd & PCI_COMMAND_MEMORY) {
                     if (i == PCI_ROM_SLOT) {
@@ -320,6 +326,17 @@ static void pci_device_config_write8(PCIDevice *d, uint32_t addr,
 {
     int can_write;
 
+    if ((d->config[0x0e] & 0x7f) == 0 &&
+        ((addr >= 0x10 && addr < 0x28) ||
+         (addr >= 0x30 && addr < 0x34))) {
+        uint32_t aligned = addr & ~3u;
+        unsigned shift = (addr & 3u) * 8;
+        uint32_t value = get_le32(d->config + aligned);
+        value = (value & ~(0xffu << shift)) | ((data & 0xffu) << shift);
+        pci_write_bar(d, aligned, value);
+        return;
+    }
+
     /* This board wires dedicated virtual devices directly to a PIC input.
      * Keep that resource visible even when a BIOS without a PIRQ router
      * tries to replace Interrupt Line with zero during PCI enumeration. */
@@ -345,6 +362,7 @@ static void pci_device_config_write8(PCIDevice *d, uint32_t addr,
         case 0x0b:
         case 0x0e:
         case 0x10 ... 0x27: /* base */
+        case 0x2c ... 0x2f:
         case 0x30 ... 0x33: /* rom */
         case 0x3d:
             can_write = 0;
@@ -378,6 +396,8 @@ static void pci_device_config_write8(PCIDevice *d, uint32_t addr,
     }
     if (can_write)
         d->config[addr] = data;
+    if (can_write && addr >= 0x40 && d->config_hook)
+        d->config_hook(d->config_hook_opaque, addr);
 }
                                   
 
@@ -465,6 +485,11 @@ void pci_device_set_config16(PCIDevice *d, uint8_t addr, uint16_t val)
 int pci_device_get_devfn(PCIDevice *d)
 {
     return d->devfn;
+}
+
+uint64_t pci_device_get_config_reads(PCIDevice *d)
+{
+    return d ? d->config_reads : 0;
 }
 
 /* return the offset of the capability or < 0 if error. */

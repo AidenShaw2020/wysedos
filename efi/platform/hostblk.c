@@ -402,6 +402,9 @@ static bool refresh(hostblk_t *h) {
 // Use the saved identity for exactly one firmware call; never retry a write
 // (or a read whose geometry/overlay could belong to the previous medium).
 static EFI_STATUS command(hostblk_t *h, bool write, uint64_t lba, uint32_t count, void *buf) {
+#if WYSE_POC_READ_ONLY
+    if (write) return EFI_WRITE_PROTECTED;
+#endif
     if (!refresh(h)) return EFI_NO_MEDIA;
     if (!count || lba >= h->phys_blocks || count > h->phys_blocks - lba)
         return EFI_INVALID_PARAMETER;

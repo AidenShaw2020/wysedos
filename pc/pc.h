@@ -22,6 +22,8 @@
 #include "sn76489.h"
 #include "fdd.h"
 #include "uhci.h"
+#include "voodoo2.h"
+#include "wgpu.h"
 
 /// Platform HAL
 uint32_t get_uticks();
@@ -113,6 +115,8 @@ typedef struct {
 	PCIBus *pcibus;
 	PCIDevice *pci_vga;
 	uword pci_vga_ram_addr;
+	Voodoo2State *voodoo2;
+	WgpuState *wgpu;     /* the Intel GPU render channel (wyseDOS) */
 
 	const char *bios;
 	const char *vga_bios;
@@ -150,6 +154,9 @@ typedef struct {
 	int enable_serial;
 	int vga_force_8dm;
 	int usb_storage;
+	int voodoo2;
+	int voodoo2_mem;      /* MB on the board: 8 or 12 */
+	int wgpu_mb;          /* render channel aperture in MB; 0: no channel */
 } PCConfig;
 
 PC *pc_new(SimpleFBDrawFunc *redraw, void (*poll)(void *), void *redraw_data,

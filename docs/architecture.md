@@ -1,5 +1,22 @@
 # Architecture
 
+## Render engine power ownership
+
+The Windows WGPU channel may keep its ring and GGTT allocations across a
+return to DOS. That does not require holding render/media forcewake forever.
+In CPU-rendered DOS modes, the monitor suspends the idle ring and releases its
+forcewake requests under the producer lock. Both the completion sequence and
+the hardware ring head must reach the last submitted work before suspension.
+Pending work keeps the engine active. Ring contents, positions, fence values,
+mappings and render allocations are preserved; this is not a reset.
+
+A later WGPU status request or submission reacquires and acknowledges both
+domains and restores the saved ring control before accessing the engine.
+A failed acknowledgement or ring-control readback prevents submission.
+The optional DOS Voodoo2 GPU
+backend is excluded from this idle DOS policy. This lifecycle is separate
+from the guest CPU Boost switches and changes no Windows driver ABI.
+
 [Documentation index](index.md)
 
 ## CPU and firmware boundary
@@ -39,7 +56,7 @@ across cores needs explicit ownership; [SB DMA](sound-dma.md) illustrates why.
 ## Graphics
 
 The guest sees VGA/EGA and a Bochs-compatible VBE PCI device (`1234:1111`).
-DOS accesses VGA directly; Windows can use VMDisp9x. Guest drivers never
+DOS accesses VGA directly; Windows uses Velocity9x. Guest drivers never
 control the physical Intel display hardware.
 
 Suitable modes use Cherry Trail's legacy VGA aperture/registers. Ordinary

@@ -159,6 +159,16 @@ void osd_draw_box_titled(int x, int y, int w, int h, const char *title, uint8_t 
 
 bool osd_is_visible(void) { return osd_visible; }
 
+static int topmost_panel(int col, int row);
+
+int osd_panel_count(void) { return panel_count; }
+
+int osd_cell_panel_y(int col, int row)
+{
+    const int i = topmost_panel(col, row);
+    return i < 0 ? -1 : panels[i].y;
+}
+
 void osd_show(void) { osd_visible = true; osd_dirty = true; }
 
 bool osd_take_dirty(void) { const bool d = osd_dirty; osd_dirty = false; return d; }

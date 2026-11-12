@@ -6,6 +6,7 @@
  */
 #define KEY_ESC        1
 #define KEY_1          2
+#define KEY_TAB       15
 #define KEY_ENTER     28
 #define KEY_A         30
 #define KEY_B         48

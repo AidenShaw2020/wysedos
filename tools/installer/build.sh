@@ -24,15 +24,14 @@ cat > out/install.ini <<'EOF'
 ; wyseDOS onto the Wyse 3040's eMMC (after asking) instead of running it.
 EOF
 
-# the development rig's control port stays off on an installed machine
-grep -v '^devctl=' ../../disks/386/config.ini | sed 's/^hda=.*/hda=host:emmc/; s/^hdb=.*/hdb=/; s/^fda=.*/fda=/; s/^fdb=.*/fdb=/; s/^mem=.*/mem=16M/' > out/config.ini
+# Public defaults never inherit local diagnostic media or development control.
+cp runtime.ini out/config.ini
 
 rm -rf out/runtime
 mkdir -p out/runtime
-for asset in ../../disks/386/*; do
-    [ -f "$asset" ] || continue
-    case "$asset" in *.img|*.iso|*.ima|*.orig|*.partial|*config.ini|*emmc-before-native*) continue;; esac
-    cp "$asset" out/runtime/
+for name in bios.bin vgabios.bin guest_mbr.bin logo.bin gm.sf2 gm.sf2.LICENSE.txt \
+            SeaBIOS-COPYING.txt SeaBIOS-COPYING.LESSER.txt SeaBIOS-NOTICE.txt; do
+    cp "../../disks/386/$name" out/runtime/
 done
 out/mkusb.exe "$OUT" ../../efi/build/bootx64.efi=EFI/BOOT/BOOTX64.EFI out/install.ini=install.ini out/runtime=386 out/config.ini=386/config.ini out/DRIVERS=DRIVERS
 ls -l "$OUT"

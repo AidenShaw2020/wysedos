@@ -9,8 +9,8 @@ LLVM="${LLVM:-/c/Program Files/LLVM/bin}"
 
 COMMON="--target=x86_64-unknown-windows -std=gnu11 -O2 -ffreestanding -nostdlibinc
         -fno-builtin-printf -fno-stack-protector -fno-stack-check -mno-stack-arg-probe
-        -fshort-wchar -fno-math-errno -mno-red-zone -msse4.2 -Ilibc/include -Iinclude -Isrc -Iplatform -I../pc
-        -DWYSE_BUILD=1 -DCIRCLE_BUILD=1 -DCIRCLE_DISK_WRITE=1 -DTINY386_PC=1 -DFRANK_NO_ADLIB=0
+        -fshort-wchar -fno-math-errno -mno-red-zone -msse4.2 -Ilibc/include -Iinclude -Isrc -Iplatform -I../pc -I../pc/voodoo/86box
+        -DWYSE_BUILD=1 -DWYSE_POC_READ_ONLY=0 -DCIRCLE_BUILD=1 -DCIRCLE_DISK_WRITE=1 -DTINY386_PC=1 -DFRANK_NO_ADLIB=0
         -DNATIVE_JIT=0 -DBLOCK_JIT=0 -DTRACE_PORTS=0 -DSOUND_FREQUENCY=48000 -DCIRCLE_PC_NO_UART=1"
 OWN="-Wall -Wextra -Wno-unused-parameter -Wno-sign-compare"
 MODEL="-Wno-everything"
@@ -32,7 +32,7 @@ compile() {   # src flags
 for f in src/*.c src/*.S libc/*.c platform/*.c; do compile "$f" "$OWN"; done
 # the real FatFs, its API renamed to fat_* (fatfs/rename.h) beside platform/ff.h's
 for f in fatfs/*.c; do compile "$f" "-include fatfs/rename.h -Wno-everything"; done
-for f in ../pc/*.c ../pc/nuked/*.c; do compile "$f" "$MODEL"; done
+for f in ../pc/*.c ../pc/nuked/*.c ../pc/voodoo/86box/*.c; do compile "$f" "$MODEL"; done
 
 "$LLVM/lld-link" -subsystem:efi_application -entry:efi_main -nodefaultlib -map:build/bootx64.map -out:build/bootx64.efi $OBJS
 mkdir -p ../tools/pxe/netboot

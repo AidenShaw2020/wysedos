@@ -567,7 +567,7 @@ static void vbe_update_vgaregs(VGAState *s)
         /* activate all planes */
         s->sr/*_vbe*/[VGA_SEQ_PLANE_WRITE] |= VGA_SR02_ALL_PLANES;
     }
-    s->gr[VGA_GFX_MODE] = (s->gr[VGA_GFX_MODE] & ~0x60) |
+    s->gr[VGA_GFX_MODE] = (s->gr[VGA_GFX_MODE] & ~0x70) |
         (shift_control << 5);
     s->cr[VGA_CRTC_MAX_SCAN] &= ~0x9f; /* no double scan */
 }
@@ -699,7 +699,7 @@ static void vga_text_refresh(VGAState *s,
         full_update = 1;
     }
 
-    full_update = full_update || update_palette16(s, s->last_palette);
+    full_update = update_palette16(s, s->last_palette) || full_update;
 
     vga_ram = s->vga_ram;
 
@@ -1229,6 +1229,8 @@ static void vga_graphic_refresh(VGAState *s,
          */
         const uint32_t key[5] = { addr1, line_offset, (uint32_t)bpp,
                                   (uint32_t)w, (uint32_t)h };
+        if (memcmp(key, s->vbe_shadow_key, sizeof key) != 0)
+            full_update = 1;
         /* Direct native LFB writes are invisible to the emulated-write
          * counter, including when Windows draws its cursor then halts.
          * Keep the per-row comparison; skip converting unchanged rows. */
@@ -1241,6 +1243,8 @@ static void vga_graphic_refresh(VGAState *s,
         }
         s->vbe_shadow_writes = g_vram_writes;
         memcpy(s->vbe_shadow_key, key, sizeof key);
+    } else {
+        memset(s->vbe_shadow_key, 0, sizeof s->vbe_shadow_key);
     }
 #endif
 
@@ -1386,6 +1390,11 @@ static void vga_graphic_refresh(VGAState *s,
             if (!full_update && vbe_row_same(src, shadow, vbe_row_bytes))
                 goto row_done;
             memcpy(shadow, src, vbe_row_bytes);
+            /* The guest can write on another core during conversion. Draw
+             * the exact bytes recorded by the change detector; rereading
+             * live VRAM could display a transient erase while the shadow
+             * already contains the restored row, leaving that erase stuck. */
+            src = shadow;
             uint32_t *dst = (uint32_t *)(fb_dev->fb_data + i0 +
                                          (size_t)y * fb_dev->width * 4u);
             switch (bpp) {
@@ -1994,6 +2003,21 @@ static const uint8_t gr_mask[16] = {
     (uint8_t)~0xff, /* 0x0f */
 };
 
+/* A banked (real-mode) VBE client that then programs a legacy planar mode by
+ * hand expects that mode on screen, as on register-based VGA cards.  A
+ * linear-framebuffer client keeps Bochs/QEMU semantics: SEQ/GC writes only
+ * change memory access.  The Windows 98 VDD saves and restores plane 2 this
+ * way under the LFB desktop for every DOS box; retiring VBE there blanked
+ * the desktop until a full-screen round trip. */
+static void vbe_retire_on_legacy_reprogram(VGAState *s)
+{
+    if (!vbe_enabled(s)) return;
+    if (s->vbe_regs[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_LFB_ENABLED) return;
+    s->vbe_regs[VBE_DISPI_INDEX_ENABLE] &= ~VBE_DISPI_ENABLED;
+    s->vbe_disable_epoch++;
+    s->bank_offset = 0;
+}
+
 /*
  * The input status register, on its own and reachable without the port
  * dispatch.
@@ -2255,6 +2279,8 @@ void vga_ioport_write(VGAState *s, uint32_t addr, uint32_t val)
         printf("vga: write SR%x = 0x%02x\n", s->sr_index, val);
 #endif
         s->sr[s->sr_index] = val & sr_mask[s->sr_index];
+        if (s->sr_index == VGA_SEQ_MEMORY_MODE && !(s->sr[s->sr_index] & VGA_SR04_CHN_4M))
+            vbe_retire_on_legacy_reprogram(s);
 #if defined(WYSE_BUILD)
         if (s->hw_mem && s->sr_index <= 4) hwvga_reg(0x3c4, s->sr_index, s->sr[s->sr_index]);
 #endif
@@ -2299,6 +2325,8 @@ void vga_ioport_write(VGAState *s, uint32_t addr, uint32_t val)
         printf("vga: write GR%x = 0x%02x\n", s->gr_index, val);
 #endif
         s->gr[s->gr_index] = val & gr_mask[s->gr_index];
+        if (s->gr_index == VGA_GFX_MISC && (s->gr[s->gr_index] & 0x0d) != 0x05)
+            vbe_retire_on_legacy_reprogram(s);
 #if defined(WYSE_BUILD)
         if (s->hw_mem && s->gr_index <= 8) hwvga_reg(0x3ce, s->gr_index, s->gr[s->gr_index]);
 #endif
@@ -2372,9 +2400,10 @@ void vbe_write(VGAState *s, uint32_t offset, uint32_t val)
             if (val >= VBE_DISPI_ID0 && val <= VBE_DISPI_ID5)
                 s->vbe_regs[s->vbe_index] = val;
             break;
-        case VBE_DISPI_INDEX_ENABLE:
-            if ((val & VBE_DISPI_ENABLED) &&
-                !(s->vbe_regs[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_ENABLED)) {
+        case VBE_DISPI_INDEX_ENABLE: {
+            const bool starting = (val & VBE_DISPI_ENABLED) && !vbe_enabled(s);
+            if (!(val & VBE_DISPI_ENABLED)) s->vbe_disable_epoch++;
+            if (starting) {
                 s->vbe_regs[VBE_DISPI_INDEX_VIRT_WIDTH] =
                     s->vbe_regs[VBE_DISPI_INDEX_XRES];
                 s->vbe_regs[VBE_DISPI_INDEX_VIRT_HEIGHT] =
@@ -2389,12 +2418,13 @@ void vbe_write(VGAState *s, uint32_t offset, uint32_t val)
             vbe_fixup_regs(s);
             vbe_update_vgaregs(s);
             /* clear the screen */
-            if (!(val & VBE_DISPI_NOCLEARMEM)) {
+            if (starting && !(val & VBE_DISPI_NOCLEARMEM)) {
                 g_vram_writes++;
                 memset(s->vga_ram, 0,
                        s->vbe_regs[VBE_DISPI_INDEX_YRES] * s->vbe_line_offset);
             }
             break;
+        }
         case VBE_DISPI_INDEX_XRES:
         case VBE_DISPI_INDEX_YRES:
         case VBE_DISPI_INDEX_BPP:
@@ -2416,6 +2446,16 @@ void vbe_write(VGAState *s, uint32_t offset, uint32_t val)
         if (mode_change) pc_vga_hold(0);
 #endif
     }
+}
+
+void vga_reset_display(VGAState *s)
+{
+    if (!s) return;
+    /* A reset cannot inherit a Windows LFB mode into its BIOS boot.
+     * Use the normal mode path so the display worker is held safely. */
+    vbe_write(s, 0, VBE_DISPI_INDEX_ENABLE);
+    vbe_write(s, 2, VBE_DISPI_DISABLED);
+    vbe_write(s, 0, VBE_DISPI_INDEX_ID);
 }
 
 uint32_t vbe_read(VGAState *s, uint32_t offset)
@@ -3343,6 +3383,12 @@ int vga_dump_state(VGAState *s, char *buf, int size)
     for (int i = 0; i < 9; i++) DUMP(" %02x", s->gr[i]);
     DUMP(" ar10-14:");
     for (int i = 0x10; i < 0x15; i++) DUMP(" %02x", s->ar[i]);
+    DUMP("\ntext cached:");
+    for (int i = 0; i < 16; i++) DUMP(" %06x", s->last_palette[i]);
+    uint32_t text_palette[16] = {0};
+    update_palette16(s, text_palette);
+    DUMP("\ntext current:");
+    for (int i = 0; i < 16; i++) DUMP(" %06x", text_palette[i]);
     DUMP("\nvbe:");
     for (int i = 0; i < 10; i++) DUMP(" %04x", s->vbe_regs[i]);
     DUMP(" bank_offset %x line_offset %u start %x", (unsigned)s->bank_offset, (unsigned)s->vbe_line_offset,

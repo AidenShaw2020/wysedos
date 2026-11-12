@@ -1,3 +1,53 @@
+# DOSOnModernPC3D
+
+Experimental wyseDOS 3D support for the Dell Wyse 3040. DOS Glide uses a
+virtual 3dfx Voodoo2; Windows 98 uses the modified
+[Velocity9x driver](drivers/windows9x/velocity9x/README.md) for Direct3D,
+Windows Glide and OpenGL through the monitor's Intel Gen8 WGPU channel.
+
+Windows keeps the emulated VGA/VBE display adapter. The driver submits
+rendering work through WGPU, while the firmware retains the physical GPU's
+display and command ring. Windows Glide and DOS Voodoo2 emulation are separate
+paths; installing the Windows driver does not replace DOS Glide emulation.
+
+This is an experimental build with measured limits, not full API conformance
+or a sustained 30 FPS claim. See [Windows 3D installation and limits](drivers/windows9x/velocity9x/INSTALL.TXT)
+and [DOS Voodoo2 status and design](docs/voodoo2.md).
+
+## 3D preview: recordings and downloads
+
+The [2026-11-12 preview image](https://github.com/AidenShaw2020/wysedos/releases/tag/3d-preview-20261112-r2)
+includes the firmware and the full Velocity9x driver, GPL license and matching
+source archive. It contains no Windows installation or games.
+
+| Recording with captured audio | Measured scene sample |
+| --- | --- |
+| [DOS Tomb Raider / Glide](docs/video/05-tombraider-dos-glide.mp4) | **21.71 FPS**, Voodoo2 emulation, 20.129 s stationary level-start sample |
+| [Windows NFS III / DirectX](docs/video/06-nfs3-directx.mp4) | **29.59 FPS**, DX5, 20.984 s driving sample |
+| [Windows NFS III / Glide](docs/video/07-nfs3-glide.mp4) | **16.47 FPS**, 15.001 s race interval |
+| [Windows Quake II test / OpenGL](docs/video/08-quake2-opengl.mp4) | **35.09 FPS**, separate opening-scene `timerefresh` |
+
+All clips are 720p60 with FPS captions. [Measurement details and limitations](docs/video/README.md)
+distinguish game FPS from capture FPS. These are scene-dependent results;
+the NFS samples are not a controlled comparison between APIs.
+Earlier runs reached **22.2 FPS** in the DOS Tomb Raider level-start scene and
+**29.92 FPS** driving NFS III on **DX5**. The replacement recordings repeat
+these paths. The Tomb Raider regression was traced to the idle Windows GPU
+command ring remaining enabled; the firmware now suspends that ring in DOS
+and restores it on the next Windows GPU request without resetting its state.
+The [measurement notes](docs/video/README.md) distinguish completed DOS frames,
+handled DirectX Flips, Glide swap calls and the separate Quake II benchmark.
+
+GPU settings provide `CPU Boost DOS: Glide` and
+`CPU Boost Windows: DirectX/Glide/OpenGL`. Windows boost is triggered by
+actual 3D driver submissions, needs no separate program or C: utility, and
+returns to the selected base speed after activity ends. Hardware enable
+switches and memory settings are separate: Voodoo2 **8/12 MB**, Windows WGPU
+workspace **32/64/128 MB**. The workspace is host RAM, not additional VGA VRAM.
+
+The older DOS showcase below retains its original configuration and results.
+Those measurements are separate from the Windows/Glide tests of this branch.
+
 <p align="center">
   <img src="docs/img/logo.png" alt="wyseDOS" width="520">
 </p>
@@ -179,11 +229,9 @@ can install an operating system onto it just as on a real PC:
   required in Windows. The installer supplies the real-DOS USB drivers in
   `C:\DRIVERS`; it does not supply Windows USB storage packages.
   Physical floppy and CD-ROM handling is unchanged.
-- **Windows 95 / 98 display driver**: `drivers/windows9x/vmdisp9x/` includes
-  the [VMDisp9x](https://github.com/JHRobotics/vmdisp9x) 2D VBE display driver
-  floppy image (`.ima`) and archive for the emulated Bochs VBE PCI adapter
-  (`1234:1111`), enabling high-colour and True Color VBE desktop modes in
-  Windows 9x.
+- **Windows 98 display and 3D driver**: the modified
+  [Velocity9x package](drivers/windows9x/velocity9x/README.md) provides the
+  VGA/VBE desktop and Direct3D, Glide and OpenGL through WGPU/Gen8.
 
 ## Hotkeys
 
@@ -268,8 +316,9 @@ a bootable FAT32 USB image at `tools/installer/out/wysedos-installer.img`.
 
 The installer builder also requires Python 3. It checks pinned upstream
 archive hashes and adds an unpacked `DRIVERS/` payload. After creating the
-guest FAT32 partition, the installer copies VMDisp9x, Bret Johnson's DOS USB
-drivers and CuteMouse 2.1b4 (including sources) to `C:\DRIVERS`. These drivers
+guest FAT32 partition, the installer copies the modified Velocity9x 3D driver,
+Bret Johnson's DOS USB drivers and CuteMouse 2.1b4 (including
+sources) to `C:\DRIVERS`. These drivers
 retain their own licences; see the bundled instructions.
 
 NUSB FE, NUSB SE and the SanDisk-based Win95 package are excluded because
@@ -284,7 +333,7 @@ them. Windows USB storage requires a separately supplied compatible driver.
 | `efi/` | UEFI bootstrap, page tables, SMP core bring-up, Intel VT-x hypervisor (`cpuvmx.c`), GOP display (`wyse.c`), LPE/RT5672 audio (`audio.c`, `lpe.c`, `analog.c`), firmware-backed storage (`bio.c`, `hostblk.c`), USB HID (`usbhid.c`), installer (`installer.c`) |
 | `pc/` | Shared PC emulator and peripherals: i386/486/Pentium core and FPU, VGA/VBE, IDE/ATAPI, floppy, i8254 PIT, i8259 PIC, i8257 DMA, i8042 PS/2 keyboard & mouse, SB16, AdLib/Nuked OPL3, MPU-401/TinySoundFont, SN76489, Covox/DSS, NE2000, PCI, ACPI, OSD menus |
 | `disks/386/` | Runtime assets installed to `\386\`: SeaBIOS (`bios.bin`), SeaVGABios (`vgabios.bin`), General MIDI soundfont (`gm.sf2`), boot logo (`logo.bin`), guest MBR template (`guest_mbr.bin`) and default `config.ini` |
-| `drivers/windows9x/` | [VMDisp9x](https://github.com/JHRobotics/vmdisp9x) 2D VBE display driver (`1234:1111`) for Windows 95/98/Me |
+| `drivers/windows9x/` | Modified Velocity9x Windows 98 WGPU/Gen8 3D package, with licenses and corresponding source |
 | `tools/` | USB installer builder (`tools/installer/`), ACPI table compiler (`tools/acpi/`), VGA BIOS EDID patcher (`tools/vgabios/`), boot logo converter (`tools/logo/`) and unit tests (`tools/tests/`) |
 
 ## Acknowledgements and licence
@@ -300,9 +349,15 @@ them. Windows USB storage requires a separately supplied compatible driver.
   notices accompany the ROMs in the installer. See the [licence texts,
   ROM hashes and corresponding-source status](LICENSES/seabios.md).
 - **GeneralUser GS** (`disks/386/gm.sf2`) by S. Christian Collins — see [`disks/386/gm.sf2.LICENSE.txt`](disks/386/gm.sf2.LICENSE.txt).
-- **[VMDisp9x](https://github.com/JHRobotics/vmdisp9x)** by JHRobotics — the
-  bundled Windows 95/98/Me graphics driver, under the **MIT licence**. The
-  original licence is included in the archive; see [package provenance](drivers/windows9x/vmdisp9x/README.md).
+- **[Velocity9x](https://github.com/michaeldale/velocity9x)** — the modified
+  Windows 98 DirectDraw/Direct3D, Glide and OpenGL driver, under **GPLv3**.
+  The [fork package](drivers/windows9x/velocity9x/README.md) includes complete
+  corresponding modified source and preserves upstream third-party notices.
+  See the [license](LICENSES/velocity9x.txt).
+- **[86Box](https://github.com/86Box/86Box)** — the pinned Voodoo renderer and
+  span recompiler, used under GPLv3 from its GPL-2.0-or-later distribution.
+  See [provenance and port changes](pc/voodoo/UPSTREAM.md) and its preserved
+  [license](pc/voodoo/86box/COPYING).
 - **[CuteMouse](https://cutemouse.sourceforge.net/)** by Nagy Daniel, with
   maintenance and contributions by Eric Auer and other contributors — DOS
   mouse driver under **GPL-2.0-or-later**. The [upstream archive](drivers/dos/ctmouse.zip)

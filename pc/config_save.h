@@ -115,6 +115,9 @@ void config_set_power_restore(int mode);
 /* The processor's speed in MHz of its generation, 0 for no limit; the host
  * reads g_cpu_speed_mhz and g_cpu_speed_gen. */
 extern int g_cpu_speed_mhz, g_cpu_speed_gen;
+extern int g_graphics_turbo;
+int config_get_graphics_turbo(void);
+void config_set_graphics_turbo(int on);
 const int *config_speed_options(int *count);
 int  config_get_speed_mhz(void);
 void config_set_speed_mhz(int mhz);
@@ -126,6 +129,29 @@ int  config_get_picture(void);
 void config_set_picture(int how);
 int  config_get_power_button(void);
 void config_set_power_button(int hold);   /* 1 = hold four seconds */
+
+/*
+ * The Voodoo2 3D add-in board: whether it is fitted and how much memory it
+ * carries (8 or 12 MB, the two boards that were sold) both rebuild the
+ * machine; the processor turbo while it shows its picture applies at once
+ * (the host reads g_voodoo2_turbo).
+ */
+extern int g_voodoo2_turbo;
+int  config_get_voodoo2(void);        void config_set_voodoo2(int fitted);
+int  config_get_voodoo2_mem(void);    void config_set_voodoo2_mem(int mb);
+const int *config_voodoo2_mem_options(int *count);
+int  config_get_voodoo2_turbo(void);  void config_set_voodoo2_turbo(int on);
+void config_note_voodoo2(int fitted, int mem_mb);
+
+/* WGPU workspace in host RAM, independent of guest VGA/Voodoo memory.
+ * Fitting or resizing requires restarting the monitor. Disabling retains
+ * the selected workspace size for the next enable. */
+int config_get_wgpu(void);
+void config_set_wgpu(int enabled);
+int config_get_wgpu_mem(void);
+void config_set_wgpu_mem(int mb);
+const int *config_wgpu_mem_options(int *count);
+void config_note_wgpu(int mb, int enabled);
 
 /* What the machine was actually built with, so the menu starts from that
  * rather than from the defaults. */

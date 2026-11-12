@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "pc.h"
+#include "fpu.h"
 #include "../src/vm.h"
 #include "hwvga_access.h"
 
@@ -192,10 +193,78 @@ static void state_to_vmcs(const WyseCpuState *s) {
     vm_write(VMCS_GUEST_INTERRUPTIBILITY, 0);
 }
 
+static bool native_x87_store(void *cpu, bool wide, bool pop, int seg, uint32_t addr) {
+    WyseFxState next;
+    uint64_t bits;
+    if (!vm_x87_store_prepare(&bits, wide, pop, &next)) {
+        cpu_setexc(cpu, 16, 0);
+        return false;
+    }
+    if (!(next.status & 0x80)) {
+        if (!cpu_store32(cpu, seg, addr, (uint32_t)bits)) return false;
+        if (wide && !cpu_store32(cpu, seg, addr + 4, (uint32_t)(bits >> 32))) return false;
+    }
+    vm_x87_store_commit(&next);
+    return true;
+}
+
+static bool ivt_watch;
+static bool hw_watch;
+static unsigned ivt_watch_logs;
+static uint32_t ivt_watch_addr = 0x20;
+static uint32_t ivt_watch_page, ivt_watch_len;
+static bool ivt_watch_pending;
+static bool ivt_watch_observe;
+static bool ivt_watch_lfb;
+static uint32_t lfb_watch_base;
+static uint8_t *watch_bytes(void) {
+    return ivt_watch_lfb ? g_pc->vga->vga_ram + ivt_watch_addr
+                         : (uint8_t *)vm.ram + ivt_watch_addr;
+}
+static uint8_t *watch_page_bytes(void) {
+    return ivt_watch_lfb ? g_pc->vga->vga_ram + (ivt_watch_addr & ~4095u)
+                         : (uint8_t *)vm.ram + ivt_watch_page;
+}
+/* Watch both physical homes of the same VRAM bytes. Windows' VBE mapping
+ * and its DIB selectors need not use the same alias. */
+static void watch_map(bool writable) {
+    vm_map(&vm, ivt_watch_page, watch_page_bytes(), ivt_watch_len, writable);
+    if (ivt_watch_lfb && lfb_watch_base != 0xe0000000u)
+        vm_map(&vm, 0xe0000000u + (ivt_watch_addr & ~4095u),
+               watch_page_bytes(), ivt_watch_len, writable);
+}
+static unsigned watch_size(void) {
+    return ivt_watch_lfb && !ivt_watch_observe ? 64u : 8u;
+}
+static char ivt_watch_messages[32][192];
+static uint32_t ivt_watch_before[16], ivt_watch_ip, ivt_watch_code, ivt_watch_si;
+static uint16_t ivt_watch_cs, ivt_watch_ds;
+static uint16_t ivt_watch_es;
+static uint32_t ivt_watch_di, ivt_watch_cx;
+
+static void hw_watch_arm(bool enable) {
+    uint64_t dr0 = enable ? 0x00000020ULL : 0;
+    uint64_t dr1 = enable ? 0x00000024ULL : 0;
+    uint64_t dr2 = enable ? 0x0001d2faULL : 0;
+    uint64_t dr3 = enable ? 0x0001d2fcULL : 0;
+    uint64_t dr6 = 0xffff0ff0ULL;
+    __asm__ volatile("mov %0, %%dr0\n\tmov %1, %%dr1\n\tmov %2, %%dr2\n\tmov %3, %%dr3\n\tmov %4, %%dr6"
+                     :: "r"(dr0), "r"(dr1), "r"(dr2), "r"(dr3), "r"(dr6));
+    vm_write(VMCS_GUEST_DR7, enable ? 0xd5dd04ffULL : 0x400ULL);
+}
+
 static int emulate(int max, int quiet) {
     WyseCpuState s;
+    uint32_t before[2], hw_before[4];
+    if (ivt_watch && ivt_watch_observe) memcpy(before, watch_bytes(), sizeof(before));
+    if (hw_watch) {
+        memcpy(hw_before, vm.ram + 0x20, 8);
+        memcpy(hw_before + 2, vm.ram + 0x1d2fa, 8);
+    }
     uint64_t t0 = rdtsc_();
     state_from_vmcs(&s);
+    uint32_t origin_ip = s.eip;
+    uint16_t origin_cs = s.seg[1].sel;
     cpui386_import_state(icpu, &s);
     uint64_t t1 = rdtsc_();
     g_where = 2;
@@ -204,6 +273,29 @@ static int emulate(int max, int quiet) {
     uint64_t t2 = rdtsc_();
     cpui386_export_state(icpu, &s);
     state_to_vmcs(&s);
+    if (hw_watch) {
+        hw_watch_arm(true);
+        if (ivt_watch_logs < 32) {
+            uint32_t hw_after[4];
+            memcpy(hw_after, vm.ram + 0x20, 8);
+            memcpy(hw_after + 2, vm.ram + 0x1d2fa, 8);
+            if (memcmp(hw_before, hw_after, sizeof(hw_after))) {
+                snprintf(ivt_watch_messages[ivt_watch_logs++], sizeof(ivt_watch_messages[0]),
+                         "emulwatch: %04x:%08x->%04x:%08x n=%d ivt=%08x/%08x bak=%08x/%08x ds=%04x es=%04x\n",
+                         origin_cs, origin_ip, s.seg[1].sel, s.eip, n,
+                         hw_after[0], hw_after[1], hw_after[2], hw_after[3], s.seg[3].sel, s.seg[0].sel);
+            }
+        }
+    }
+    if (ivt_watch && ivt_watch_observe && ivt_watch_logs < 32) {
+        uint32_t after[2];
+        memcpy(after, watch_bytes(), sizeof(after));
+        if (memcmp(before, after, sizeof(after))) {
+             snprintf(ivt_watch_messages[ivt_watch_logs++], sizeof(ivt_watch_messages[0]),
+                 "memobserve %08x: %04x:%08x insns %d words %08x -> %08x %08x -> %08x\n",
+                   ivt_watch_addr, origin_cs, origin_ip, n, before[0], after[0], before[1], after[1]);
+        }
+    }
     uint64_t t3 = rdtsc_();
     g_vmx_emul_tsc += t2 - t1;
     g_vmx_state_tsc += (t1 - t0) + (t3 - t2);
@@ -251,6 +343,7 @@ void wyse_map_lfb(uint32_t addr, uint32_t len, void *ptr, int enabled) {
     mapped_len = 0;
     __atomic_store_n(&g_pc->vga->direct_vram, false, __ATOMIC_RELEASE);
     if (enabled && addr && ptr && len) {
+        lfb_watch_base = addr;
         __atomic_store_n(&g_pc->vga->direct_vram, true, __ATOMIC_RELEASE);
         vm_map(&vm, addr, ptr, len, true);
         if (addr != bochs && (uint64_t)g_pc->phys_mem_size <= bochs) vm_map(&vm, bochs, ptr, len, true);
@@ -258,6 +351,27 @@ void wyse_map_lfb(uint32_t addr, uint32_t len, void *ptr, int enabled) {
         mapped_len = len;
         printf("vmx: linear framebuffer at %08x and %08x, %u KB\n", addr, bochs, len >> 10);
     }
+}
+
+// The render channel's aperture (pc/wgpu.h): host RAM the GPU reads without
+// snooping, so the guest gets it write-combining. SeaBIOS packs BARs below
+// FEC00000 largest first, so an aperture of up to 128 MB stays clear of the
+// framebuffer's second home at E0000000; a BAR placed over it is refused.
+void wyse_map_wgpu(uint32_t addr, void *ptr, uint32_t len, int enabled) {
+    static uint32_t mapped_addr, mapped_len;
+    if (!vm.ram) return;
+    if (mapped_len) vm_map(&vm, mapped_addr, NULL, mapped_len, false);
+    mapped_len = 0;
+    if (!enabled || !addr || !ptr || !len) return;
+    const uint64_t bochs = 0xe0000000u, bochs_end = bochs + g_pc->vga_mem_capacity;
+    if ((uint64_t)addr < vm.ram_size || (addr < bochs_end && addr + (uint64_t)len > bochs)) {
+        printf("vmx: render channel aperture at %08x overlaps RAM or the framebuffer - not mapped\n", addr);
+        return;
+    }
+    vm_map_wc(&vm, addr, ptr, len);
+    mapped_addr = addr;
+    mapped_len = len;
+    printf("vmx: render channel aperture at %08x, %u MB, write-combining\n", addr, len >> 20);
 }
 
 //--------------------------------------------------------------------+
@@ -368,6 +482,15 @@ static void hw_update(bool resync) {
              : (v->sr[4] & 0x08) ? (vga_chain4_simple(v) ? WIN_RAM : WIN_EMU)
              : g_hwvga_on ? WIN_HW : WIN_EMU;
     const bool trap_text = want == WIN_HW && safe_planar && !(v->gr[6] & 1);
+    if (g_hwvga_on && win_mode != WIN_HW && want == WIN_EMU && ram_13h &&
+        !vga_vbe_on(v) && !(v->sr[4] & 8) && (v->gr[6] & 3) == 1) {
+        pc_vga_hold(1);
+        hwvga_store_chain4(v->vga_ram);
+        hwvga_fetch(v);
+        pc_vga_hold(0);
+        ram_13h = false;
+        ram_planar = true;
+    }
     if (want == win_mode) {
         if (trap_text != text_trapped) {
             if (trap_text) vm_map(&vm,0xa0000,NULL,0x20000,false);
@@ -468,28 +591,95 @@ static void inject_ud(void) { inject(6, 3, false, 0); }
 // #PF too); the last 32 outside V86 mode (EMM386 reflects INTs there) are kept
 // and logged at a triple fault or with "trapexc 2". For #PF, err is the error
 // code and sp the faulting address.
-struct exc_rec { uint32_t vec, err, ip, flags, sp; uint16_t cs, ss; };
+struct exc_rec {
+    uint32_t vec, err, ip, flags, sp;
+    uint16_t cs, ss;
+    uint32_t cr0, cr4, regs[8], stack[16], stack_valid, stack_sp;
+};
 static struct exc_rec exc_ring[32];
 static uint32_t exc_n;
 
 static void exc_dump(void) {
+    for (unsigned index = 0; index < ivt_watch_logs; index++)
+        printf("%s", ivt_watch_messages[index]);
     for (uint32_t i = exc_n > 32 ? exc_n - 32 : 0; i < exc_n; i++) {
         const struct exc_rec *e = &exc_ring[i & 31];
         printf("vmx: exception %u err %x at %04x:%08x flags %x ss:sp %04x:%08x\n", e->vec, e->err, e->cs, e->ip,
                e->flags, e->ss, e->sp);
+        if (e->stack_valid) {
+            printf("vmx: excstate cr0 %08x cr4 %08x ax %08x cx %08x dx %08x bx %08x bp %08x si %08x di %08x\n",
+                   e->cr0, e->cr4, e->regs[0], e->regs[1], e->regs[2], e->regs[3],
+                   e->regs[5], e->regs[6], e->regs[7]);
+            printf("vmx: excstack sp %08x valid %04x", e->stack_sp, e->stack_valid);
+            for (unsigned word = 0; word < 16; word++) printf(" %08x", e->stack[word]);
+            printf("\n");
+        }
     }
 }
 
 static bool exc_trace;          // trapexc 1/3: interrupts and task switches go in too
+static bool exc_only;
+static bool lin_to_phys(uint32_t lin, uint32_t *phys);
+
+static void hw_watch_note(uint32_t qual) {
+    if (ivt_watch_logs >= 32) return;
+    uint32_t ip = (uint32_t)vm_read(VMCS_GUEST_RIP);
+    uint32_t lin = (uint32_t)vm_read(VMCS_GUEST_CS_BASE) + ip;
+    uint32_t prev = 0, cur = 0, phys = 0;
+    if (lin >= 4 && lin_to_phys(lin - 4, &phys) && (uint64_t)phys + 4 <= vm.ram_size)
+        memcpy(&prev, vm.ram + phys, 4);
+    if (lin_to_phys(lin, &phys) && (uint64_t)phys + 4 <= vm.ram_size)
+        memcpy(&cur, vm.ram + phys, 4);
+    uint32_t ivt[2], bak[2];
+    memcpy(ivt, vm.ram + 0x20, sizeof(ivt));
+    memcpy(bak, vm.ram + 0x1d2fa, sizeof(bak));
+    snprintf(ivt_watch_messages[ivt_watch_logs++], sizeof(ivt_watch_messages[0]),
+             "hwwatch q=%x %04x:%08x code=%08x/%08x ivt=%08x/%08x bak=%08x/%08x ds:si=%04x:%04x es:di=%04x:%04x cx=%04x cr0=%x\n",
+             qual & 0xffffu, (unsigned)vm_read(VMCS_GUEST_CS_SEL), ip,
+             __builtin_bswap32(prev), __builtin_bswap32(cur),
+             ivt[0], ivt[1], bak[0], bak[1],
+             (unsigned)vm_read(VMCS_GUEST_DS_SEL), (unsigned)(vm.regs.rsi & 0xffffu),
+             (unsigned)vm_read(VMCS_GUEST_ES_SEL), (unsigned)(vm.regs.rdi & 0xffffu),
+             (unsigned)(vm.regs.rcx & 0xffffu), guest_cr0());
+}
 
 static void exc_note(uint32_t vec, uint32_t err) {
+    if (exc_only && vec >= 32) return;
     if (vec == 13 && (err & 3) == 2) return;
     if (vm_read(VMCS_GUEST_RFLAGS) & (1u << 17)) return;
-    exc_ring[exc_n++ & 31] = (struct exc_rec){vec, err, (uint32_t)vm_read(VMCS_GUEST_RIP),
-                                              (uint32_t)vm_read(VMCS_GUEST_RFLAGS),
-                                              vec == 14 ? (uint32_t)vm.exit_qual : (uint32_t)vm_read(VMCS_GUEST_RSP),
-                                              (uint16_t)vm_read(VMCS_GUEST_CS_SEL),
-                                              (uint16_t)vm_read(VMCS_GUEST_SS_SEL)};
+    struct exc_rec *e = &exc_ring[exc_n++ & 31];
+    *e = (struct exc_rec){.vec = vec, .err = err, .ip = (uint32_t)vm_read(VMCS_GUEST_RIP),
+                         .flags = (uint32_t)vm_read(VMCS_GUEST_RFLAGS),
+                         .sp = vec == 14 ? (uint32_t)vm.exit_qual : (uint32_t)vm_read(VMCS_GUEST_RSP),
+                         .cs = (uint16_t)vm_read(VMCS_GUEST_CS_SEL),
+                         .ss = (uint16_t)vm_read(VMCS_GUEST_SS_SEL)};
+    // Capture the return frame before Windows' fatal-error UI reuses it.
+    // Read each byte through the guest page tables; unmapped words stay invalid.
+    // This observer is enabled only by trapexc and never changes guest memory.
+    if (vec == 7 || ((vec == 13 || vec == 14) && (e->cs & 3) == 0)) {
+        e->cr0 = guest_cr0();
+        e->cr4 = (uint32_t)vm_read(VMCS_CR4_SHADOW);
+        for (unsigned reg = 0; reg < 8; reg++) e->regs[reg] = (uint32_t)gpr_get(reg);
+        e->stack_sp = (uint32_t)vm_read(VMCS_GUEST_RSP);
+        uint32_t base = (uint32_t)vm_read(VMCS_GUEST_SS_BASE);
+        uint32_t mask = (vm_read(VMCS_GUEST_SS_AR) & (1u << 14)) ? ~0u : 0xffffu;
+        for (unsigned word = 0; word < 16; word++) {
+            uint32_t value = 0;
+            bool valid = true;
+            for (unsigned byte = 0; byte < 4; byte++) {
+                uint32_t phys;
+                if (!lin_to_phys(base + ((e->stack_sp + word * 4 + byte) & mask), &phys) || phys >= vm.ram_size) {
+                    valid = false;
+                    break;
+                }
+                value |= (uint32_t)vm.ram[phys] << (byte * 8);
+            }
+            if (valid) {
+                e->stack[word] = value;
+                e->stack_valid |= 1u << word;
+            }
+        }
+    }
 }
 
 uint32_t g_gwatch, g_gwatch_left = 2;
@@ -529,6 +719,26 @@ void wyse_cpu_gmem(uint32_t lin, uint32_t n) {
     printf("gmem: cr3 %08x idtr %08x/%x gdtr %08x tr %04x\n", (unsigned)vm_read(VMCS_GUEST_CR3),
            (unsigned)vm_read(VMCS_GUEST_IDTR_BASE), (unsigned)vm_read(VMCS_GUEST_IDTR_LIMIT),
            (unsigned)vm_read(VMCS_GUEST_GDTR_BASE), (unsigned)vm_read(VMCS_GUEST_TR_SEL));
+        printf("gmem: cs:ip %04x:%08x base %08x ss:sp %04x:%08x flags %08x cr0 %08x halted %u\n",
+            (unsigned)vm_read(VMCS_GUEST_CS_SEL), (unsigned)vm_read(VMCS_GUEST_RIP),
+            (unsigned)vm_read(VMCS_GUEST_CS_BASE), (unsigned)vm_read(VMCS_GUEST_SS_SEL),
+            (unsigned)vm_read(VMCS_GUEST_RSP), (unsigned)vm_read(VMCS_GUEST_RFLAGS),
+            guest_cr0(), halted);
+}
+
+void wyse_cpu_gphys(uint32_t phys, uint32_t n) {
+    if (n > 512) n = 512;
+    if ((uint64_t)phys + n > vm.ram_size) {
+        printf("gphys: invalid RAM range\n");
+        return;
+    }
+    for (uint32_t off = 0; off < n; off += 32) {
+        char buf[96];
+        int len = snprintf(buf, sizeof(buf), "gphys %08x:", phys + off);
+        for (uint32_t index = 0; index < 32 && off + index < n; index++)
+            len += snprintf(buf + len, sizeof(buf) - len, "%02x", vm.ram[phys + off + index]);
+        printf("%s\n", buf);
+    }
 }
 
 void wyse_cpu_trap_exceptions(int on) {
@@ -537,9 +747,23 @@ void wyse_cpu_trap_exceptions(int on) {
         return;
     }
     exc_n = 0;
+    if (on == 5) {
+        exc_trace = false;
+        exc_only = false;
+        hw_watch = true;
+        ivt_watch_logs = 0;
+        hw_watch_arm(true);
+        vm_write(VMCS_EXCEPTION_BITMAP, 1u << 1);
+        return;
+    }
+    if (hw_watch) {
+        hw_watch = false;
+        hw_watch_arm(false);
+    }
     exc_trace = on != 0;
+    exc_only = on == 4 || on == 6;  // mode 6 includes #PF without IRQs overwriting the fault
     uint32_t bm = ~((1u << 1) | (1u << 3) | (1u << 14));
-    if (on == 3) bm |= 1u << 14;
+    if (on == 3 || on == 6) bm |= 1u << 14;
     vm_write(VMCS_EXCEPTION_BITMAP, on ? bm : 0);
 }
 
@@ -689,13 +913,85 @@ static void iot_dump(void) {
 
 void wyse_cpu_iotrace(const char *args) {
     while (*args == ' ') args++;
+    /* Observation only: detect whether a VGA-emulated instruction or a
+     * native guest slice changed a chosen LFB pixel. No EPT remapping. */
+    if (!strncmp(args, "lfb ", 4) || !strncmp(args, "lfbwrite ", 9)) {
+        char *end;
+        bool write_watch = !strncmp(args, "lfbwrite ", 9);
+        const char *number = args + (write_watch ? 9 : 4);
+        unsigned long offset = strtoul(number, &end, 16);
+        if (end == number || *end || !g_pc || !g_pc->vga ||
+            (write_watch && !lfb_watch_base) ||
+            (uint64_t)offset + (write_watch ? 64u : 8u) > g_pc->vga->vga_ram_size) {
+            printf("memwatch: invalid LFB offset\n");
+            return;
+        }
+        if (ivt_watch && !ivt_watch_observe)
+            watch_map(true);
+        if (ivt_watch_pending && !mtf_on)
+            vm_write(VMCS_PROC_CTLS, vm_read(VMCS_PROC_CTLS) & ~PROC_MONITOR_TRAP);
+        ivt_watch_pending = false;
+        ivt_watch_lfb = true;
+        ivt_watch = true;
+        ivt_watch_observe = !write_watch;
+        ivt_watch_addr = (uint32_t)offset;
+        ivt_watch_page = lfb_watch_base + ((uint32_t)offset & ~4095u);
+        ivt_watch_len = (((uint32_t)offset & 4095u) + watch_size() + 4095u) & ~4095u;
+        ivt_watch_logs = 0;
+        if (write_watch)
+            watch_map(false);
+        printf("memwatch: LFB %s at offset %08x GPA page %08x\n",
+               write_watch ? "write watch" : "observation", ivt_watch_addr, ivt_watch_page);
+        return;
+    }
+    if (!strcmp(args, "ivt") || !strncmp(args, "mem ", 4) || !strncmp(args, "observe ", 8)) {
+        bool observe = !strncmp(args, "observe ", 8);
+        uint32_t addr = 0x20;
+        if (strncmp(args, "ivt", 3)) {
+            char *end;
+            const char *number = args + (observe ? 8 : 4);
+            unsigned long requested = strtoul(number, &end, 16);
+            if (end == number || *end || requested > UINT32_MAX ||
+                (uint64_t)requested + 8 > vm.ram_size) {
+                printf("memwatch: invalid RAM range\n");
+                return;
+            }
+            addr = (uint32_t)requested;
+        }
+        if (ivt_watch && !ivt_watch_observe)
+            watch_map(true);
+        if (ivt_watch_pending && !mtf_on)
+            vm_write(VMCS_PROC_CTLS, vm_read(VMCS_PROC_CTLS) & ~PROC_MONITOR_TRAP);
+        ivt_watch_pending = false;
+        ivt_watch_observe = observe;
+        ivt_watch_lfb = false;
+        ivt_watch_addr = addr;
+        ivt_watch_page = addr & ~4095u;
+        ivt_watch_len = ((addr & 4095u) + 8 + 4095u) & ~4095u;
+        ivt_watch = true;
+        ivt_watch_logs = 0;
+        if (!observe) watch_map(false);
+        printf("memwatch: %s enabled at %08x\n", observe ? "emulation observation" : "write watch", addr);
+        return;
+    }
     if (!*args) {
+        if (ivt_watch_observe)
+            for (unsigned index = 0; index < ivt_watch_logs; index++)
+                printf("%s", ivt_watch_messages[index]);
         iot_dump();
         return;
     }
     iot_ranges = 0;
     iot_n = 0;
-    if (!strncmp(args, "off", 3)) return;
+    if (!strncmp(args, "off", 3)) {
+        if (ivt_watch && !ivt_watch_observe)
+            watch_map(true);
+        if (ivt_watch_pending && !mtf_on)
+            vm_write(VMCS_PROC_CTLS, vm_read(VMCS_PROC_CTLS) & ~PROC_MONITOR_TRAP);
+        ivt_watch_pending = false;
+        ivt_watch = false;
+        return;
+    }
     char *end;
     while (iot_ranges < 8) {
         uint32_t lo = (uint32_t)strtoul(args, &end, 16);
@@ -721,6 +1017,120 @@ static void dump_guest(const char *why) {
         printf("  seg%d sel %04llx base %08llx limit %08llx ar %05llx\n", i,
                (unsigned long long)vm_read(VMCS_GUEST_ES_SEL + 2 * i), (unsigned long long)vm_read(VMCS_GUEST_ES_BASE + 2 * i),
                (unsigned long long)vm_read(VMCS_GUEST_ES_LIMIT + 2 * i), (unsigned long long)vm_read(VMCS_GUEST_ES_AR + 2 * i));
+}
+
+// Voodoo2 BAR accesses without the interpreter. Glide talks to the board one
+// MOV or FST(P) at a time, so a burst ran about one board access for the cost
+// of loading and storing the whole CPU state (~7 us). Here the faulting
+// instruction is decoded in place - 32-bit protected-mode code only, plain
+// MOV r/m<-reg, MOV reg<-r/m, MOV r/m<-imm, MOV moffs<->EAX, FST/FSTP m32 -
+// and the access goes to the board at the guest-physical address the EPT
+// violation reports. Anything else falls back to the interpreter.
+int g_fast_mmio = 1;            // "fastmmio 0": every board access through the interpreter
+uint64_t g_vmx_fast_mmio;
+uint32_t g_vmx_board_burst16;   // board accesses per interpreter burst, x16 (for the log)
+
+static bool fetch_code(uint32_t lin, uint8_t *code, unsigned n) {
+    uint32_t first, last;
+    if (!lin_to_phys(lin, &first) || !lin_to_phys(lin + n - 1, &last)) return false;
+    unsigned split = 4096 - (lin & 0xfff);
+    if (split > n) split = n;
+    if ((uint64_t)first + split > vm.ram_size || (uint64_t)(last & ~0xfffu) + (n - split) > vm.ram_size) return false;
+    memcpy(code, vm.ram + first, split);
+    if (split < n) memcpy(code + split, vm.ram + (last & ~0xfffu), n - split);
+    return true;
+}
+
+static bool voodoo_fast_access(void) {
+    Voodoo2State *board = g_pc->voodoo2;
+    uint32_t gpa = (uint32_t)vm.exit_gpa, offset;
+    if (!g_fast_mmio || !board || vm.exit_gpa >> 32 || !voodoo2_decode(board, gpa, 1, &offset)) return false;
+    uint64_t rflags = vm_read(VMCS_GUEST_RFLAGS);
+    if (!(guest_cr0() & 1) || (rflags & ((1u << 17) | (1u << 8))) ||     // real mode, V86, single step
+        !(vm_read(VMCS_GUEST_CS_AR) & (1u << 14)))                        // 16-bit code
+        return false;
+    uint32_t eip = (uint32_t)vm_read(VMCS_GUEST_RIP);
+    uint8_t code[15];
+    if (!fetch_code((uint32_t)vm_read(VMCS_GUEST_CS_BASE) + eip, code, sizeof(code))) return false;
+    unsigned i = 0, size = 4;
+    for (; i < 3; i++) {
+        uint8_t p = code[i];
+        if (p == 0x66) size = 2;
+        else if (p != 0x26 && p != 0x2e && p != 0x36 && p != 0x3e && p != 0x64 && p != 0x65) break;
+    }
+    uint8_t op = code[i++];
+    enum { STORE, LOAD, IMM, FSTORE } kind;
+    unsigned reg = 0;
+    bool pop = false;
+    if (op == 0xa1 || op == 0xa3) {                 // MOV EAX, moffs32 / MOV moffs32, EAX
+        kind = op == 0xa1 ? LOAD : STORE;
+        i += 4;
+    } else {
+        if (op == 0x89) kind = STORE;
+        else if (op == 0x8b) kind = LOAD;
+        else if (op == 0xc7) kind = IMM;
+        else if (op == 0xd9 && size == 4) kind = FSTORE;
+        else return false;
+        uint8_t modrm = code[i++];
+        unsigned mod = modrm >> 6, rm = modrm & 7;
+        reg = (modrm >> 3) & 7;
+        if (mod == 3) return false;
+        if (kind == IMM && reg != 0) return false;
+        if (kind == FSTORE) {
+            if (reg != 2 && reg != 3) return false;
+            pop = reg == 3;
+        }
+        if (rm == 4) {                              // SIB
+            uint8_t sib = code[i++];
+            if (mod == 0 && (sib & 7) == 5) i += 4;
+        } else if (mod == 0 && rm == 5) {
+            i += 4;
+        }
+        if (mod == 1) i += 1;
+        else if (mod == 2) i += 4;
+        if (kind == IMM) i += size;
+    }
+    if (i > sizeof(code) || (gpa & (size - 1))) return false;
+    if (kind == LOAD) {
+        uint32_t value;
+        if (!voodoo2_read(board, gpa, size, &value)) return false;
+        uint32_t old = (uint32_t)gpr_get(reg);
+        gpr_set(reg, size == 4 ? value : (old & ~0xffffu) | (value & 0xffff));
+    } else if (kind == FSTORE) {
+        WyseFxState next;
+        uint64_t bits;
+        if (!vm_x87_store_prepare(&bits, false, pop, &next)) return false;   // the interpreter raises #MF
+        if (!(next.status & 0x80) && !voodoo2_write(board, gpa, 4, (uint32_t)bits)) return false;
+        vm_x87_store_commit(&next);
+    } else {
+        uint32_t value;
+        if (kind == IMM)
+            value = size == 4 ? (uint32_t)code[i - 4] | (uint32_t)code[i - 3] << 8 |
+                                (uint32_t)code[i - 2] << 16 | (uint32_t)code[i - 1] << 24
+                              : (uint32_t)code[i - 2] | (uint32_t)code[i - 1] << 8;
+        else
+            value = (uint32_t)gpr_get(reg);
+        if (!voodoo2_write(board, gpa, size, size == 4 ? value : value & 0xffff)) return false;
+    }
+    vm_write(VMCS_GUEST_RIP, eip + i);
+    uint64_t intr = vm_read(VMCS_GUEST_INTERRUPTIBILITY);
+    if (intr & 3) vm_write(VMCS_GUEST_INTERRUPTIBILITY, intr & ~3ULL);
+    g_vmx_fast_mmio++;
+    return true;
+}
+
+// "gregs": where the guest is (between two runs), its general registers and
+// the interrupt state
+void wyse_cpu_gregs(void) {
+    dump_guest("gregs");
+    printf("  eax %08llx ebx %08llx ecx %08llx edx %08llx esi %08llx edi %08llx ebp %08llx esp %08llx\n",
+           (unsigned long long)(uint32_t)vm.regs.rax, (unsigned long long)(uint32_t)vm.regs.rbx,
+           (unsigned long long)(uint32_t)vm.regs.rcx, (unsigned long long)(uint32_t)vm.regs.rdx,
+           (unsigned long long)(uint32_t)vm.regs.rsi, (unsigned long long)(uint32_t)vm.regs.rdi,
+           (unsigned long long)(uint32_t)vm.regs.rbp, (unsigned long long)(uint32_t)vm_read(VMCS_GUEST_RSP));
+    printf("  interruptibility %llx activity %llx cr3 %llx\n",
+           (unsigned long long)vm_read(VMCS_GUEST_INTERRUPTIBILITY), (unsigned long long)vm_read(VMCS_GUEST_ACTIVITY),
+           (unsigned long long)vm_read(VMCS_GUEST_CR3));
 }
 
 // Offer the 8259's interrupt if the guest can take it now; otherwise ask for an
@@ -926,6 +1336,14 @@ void wyse_cpu_step(PC *pc) {
         }
         vm_write(VMCS_PREEMPTION_TIMER, (left >> 6) + 1);
         g_where = 3;
+        uint32_t native_before[2], native_ip = 0;
+        uint16_t native_cs = 0;
+        bool observe_native = ivt_watch && ivt_watch_observe && ivt_watch_logs < 32;
+        if (observe_native) {
+            memcpy(native_before, watch_bytes(), sizeof(native_before));
+            native_ip = (uint32_t)vm_read(VMCS_GUEST_RIP);
+            native_cs = (uint16_t)vm_read(VMCS_GUEST_CS_SEL);
+        }
         uint64_t i_in = instr_retired();
         uint64_t cycles_in = target_cpms ? core_cycles() : 0;
         bool entered = vm_run(&vm);
@@ -949,6 +1367,17 @@ void wyse_cpu_step(PC *pc) {
             return;
         }
         uint32_t reason = vm.exit_reason & 0xffff;
+        if (observe_native) {
+            uint32_t after[2];
+            memcpy(after, watch_bytes(), sizeof(after));
+            if (memcmp(native_before, after, sizeof(after))) {
+                  snprintf(ivt_watch_messages[ivt_watch_logs++], sizeof(ivt_watch_messages[0]),
+                      "memnative %08x: %04x:%08x -> %04x:%08x exit %u words %08x -> %08x %08x -> %08x\n",
+                       ivt_watch_addr, native_cs, native_ip,
+                       (unsigned)vm_read(VMCS_GUEST_CS_SEL), (unsigned)vm_read(VMCS_GUEST_RIP), reason,
+                       native_before[0], after[0], native_before[1], after[1]);
+            }
+        }
         if (reason < 64) g_vmx_exits[reason]++;
         {
             // An exit in the middle of delivering an event (an interrupt from
@@ -995,6 +1424,29 @@ void wyse_cpu_step(PC *pc) {
         }
         case EXIT_EPT_VIOLATION:
             g_last_ept_gpa = vm.exit_gpa;
+            if (ivt_watch && !ivt_watch_observe &&
+                ((vm.exit_gpa >= ivt_watch_page &&
+                  vm.exit_gpa < (uint64_t)ivt_watch_page + ivt_watch_len) ||
+                 (ivt_watch_lfb && vm.exit_gpa >= 0xe0000000ull + (ivt_watch_addr & ~4095u) &&
+                  vm.exit_gpa < 0xe0000000ull + (ivt_watch_addr & ~4095u) + ivt_watch_len))) {
+                memcpy(ivt_watch_before, watch_bytes(), watch_size());
+                ivt_watch_ip = (uint32_t)vm_read(VMCS_GUEST_RIP);
+                ivt_watch_cs = (uint16_t)vm_read(VMCS_GUEST_CS_SEL);
+                ivt_watch_ds = (uint16_t)vm_read(VMCS_GUEST_DS_SEL);
+                ivt_watch_si = (uint32_t)vm.regs.rsi;
+                ivt_watch_es = (uint16_t)vm_read(VMCS_GUEST_ES_SEL);
+                ivt_watch_di = (uint32_t)vm.regs.rdi;
+                ivt_watch_cx = (uint32_t)vm.regs.rcx;
+                uint32_t phys;
+                ivt_watch_code = 0;
+                if (lin_to_phys((uint32_t)vm_read(VMCS_GUEST_CS_BASE) + ivt_watch_ip, &phys) &&
+                    (uint64_t)phys + 4 <= vm.ram_size)
+                    memcpy(&ivt_watch_code, vm.ram + phys, 4);
+                ivt_watch_pending = true;
+                watch_map(true);
+                vm_write(VMCS_PROC_CTLS, vm_read(VMCS_PROC_CTLS) | PROC_MONITOR_TRAP);
+                break;
+            }
             if (!wyse_rom_write_allowed((uint32_t)vm.exit_gpa)) {
                 rom_write_faults++;
                 if (rom_write_faults<=8)
@@ -1003,6 +1455,30 @@ void wyse_cpu_step(PC *pc) {
                         (unsigned)vm_read(VMCS_GUEST_RIP));
             }
             if (plane_fault(vm.exit_gpa)) break;    // the page now goes to one plane natively
+            {
+                // A Voodoo2 access: decoded here when the code touches the board
+                // now and then (DOS Glide: ~1 access per interpreter burst),
+                // through the interpreter when it streams (Windows Glide3 filling
+                // its command FIFO: ~13 per burst, where one state load pays for
+                // all). Every 32nd access samples a burst to follow the pattern.
+                static uint32_t board_exits, board_burst16 = 16;    // accesses per burst, x16
+                uint32_t board_offset;
+                if (g_pc->voodoo2 && !(vm.exit_gpa >> 32) &&
+                    voodoo2_decode(g_pc->voodoo2, (uint32_t)vm.exit_gpa, 1, &board_offset)) {
+                    bool sample = (++board_exits & 31) == 0;
+                    if (!sample && board_burst16 < 40 && voodoo_fast_access()) break;
+                    if (guest_cr0() & 1) {
+                        uint64_t before = (uint64_t)icpu->burst_mmio;
+                        emulate(4096, 32);
+                        uint64_t accesses = (uint64_t)icpu->burst_mmio - before;
+                        if (accesses > 64) accesses = 64;
+                        board_burst16 = (uint32_t)((board_burst16 * 7 + accesses * 16) / 8);
+                        g_vmx_board_burst16 = board_burst16;
+                        plane_update();
+                        break;
+                    }
+                }
+            }
             {
                 // which VGA settings still go through the interpreter, for the log
                 VGAState *v = g_pc->vga;
@@ -1016,8 +1492,9 @@ void wyse_cpu_step(PC *pc) {
             // A burst pays off for code drawing into video memory. A probe of
             // the APIC's page (DOS/4GW Professional reads FEE00030 while it
             // switches modes) is one instruction, not a run into that switch.
-            if (vm.exit_gpa >= 0xfec00000u && vm.exit_gpa < 0xff000000u) emulate(1, 1);
-            else emulate(4096, 32);
+              if (!(guest_cr0() & 1) ||
+                (vm.exit_gpa >= 0xfec00000u && vm.exit_gpa < 0xff000000u)) emulate(1, 1);
+                        else emulate(4096, 32);
             plane_update();                         // the burst may have set the VGA up
             break;
         case EXIT_CPUID:
@@ -1090,6 +1567,32 @@ void wyse_cpu_step(PC *pc) {
             break;
         }
         case EXIT_MONITOR_TRAP:
+            if (ivt_watch_pending) {
+                uint32_t after[16];
+                unsigned changed = 0, size = watch_size();
+                memcpy(after, watch_bytes(), size);
+                while (changed < size / 4 && ivt_watch_before[changed] == after[changed]) changed++;
+                if (ivt_watch_logs < 32 && changed < size / 4) {
+                    unsigned next = changed + 1 < size / 4 ? changed + 1 : changed;
+                    if (ivt_watch_logs == 0) {
+                        uint32_t stack = (uint32_t)vm_read(VMCS_GUEST_SS_BASE) +
+                                         (uint32_t)vm_read(VMCS_GUEST_RSP);
+                        printf("memwatch caller: ax %08x bx %08x dx %08x bp %08x flags %08x\n",
+                               (unsigned)vm.regs.rax, (unsigned)vm.regs.rbx,
+                               (unsigned)vm.regs.rdx, (unsigned)vm.regs.rbp,
+                               (unsigned)vm_read(VMCS_GUEST_RFLAGS));
+                        wyse_cpu_gmem(stack, 128);
+                    }
+                    ivt_watch_logs++;
+                    printf("memwatch %08x: %04x:%08x code %08x words %08x -> %08x %08x -> %08x ds:si %04x:%08x es:di %04x:%08x cx %08x\n",
+                           ivt_watch_addr + changed * 4, ivt_watch_cs, ivt_watch_ip, __builtin_bswap32(ivt_watch_code),
+                           ivt_watch_before[changed], after[changed], ivt_watch_before[next], after[next], ivt_watch_ds, ivt_watch_si,
+                           ivt_watch_es, ivt_watch_di, ivt_watch_cx);
+                }
+                watch_map(false);
+                ivt_watch_pending = false;
+                if (!mtf_on) vm_write(VMCS_PROC_CTLS, vm_read(VMCS_PROC_CTLS) & ~PROC_MONITOR_TRAP);
+            }
             if (mtf_on) mtf_step();
             break;
         case EXIT_TRIPLE_FAULT:
@@ -1108,6 +1611,12 @@ void wyse_cpu_step(PC *pc) {
             uint32_t info = vm.exit_intr_info;
             if ((info & 0x80000000u) && ((info >> 8) & 7) == 3) {
                 uint32_t vec = info & 0xff, err = (uint32_t)vm_read(VMCS_EXIT_INTR_ERRCODE);
+                if (vec == 1 && hw_watch) {
+                    hw_watch_note((uint32_t)vm.exit_qual);
+                    hw_watch_arm(true);
+                    vm_write(VMCS_GUEST_RFLAGS, vm_read(VMCS_GUEST_RFLAGS) | (1u << 16));
+                    break;
+                }
                 exc_note(vec, (info & (1u << 11)) ? err : 0);
                 if (vec == 14) {
                     uint64_t cr2 = vm.exit_qual;
@@ -1157,6 +1666,12 @@ void wyse_cpu_reset(PC *pc) {
     printf("vmx: guest reset to F000:FFF0\n");
 }
 
+// The guest instruction behind the exit being handled, for device diagnostics.
+static uint32_t guest_caller(uint16_t *cs) {
+    *cs = (uint16_t)vm_read(VMCS_GUEST_CS_SEL);
+    return (uint32_t)vm_read(VMCS_GUEST_RIP);
+}
+
 const char *wyse_cpu_init(PC *pc) {
     g_pc = pc;
     icpu = pc->cpu;
@@ -1164,6 +1679,8 @@ const char *wyse_cpu_init(PC *pc) {
     if (err) return err;
     err = vm_create(&vm, pc->phys_mem, pc->phys_mem_capacity);
     if (err) return err;
+    voodoo2_set_caller_source(guest_caller);
+    fpu_set_native_store(icpu->fpu, native_x87_store);
     wyse_cpu_pam_changed();
 
     // guest RAM above what the machine has is not there: unmap it so it reads as open bus

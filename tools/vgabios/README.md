@@ -22,6 +22,18 @@ the text page. The patch uses the original BIOS mode lookup without changing
 VGA registers or clearing other pages. Unchanged cached modes retain the
 original path; unknown modes retain the existing descriptor.
 
+The interrupt entry now performs that reconciliation before every legacy
+operation, including character output. A virtual DOS machine can inherit a
+private VBE descriptor while its standard BDA has already been restored to
+text mode. Character output would then use INT 15h/87h to copy glyph pixels
+into the inherited linear framebuffer. The wrapper updates only the private
+BDA cache using the original mode lookup; it does not set a hardware mode.
+Standard BDA mode FFh denotes VBE and keeps its full private descriptor.
+`tools/tests/vgabios_legacy_context.py ROM` executes this restored-text case
+through both interrupt entries, checking text output, scrolling, unchanged
+DISPI state and the absence of high-memory copies. The prior ROM fails both
+character-output cases by invoking INT 15h/87h.
+
 The advertised real-mode VBE `WinFuncPtr` also preserves flags around the
 original bank callback. That callback starts with CLI/CLD but returns with
 RETF without restoring flags; a direct far caller therefore loses IF and DF.

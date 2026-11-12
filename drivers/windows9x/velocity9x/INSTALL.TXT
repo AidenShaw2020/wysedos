@@ -1,0 +1,40 @@
+Velocity9x for wyseDOS - local Gen8 fork, wysedos-g5j
+==================================================
+This modified build is based on Velocity9x 0.44.0. It is not an official
+upstream release. It adds the wyseDOS WGPU render channel for Intel Gen8.
+Windows sees the virtual VGA adapter; it does not own the physical GPU.
+
+Install only after Windows 98 is installed and booting with standard VGA.
+Keep a copy of the current display driver and a working DOS boot path.
+In Device Manager update the active display adapter, choose Have Disk and
+select VELOCITY9X.INF from this folder. Use 640x480 or 800x600 High Color
+(16-bit) for the tested rendering paths. Restart Windows normally.
+The original INSTALL.TXT, FIRSTBOOT.TXT and RECOVER.TXT are included too;
+their generic VBE/no-acceleration description predates this WGPU fork.
+
+V9XHAL.DLL provides DirectDraw/Direct3D; V9XGL.DLL is the OpenGL ICD and
+is registered by the INF. GLIDE2X.DLL and GLIDE3X.DLL provide Windows Glide
+through the same render channel. A game's local DLL takes precedence over
+SYSTEM: back up that DLL and copy this build alongside the game if needed.
+Do not replace unrelated real 3dfx drivers on another machine.
+
+Windows Glide is separate from DOS Voodoo2 emulation. This folder does not
+install a Windows CPU booster or depend on a booster executable on C:.
+CPU boost settings belong to the firmware settings menu.
+
+Licensing and source
+--------------------
+LICENSE.TXT contains GPL version 3. Preserve NOTICES.TXT for incorporated
+third-party code/data. SRC.ZIP contains the corresponding modified source,
+build scripts and tests. SOURCE.TXT records the upstream repository and
+base commit. The Windows 98 DDK and Open Watcom must be obtained separately.
+No Windows installation, game assets, registration data or private test
+logs are included. SHA256.TXT identifies this package's actual files.
+
+Validation and limitations
+--------------------------
+The retained render DLLs passed native GDI/fill/mixed ordering checks,
+Glide pixel checks and OpenGL lighting/lifetime regression checks on Wyse.
+This does not establish full DirectDraw/Glide/OpenGL conformance. NFS III
+Glide remains below 30 FPS in the measured full-quality driving scenes.
+Unsupported operations remain unsupported; see the project documentation.

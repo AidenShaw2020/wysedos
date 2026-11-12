@@ -4,8 +4,12 @@ The device installer copies this entire unpacked folder to C:\DRIVERS on
 the newly prepared guest FAT32 partition. Drivers are not installed into
 Windows automatically. Install an operating system first.
 
-VGA      VMDisp9x 1.2025.0.119b, 2D. In Display Properties select the
-         adapter driver VMDISP9X.INF. Tested on Win98 FE and SE at 800x600.
+VELOCITY Modified Velocity9x Windows 98 3D driver for wyseDOS WGPU/Gen8.
+         Select VELOCITY9X.INF. Read WYSE.TXT and RECOVER.TXT first.
+         Direct3D, Windows Glide and OpenGL share the render channel.
+         GPLv3 license, third-party notices and corresponding modified
+         source (SRC.ZIP) are included. This is an independent fork build.
+
 USBDOS   Bret Johnson's DOS USB drivers, including their documentation.
          In real DOS run C:\DRIVERS\USBON.BAT. USB flash disks receive a
          free drive letter automatically, without choosing them in OSD.
@@ -37,8 +41,9 @@ a removed-volume warning and a stalled system in hardware testing.
 
 Upstream sources and licensing
 -----------------------------
-VGA: https://github.com/JHRobotics/vmdisp9x/releases/tag/v1.2025.0.119
-     MIT; upstream license included.
+VELOCITY: https://github.com/michaeldale/velocity9x
+          GNU GPL v3; modified corresponding source and NOTICES.TXT included.
+          SOURCE.TXT records the upstream base commit and build dependencies.
 USBDOS: https://bretjohnson.us/programs/usbdos.zip
      Freeware; read the original USBINTRO.DOC for its redistribution terms.
 CTMOUSE: https://ibiblio.org/pub/micro/pc-stuff/freedos/files/repositories/latest/base/ctmouse.zip

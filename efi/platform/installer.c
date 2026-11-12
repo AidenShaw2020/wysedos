@@ -562,6 +562,24 @@ void installer_backup_emmc(void) {
             bio_path_has(bio_device_path(hs[i]),DP_MESSAGING,DP_MSG_USB)) continue;
         if (fatvol_attach(2,bio,0,bio->Media->LastBlock+1)!=FR_OK) continue;
         FILINFO fi;
+        if (f_stat("2:386/native.ini",&fi)==FR_OK) {
+            const char *srcs[3]={"2:EFI/BOOT/BOOTX64.EFI","2:386/config.ini","2:386/native.ini"};
+            const char *dsts[3]={"386/poc-before-bootx64.efi","386/poc-before-config.ini","386/poc-before-native.ini"};
+            ok=true;
+            for (int j=0;j<3 && ok;j++) {
+                FILINFO exists;
+                ok=f_stat(srcs[j],&fi)==FR_OK && f_stat(dsts[j],&exists)==FR_NO_FILE;
+                if (!ok) break;
+                char tmp[128]; snprintf(tmp,sizeof(tmp),"%s.partial",dsts[j]);
+                f_unlink(tmp);
+                ok=copy_file(srcs[j],tmp);
+                FILINFO check;
+                ok=ok && f_stat(tmp,&check)==FR_OK && check.fsize==fi.fsize;
+                if (ok) ok=f_rename(tmp,dsts[j])==FR_OK;
+                printf("backup: %s %llu bytes %s\n",dsts[j],(unsigned long long)fi.fsize,ok?"saved":"FAILED");
+            }
+            fatvol_detach(2); break;
+        }
         if (f_stat("2:386/hdd.img",&fi)==FR_OK) {
             const char *srcs[3]={"2:386/hdd.img","2:386/games.img","2:386/config.ini"};
             const char *dsts[3]={"386/emmc-before-native.img","386/emmc-before-native-games.img","386/emmc-before-native.ini"};
@@ -607,8 +625,7 @@ bool write_native_config(void) {
         char *end=strchr(line,'\n'); if (end) *end=0;
         if (*line && line[strlen(line)-1]=='\r') line[strlen(line)-1]=0;
         const char *text=!strncmp(line,"hda=",4)?"hda=host:emmc":
-                         !strncmp(line,"hdb=",4)?"hdb=":
-                         !strncmp(line,"mem=",4)?"mem=16M":line;
+                         !strncmp(line,"hdb=",4)?"hdb=":line;
         unsigned len=(unsigned)strlen(text);
         ok=f_write(&out,text,len,&put)==FR_OK && put==len && f_write(&out,"\r\n",2,&put)==FR_OK && put==2;
         if (!end) break;
@@ -774,8 +791,11 @@ void installer_run(void) {
     if (f_stat("DRIVERS",&driver_dir)!=FR_OK || !(driver_dir.fattrib&AM_DIR))
         stop("Unpacked DRIVERS bundle missing");
     static const char *driver_files[]={"DRIVERS/README.TXT","DRIVERS/SHA256.TXT",
-        "DRIVERS/VGA/vmdisp9x.inf","DRIVERS/USBDOS/USBUHCIL.COM",
-        "DRIVERS/USBDOS/USBDRIVE.COM","DRIVERS/CTMOUSE/CTMOUSE.EXE"};
+        "DRIVERS/USBDOS/USBUHCIL.COM",
+        "DRIVERS/USBDOS/USBDRIVE.COM","DRIVERS/CTMOUSE/CTMOUSE.EXE",
+        "DRIVERS/VELOCITY/VELOCITY9X.INF","DRIVERS/VELOCITY/V9XHAL.DLL",
+        "DRIVERS/VELOCITY/LICENSE.TXT","DRIVERS/VELOCITY/NOTICES.TXT",
+        "DRIVERS/VELOCITY/SRC.ZIP"};
     for (unsigned i=0;i<sizeof(driver_files)/sizeof(driver_files[0]);i++) {
         FILINFO file;
         if (f_stat(driver_files[i],&file)!=FR_OK || !file.fsize || (file.fattrib&AM_DIR))
@@ -812,7 +832,7 @@ void installer_run(void) {
      * reserves 2048 sectors inside its protected container. */
     if (fatvol_attach(FATVOL_TARGET_DATA,emmc,guest.first+2048,guest.count-2048)!=FR_OK)
         stop("Cannot mount guest partition for drivers");
-    if (graphical) installer_ui_status(copy_step,"Copying unpacked drivers to C:\\DRIVERS",last_percent<0?30:30+(unsigned)last_percent*60/100);
+    if (graphical) installer_ui_status(copy_step,"Drivers: Velocity9x (GPLv3), USB and mouse",last_percent<0?30:30+(unsigned)last_percent*60/100);
     if (!copy_tree("DRIVERS","3:DRIVERS",false)) stop("Copying guest drivers failed");
     fatvol_detach(FATVOL_TARGET_DATA);
     step("5 / 6 - Setting boot entry","UEFI starts wyseDOS; DOS sees only the guest disk",92);

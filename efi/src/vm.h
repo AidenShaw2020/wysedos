@@ -3,6 +3,7 @@
 #define VM_H
 
 #include "vmx.h"
+#include "x87_store.h"
 
 typedef struct {
     uint8_t *ram;               // guest physical 0 .. ram_size, host-identity-mapped buffer
@@ -41,12 +42,19 @@ void vm_io_trap(uint16_t port, bool trap);
 // whatever the guest's page tables say (the Atom's own VGA at A0000).
 void vm_map_mmio(vm_t *vm, uint64_t gpa, uint64_t hpa, uint64_t size);
 
+// Map guest-physical [gpa, gpa+size) onto host RAM write-combining, whatever
+// the guest's page tables say: memory the GPU reads without snooping (the
+// render channel's aperture), as a graphics card's aperture is.
+void vm_map_wc(vm_t *vm, uint64_t gpa, void *host, uint64_t size);
+
 // Real-mode reset state with CS:IP as given (CS base = cs << 4).
 void vm_reset_real(vm_t *vm, uint16_t cs, uint16_t ip);
 
 // Run until the next VM exit. Returns false if VM entry failed (vm->exit_reason
 // then holds the VM-instruction error).
 bool vm_run(vm_t *vm);
+bool vm_x87_store_prepare(uint64_t *bits, bool wide, bool pop, WyseFxState *next);
+void vm_x87_store_commit(const WyseFxState *next);
 
 // Advance guest RIP past the exiting instruction.
 void vm_skip_instr(vm_t *vm);

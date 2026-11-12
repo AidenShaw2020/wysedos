@@ -1,0 +1,2 @@
+690a74a512941d3b87a6e76a8d90080fe90a4c076c8b231a4345db99480fbde6  velocity9x-wysedos-g5j-src.zip
+d35b0f07c97d0ec0dd079ad64efbcc68764ee3c4699a8ef52d2ceaf0aec99237  velocity9x-wysedos-g5j-driver.zip
