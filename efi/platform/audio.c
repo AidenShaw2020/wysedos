@@ -59,18 +59,32 @@ static inline int clamp16(int v) { return v > 32767 ? 32767 : v < -32768 ? -3276
 
 volatile int g_audio_pause;    // the monitor's menu is open: silence
 
+/* With Voodoo2 on core 3 the mixer owns the analog FIFO too. Its sixteen
+ * stereo frames cannot cover an entire 512-frame mix or synthesis catch-up.
+ * The dedicated analog core remains the sole feeder when it is present. */
+static void audio_service_analog(void) {
+    if (!analog_owns_core()) analog_feed();
+}
+
 static void mix(int16_t *dst, int frames) {
     PC *pc = apc;
+    audio_service_analog();
     if (g_audio_pause) {
         memset(dst, 0, (size_t)frames * 4);
         analog_put(dst, frames);
+        audio_service_analog();
         return;
     }
     // the OPL renders ahead of the mixer; make sure this period is there
-    if (pc->adlib_enabled)
-        for (int i = 0; i < 64 && adlib_ready(pc->adlib) < (uint32_t)frames; i++) adlib_synth_step();
+    if (pc->adlib_enabled) {
+        for (int i = 0; i < 64 && adlib_ready(pc->adlib) < (uint32_t)frames; i++) {
+            adlib_synth_step();
+            audio_service_analog();
+        }
+    }
 
     for (int i = 0; i < frames; i++) {
+        if ((i & 15) == 0) audio_service_analog();
         int left = 0, right = 0;
         if (pc->pcspk_enabled) {
             int s = level(pcspk_sample(pc->pcspk), MIX_PCSPEAKER);
@@ -142,6 +156,7 @@ static void mix(int16_t *dst, int frames) {
     }
     g_audio_frames += frames;
     analog_put(dst, frames);    // the same frames to the headphone jack
+    audio_service_analog();
 }
 
 static void audio_core(void) {
@@ -151,7 +166,9 @@ static void audio_core(void) {
         void mp_hang_watch_core3(void);
         g_core_heartbeat[1]++;
         mp_hang_watch_core3();
+        audio_service_analog();
         int work = adlib_synth_step();
+        audio_service_analog();
         int n = lpe_pump(mix);
         // without HDMI/DP audio the analog output sets the pace
         if (!lpe_active() && analog_level() < 2048) {
@@ -159,8 +176,9 @@ static void audio_core(void) {
             n++;
         }
         if (!analog_owns_core()) {
-            analog_feed();
+            audio_service_analog();
             if (gmsynth_step()) work = 1;     // General MIDI here when core 3 is not running
+            audio_service_analog();
         }
         if (!work && !n) __asm__ volatile("pause");
     }

@@ -230,6 +230,153 @@ static int run_case(const u8 *rom,size_t rom_size,const Case *c,int mode) {
     free(b->cpu->tlb.tab); cpui386_delete(b->cpu); free(b);free(before);free(ram);
     return ok;
 }
+static int run_vector_copy(int repeated) {
+    u8 *ram=calloc(1,RAM_SIZE);
+    if (!ram) unexpected("allocation");
+    CPU_CB *cb;
+    CPUI386 *cpu=cpui386_new(5,(char *)ram,RAM_SIZE,&cb);
+    const unsigned words=repeated?78:2;
+    for (unsigned index=0;index<words;index++) put16(ram,0x20+index*2,(u16)(0x880+index*37));
+    ram[0x20100]=repeated?0xf3:0xa5;
+    ram[0x20101]=0xa5;
+    ram[0x20102]=0xf4;
+    WyseCpuState state={0};
+    for (int index=0;index<6;index++) {
+        state.seg[index].limit=0xffff;
+        state.seg[index].ar=0x93;
+    }
+    state.seg[SEG_CS].sel=0x2000; state.seg[SEG_CS].base=0x20000; state.seg[SEG_CS].ar=0x9b;
+    state.seg[SEG_ES].sel=0x1c00; state.seg[SEG_ES].base=0x1c000;
+    state.seg[SEG_SS].sel=0x3000; state.seg[SEG_SS].base=0x30000;
+    state.seg[SEG_LDT].ar=0x10000; state.seg[SEG_TR].ar=0x8b;
+    state.eip=0x100; state.eflags=0x17002; state.cr0=0x10; state.idt_limit=0x3ff;
+    state.gpr[1]=0xabcd0000u|words;
+    state.gpr[4]=0xcafe5ff0u;
+    state.gpr[6]=0x50020;
+    state.gpr[7]=0xbeef12fa;
+    for (int step=0;step<(repeated?1:2);step++) {
+        cpui386_import_state(cpu,&state);
+        cpui386_burst(cpu,1,1);
+        cpui386_export_state(cpu,&state);
+    }
+    int ok=!memcmp(ram+0x20,ram+0x1d2fa,words*2) &&
+        state.gpr[6]==0x50020+words*2 && state.gpr[7]==0xbeef12fa+words*2 &&
+        state.gpr[1]==(repeated?0xabcd0000u:(0xabcd0000u|words)) &&
+        state.eip==0x102 && state.eflags==0x17002;
+    printf("%s: %s real-mode RAM word copy with dirty upper registers and native handoffs\n",
+           ok?"PASS":"FAIL",repeated?"REP":"paired");
+    cpui386_delete(cpu);
+    free(ram);
+    return ok;
+}
+
+static int run_mode_boundary(int lmsw) {
+    u8 *ram=calloc(1,RAM_SIZE);
+    if (!ram) unexpected("allocation");
+    CPU_CB *cb;
+    CPUI386 *cpu=cpui386_new(5,(char *)ram,RAM_SIZE,&cb);
+    const u8 code[]={0x90,0x0f,lmsw?0x01:0x22,lmsw?0xf0:0xc0,0xf4};
+    memcpy(ram+0x100,code,sizeof(code));
+    WyseCpuState state={0};
+    state.eip=0x100;state.eflags=2;state.cr0=0x11;
+    state.gpr[0]=0x10;state.gpr[4]=0x8000;
+    for (unsigned index=0;index<6;index++) {
+        state.seg[index].sel=index==SEG_CS?8:16;
+        state.seg[index].limit=0xffff;
+        state.seg[index].ar=index==SEG_CS?0x9b:0x93;
+    }
+    state.seg[SEG_LDT].ar=0x10000;
+    state.seg[SEG_TR].ar=0x8b;
+    cpui386_import_state(cpu,&state);
+    int count=cpui386_burst(cpu,4,4);
+    cpui386_export_state(cpu,&state);
+    int ok=count==1 && state.eip==0x101 && state.cr0==0x11;
+    printf("%s mode boundary %s: instructions %d IP %x CR0 %x\n",
+           ok?"PASS":"FAIL",lmsw?"LMSW":"MOV CR0",count,state.eip,state.cr0);
+    cpui386_delete(cpu);free(ram);
+    return ok;
+}
+
+/* A burst must hand 0f ae (fences, clflush) and the other 0f a0-bf opcodes
+ * the interpreter lacks back to the real CPU instead of raising #UD; the
+ * implemented neighbours (movsx) keep running in the burst. */
+static int run_native_only_stop(void) {
+    static const struct { const char *name; u8 code[4]; unsigned len; int interpreted; } ops[]={
+        {"SFENCE",{0x0f,0xae,0xf8},3,0}, {"LFENCE",{0x0f,0xae,0xe8},3,0},
+        {"MFENCE",{0x0f,0xae,0xf0},3,0}, {"CLFLUSH [eax]",{0x0f,0xae,0x38},3,0},
+        {"POPCNT",{0xf3,0x0f,0xb8,0xc0},4,0}, {"MOVSX (still interpreted)",{0x0f,0xbe,0xc0},3,1},
+    };
+    int failures=0;
+    for (unsigned op=0;op<sizeof(ops)/sizeof(ops[0]);op++) {
+        u8 *ram=calloc(1,RAM_SIZE);
+        if (!ram) unexpected("allocation");
+        CPU_CB *cb;
+        CPUI386 *cpu=cpui386_new(5,(char *)ram,RAM_SIZE,&cb);
+        ram[0x100]=0x90;
+        memcpy(ram+0x101,ops[op].code,ops[op].len);
+        ram[0x101+ops[op].len]=0xf4;
+        WyseCpuState state={0};
+        state.eip=0x100;state.eflags=2;state.cr0=0x11;
+        state.gpr[0]=0x2000;state.gpr[4]=0x8000;
+        for (unsigned index=0;index<6;index++) {
+            state.seg[index].sel=index==SEG_CS?8:16;
+            state.seg[index].limit=0xffff;
+            state.seg[index].ar=index==SEG_CS?0x9b:0x93;
+        }
+        state.seg[SEG_LDT].ar=0x10000;
+        state.seg[SEG_TR].ar=0x8b;
+        cpui386_import_state(cpu,&state);
+        int count=cpui386_burst(cpu,8,8);
+        cpui386_export_state(cpu,&state);
+        unsigned want_ip=ops[op].interpreted?0x101+ops[op].len:0x101;
+        int ok=count==(ops[op].interpreted?2:1) && state.eip==want_ip && state.cr0==0x11;
+        printf("%s burst stops before native-only %s: instructions %d IP %x (want %x)\n",
+               ok?"PASS":"FAIL",ops[op].name,count,state.eip,want_ip);
+        failures+=!ok;
+        cpui386_delete(cpu);free(ram);
+    }
+    return failures;
+}
+
+static int run_realmode_segment_cache(void) {
+    u8 *ram=calloc(1,RAM_SIZE);
+    if (!ram) unexpected("allocation");
+    CPU_CB *cb;
+    CPUI386 *cpu=cpui386_new(5,(char *)ram,RAM_SIZE,&cb);
+    const u8 code[]={0x8e,0xd8,0xf3,0xa5,0xf4}; /* mov ds, ax; rep movsw; hlt */
+    memcpy(ram+0x20100,code,sizeof(code));
+    for (unsigned index=0;index<4;index++) {
+        put16(ram,0x00020+index*2,(u16)(0x1111+index*0x1111));
+        put16(ram,0x50020+index*2,(u16)(0x9000+index));
+    }
+    WyseCpuState state={0};
+    state.eip=0x100;state.eflags=2;state.cr0=0x10;state.idt_limit=0x3ff;
+    state.gpr[0]=0;state.gpr[1]=4;state.gpr[4]=0x8000;
+    state.gpr[6]=0x50020;state.gpr[7]=0x12fa;
+    for (unsigned index=0;index<6;index++) {
+        state.seg[index].sel=index==SEG_CS?0x2000:index==SEG_ES?0x1c00:0x0028;
+        state.seg[index].base=(u32)state.seg[index].sel<<4;
+        state.seg[index].limit=index==SEG_DS?0xffffffffu:0xffff;
+        state.seg[index].ar=index==SEG_CS?0x9b:index==SEG_DS?0xc093:0x93;
+    }
+    state.seg[SEG_LDT].ar=0x10000;
+    state.seg[SEG_TR].ar=0x8b;
+    cpui386_import_state(cpu,&state);
+    cpui386_burst(cpu,1,1);
+    cpui386_export_state(cpu,&state);
+    int reloaded=state.seg[SEG_DS].sel==0 && state.seg[SEG_DS].base==0 &&
+        state.seg[SEG_DS].limit==0xffffffffu && state.seg[SEG_DS].ar==0x8093;
+    cpui386_import_state(cpu,&state);
+    cpui386_burst(cpu,1,1);
+    cpui386_export_state(cpu,&state);
+    int copied=!memcmp(ram+0x00020,ram+0x1d2fa,8) &&
+        state.gpr[6]==0x50028 && state.gpr[7]==0x1302;
+    int ok=reloaded && copied;
+    printf("%s real-mode segment reload clears 32-bit D/B while preserving big-real limit (AR=%x ESI=%x)\n",
+           ok?"PASS":"FAIL",state.seg[SEG_DS].ar,state.gpr[6]);
+    cpui386_delete(cpu);free(ram);
+    return ok;
+}
 int main(int argc,char **argv) {
     const char *path=argc>1?argv[1]:"disks/386/vgabios.bin";
     if (argc>2) {
@@ -266,7 +413,7 @@ int main(int argc,char **argv) {
         printf("INJECTED NEGATIVE CONTROL %d: expected FAIL/exit 1, not a production defect\n",negative_control);
         return run_case(rom,size,&cases[0],0)?0:1;
     }
-    int failures=0;
+    int failures=!run_vector_copy(0)+!run_vector_copy(1)+!run_mode_boundary(0)+!run_mode_boundary(1)+!run_realmode_segment_cache()+run_native_only_stop();
     for (unsigned i=0;i<sizeof(cases)/sizeof(cases[0]);i++)
         for (int mode=0;mode<4;mode++) failures+=!run_case(rom,size,&cases[i],mode);
     printf("%s: 60 actual-interpreter cases, %d failures; complete aperture/guards, ordered callback writes, RAM, GPRs, flags and native handoffs checked.\n",

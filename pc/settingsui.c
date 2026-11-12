@@ -1,9 +1,10 @@
 /*
  * The settings menu, on Win+F11.
  *
- * Every row is one entry in the table below, including the headings, so the
- * layout is data rather than a sequence of draw calls and the cursor only has
- * to know how to skip what it cannot select.
+ * Every row is one entry in the table below, including the tabs and the
+ * headings, so the layout is data rather than a sequence of draw calls and
+ * the cursor only has to know how to skip what it cannot select.  A tab row
+ * starts a page (CPU, GPU, SOUND, ...); Tab / PgDn and PgUp step through them.
  */
 
 #include "settingsui.h"
@@ -43,6 +44,7 @@ typedef enum {
 } RowEffect;
 
 typedef enum {
+    ROW_TAB,              /* starts a page; its label is the tab's name */
     ROW_HEADING,
     ROW_TOGGLE,
     ROW_CHOICE,           /* one of a list of numbers */
@@ -68,13 +70,11 @@ static const int power_button_options[] = { 0, 1 };
 static const int picture_options[] = { PICTURE_4_3, PICTURE_FILL, PICTURE_SHARP_2X };
 
 static const Row rows[] = {
-    { ROW_HEADING, "Machine",              0, 0, 0, 0, EFFECT_NOW },
+    { ROW_TAB,     "CPU",                  0, 0, 0, 0, EFFECT_NOW },
     /* Null options: the sizes depend on the processor, because it is the
      * board rather than the chip that limits them.  Fetched when the row is
      * used; see row_options(). */
     { ROW_CHOICE,  "Memory",               config_get_mem_size_mb, config_set_mem_size_mb,
-                                           0, 0, EFFECT_RESTART },
-    { ROW_CHOICE,  "Video memory",         config_get_vga_mem_kb, config_set_vga_mem_kb,
                                            0, 0, EFFECT_RESTART },
     { ROW_CHOICE,  "Processor",            config_get_cpu_gen, config_set_cpu_gen,
                                            cpu_options, 3, EFFECT_RESTART },
@@ -82,9 +82,31 @@ static const Row rows[] = {
     /* Null options: the clocks depend on the processor; see row_options(). */
     { ROW_CHOICE,  "Speed",                config_get_speed_mhz, config_set_speed_mhz, 0, 0, EFFECT_NOW },
 
-    { ROW_HEADING, "Sound",                0, 0, 0, 0, EFFECT_NOW },
+    { ROW_TAB,     "GPU",                  0, 0, 0, 0, EFFECT_NOW },
+    { ROW_HEADING, "VGA",                  0, 0, 0, 0, EFFECT_NOW },
+    { ROW_CHOICE,  "Video memory",         config_get_vga_mem_kb, config_set_vga_mem_kb,
+                                           0, 0, EFFECT_RESTART },
+    { ROW_CHOICE,  "Picture",              config_get_picture, config_set_picture,
+                                           picture_options, 3, EFFECT_NOW },
+    { ROW_HEADING, "Voodoo2 3D card",      0, 0, 0, 0, EFFECT_NOW },
+    { ROW_TOGGLE,  "Voodoo2",              config_get_voodoo2, config_set_voodoo2, 0, 0, EFFECT_RESTART },
+    /* Null options: see row_options(). */
+    { ROW_CHOICE,  "Voodoo2 memory",       config_get_voodoo2_mem, config_set_voodoo2_mem,
+                                           0, 0, EFFECT_RESTART },
+    { ROW_TOGGLE,  "CPU Boost DOS: Glide", config_get_voodoo2_turbo, config_set_voodoo2_turbo,
+                                           0, 0, EFFECT_NOW },
+    { ROW_HEADING, "Windows 3D",            0, 0, 0, 0, EFFECT_NOW },
+    { ROW_TOGGLE,  "Windows 3D accelerator", config_get_wgpu, config_set_wgpu,
+                                           0, 0, EFFECT_RESTART },
+    { ROW_CHOICE,  "Windows 3D memory", config_get_wgpu_mem, config_set_wgpu_mem,
+                                           0, 0, EFFECT_RESTART },
+    { ROW_TOGGLE,  "CPU Boost Windows: DirectX/Glide/OpenGL", config_get_graphics_turbo, config_set_graphics_turbo,
+                                           0, 0, EFFECT_NOW },
+
+    { ROW_TAB,     "SOUND",                0, 0, 0, 0, EFFECT_NOW },
     { ROW_VOLUME,  "Volume",               config_get_volume, config_set_volume, 0, 0, EFFECT_NOW },
     { ROW_VOLUME,  "Headphones",           config_get_mix_headphones, config_set_mix_headphones, 0, 0, EFFECT_NOW },
+    { ROW_HEADING, "Devices",              0, 0, 0, 0, EFFECT_NOW },
     { ROW_TOGGLE,  "PC speaker",           config_get_pcspeaker, config_set_pcspeaker, 0, 0, EFFECT_DEVICE },
     { ROW_TOGGLE,  "AdLib",                config_get_adlib, config_set_adlib, 0, 0, EFFECT_DEVICE },
     { ROW_TOGGLE,  "Sound Blaster",        config_get_soundblaster, config_set_soundblaster, 0, 0, EFFECT_DEVICE },
@@ -92,7 +114,6 @@ static const Row rows[] = {
     { ROW_TOGGLE,  "Tandy 3-voice",        config_get_tandy, config_set_tandy, 0, 0, EFFECT_DEVICE },
     { ROW_TOGGLE,  "Covox on LPT2",        config_get_covox, config_set_covox, 0, 0, EFFECT_DEVICE },
     { ROW_TOGGLE,  "Disney Sound Source",  config_get_dss, config_set_dss, 0, 0, EFFECT_DEVICE },
-
     { ROW_HEADING, "Mixer",                0, 0, 0, 0, EFFECT_NOW },
     { ROW_VOLUME,  "PC speaker",           config_get_mix_pcspeaker, config_set_mix_pcspeaker, 0, 0, EFFECT_NOW },
     { ROW_VOLUME,  "AdLib / OPL3",         config_get_mix_adlib, config_set_mix_adlib, 0, 0, EFFECT_NOW },
@@ -101,18 +122,14 @@ static const Row rows[] = {
     { ROW_VOLUME,  "Tandy",                config_get_mix_tandy, config_set_mix_tandy, 0, 0, EFFECT_NOW },
     { ROW_VOLUME,  "Covox / Sound Source", config_get_mix_covox, config_set_mix_covox, 0, 0, EFFECT_NOW },
 
-    { ROW_HEADING, "Display",              0, 0, 0, 0, EFFECT_NOW },
-    { ROW_CHOICE,  "Picture",              config_get_picture, config_set_picture,
-                                           picture_options, 3, EFFECT_NOW },
-
-    { ROW_HEADING, "Input",                0, 0, 0, 0, EFFECT_NOW },
+    { ROW_TAB,     "INPUT",                0, 0, 0, 0, EFFECT_NOW },
     { ROW_TOGGLE,  "Mouse",                config_get_mouse, config_set_mouse, 0, 0, EFFECT_DEVICE },
     { ROW_CHOICE,  "Mouse speed",          config_get_mouse_speed, config_set_mouse_speed,
                                            mouse_speed_options, 9, EFFECT_NOW },
     { ROW_TOGGLE,  "Invert mouse Y",       config_get_mouse_invert_y, config_set_mouse_invert_y, 0, 0, EFFECT_NOW },
     { ROW_TOGGLE,  "Joystick",             config_get_joystick, config_set_joystick, 0, 0, EFFECT_DEVICE },
 
-    { ROW_HEADING, "Power",                0, 0, 0, 0, EFFECT_NOW },
+    { ROW_TAB,     "POWER",                0, 0, 0, 0, EFFECT_NOW },
     { ROW_CHOICE,  "When power returns",   config_get_power_restore, config_set_power_restore,
                                            power_restore_options, 3, EFFECT_NOW },
     { ROW_CHOICE,  "Power button",         config_get_power_button, config_set_power_button,
@@ -124,14 +141,34 @@ static const Row rows[] = {
 #define PANEL_Y  1
 #define PANEL_W  54
 #define PANEL_H  24
-/* The rows between the title and the two note lines above the footer; the
- * list scrolls when there are more. */
-#define LIST_TOP   (PANEL_Y + 2)
+/* The tab bar under the title, then the page's rows down to the two note
+ * lines above the footer; a page scrolls when it has more. */
+#define TABS_Y     (PANEL_Y + 2)
+#define LIST_TOP   (PANEL_Y + 4)
 #define LIST_ROWS  (PANEL_Y + PANEL_H - 4 - LIST_TOP)
 
 static State state;
-static int cursor = 1;                 /* row 0 is a heading */
-static int scroll;                     /* the first row on screen */
+static int cursor = 1;                 /* row 0 is the first tab */
+static int scroll = 1;                 /* the first row on screen */
+
+/* The page a row is on: its tab row, and the row after its last. */
+static int page_start(int row)
+{
+    while (row > 0 && rows[row].kind != ROW_TAB) row--;
+    return row;
+}
+
+static int page_end(int start)
+{
+    int row = start + 1;
+    while (row < ROW_COUNT && rows[row].kind != ROW_TAB) row++;
+    return row;
+}
+
+static bool selectable(int row)
+{
+    return rows[row].kind != ROW_TAB && rows[row].kind != ROW_HEADING;
+}
 static bool restart_requested;
 static int mem_before_confirm;         /* to put back if the answer is no */
 
@@ -140,7 +177,7 @@ void settingsui_clear_restart(void) { restart_requested = false; }
 
 static void draw(void);
 
-void settingsui_init(void) { state = STATE_CLOSED; cursor = 1; scroll = 0; }
+void settingsui_init(void) { state = STATE_CLOSED; cursor = 1; scroll = 1; }
 
 bool settingsui_is_open(void) { return state != STATE_CLOSED; }
 
@@ -180,6 +217,8 @@ static const int *row_options(const Row *r, int *count)
     if (r->options) { *count = r->option_count; return r->options; }
     if (r->set == config_set_vga_mem_kb) return config_vga_mem_options(count);
     if (r->set == config_set_speed_mhz) return config_speed_options(count);
+    if (r->set == config_set_voodoo2_mem) return config_voodoo2_mem_options(count);
+    if (r->set == config_set_wgpu_mem) return config_wgpu_mem_options(count);
     return config_mem_options(count);
 }
 
@@ -236,6 +275,11 @@ static void format_value(const Row *r, char *out, size_t cap)
         else if (r->set == config_set_picture)
             snprintf(out, cap, "%s", v == PICTURE_FILL ? "fill the screen" :
                                      v == PICTURE_SHARP_2X ? "sharp, 2x pixels" : "4:3");
+        else if (r->set == config_set_voodoo2_mem)
+            snprintf(out, cap, "%d MB", v);
+        else if (r->set == config_set_wgpu_mem) {
+            snprintf(out, cap, "%d MB", v);
+        }
         else if (r->set == config_set_power_button)
             snprintf(out, cap, "%s", v ? "hold 4 s to switch off" : "press to switch off");
         else
@@ -255,16 +299,33 @@ static void draw(void)
 
     const int x = PANEL_X + 2;
 
+    /* The tab bar, centred: every page's name, the current one highlighted. */
+    const int first = page_start(cursor) + 1, end = page_end(first - 1);
+    {
+        int width = -1;
+        for (int i = 0; i < ROW_COUNT; i++)
+            if (rows[i].kind == ROW_TAB) width += (int)strlen(rows[i].label) + 3;
+        int tx = PANEL_X + (PANEL_W - width) / 2;
+        for (int i = 0; i < ROW_COUNT; i++) {
+            if (rows[i].kind != ROW_TAB) continue;
+            char name[16];
+            snprintf(name, sizeof name, " %s ", rows[i].label);
+            osd_print(tx, TABS_Y, name, i == first - 1 ? OSD_ATTR_SELECTED : OSD_ATTR_NORMAL);
+            tx += (int)strlen(name) + 1;
+        }
+    }
+
     /* Keep the cursor on screen, and the heading above it with it. */
-    const int want = cursor > 0 && rows[cursor - 1].kind == ROW_HEADING ? cursor - 1 : cursor;
+    const int want = rows[cursor - 1].kind == ROW_HEADING ? cursor - 1 : cursor;
+    if (scroll < first || scroll >= end) scroll = first;
     if (want < scroll) scroll = want;
     if (cursor >= scroll + LIST_ROWS) scroll = cursor - LIST_ROWS + 1;
-    if (scroll > 0)
+    if (scroll > first)
         osd_putchar(PANEL_X + PANEL_W - 2, LIST_TOP, '\x1E', OSD_ATTR_HINT);
-    if (scroll + LIST_ROWS < ROW_COUNT)
+    if (scroll + LIST_ROWS < end)
         osd_putchar(PANEL_X + PANEL_W - 2, LIST_TOP + LIST_ROWS - 1, '\x1F', OSD_ATTR_HINT);
 
-    for (int i = scroll; i < ROW_COUNT && i < scroll + LIST_ROWS; i++) {
+    for (int i = scroll; i < end && i < scroll + LIST_ROWS; i++) {
         const Row *r = &rows[i];
         const int y = LIST_TOP + i - scroll;
 
@@ -302,7 +363,7 @@ static void draw(void)
 
     const int footer = PANEL_Y + PANEL_H - 2;
     osd_print(x, footer,
-              "\x18\x19 choose   \x1B\x1A change   Enter save   Esc close",
+              "Tab page  \x18\x19 choose  \x1B\x1A change  Enter save  Esc",
               OSD_ATTR_HINT);
 
     /*
@@ -315,6 +376,9 @@ static void draw(void)
     if (rows[cursor].effect == EFFECT_RESTART)
         osd_print(x, footer - 2, "\x07 takes effect when the machine restarts",
                   OSD_ATTR(OSD_BROWN, OSD_BLUE));
+    else if (rows[cursor].set == config_set_voodoo2_turbo ||
+             rows[cursor].set == config_set_graphics_turbo)
+        osd_print(x, footer - 2, "Full CPU speed during 3D rendering", OSD_ATTR_HINT);
 
     if (config_has_changes())
         osd_print(x, footer - 1, "changed, not yet saved", OSD_ATTR_HINT);
@@ -355,14 +419,32 @@ static void draw(void)
 
 /* ------------------------------------------------------------------------ */
 
+/* Up and down stay on the page, wrapping round within it. */
 static void move_cursor(int delta)
 {
+    const int start = page_start(cursor), end = page_end(start);
     int i = cursor;
     for (int guard = 0; guard < ROW_COUNT; guard++) {
         i += delta;
-        if (i < 0) i = ROW_COUNT - 1;
-        if (i >= ROW_COUNT) i = 0;
-        if (rows[i].kind != ROW_HEADING) { cursor = i; return; }
+        if (i <= start) i = end - 1;
+        if (i >= end) i = start + 1;
+        if (selectable(i)) { cursor = i; return; }
+    }
+}
+
+/* The first row that can be chosen on the next or the previous page. */
+static void change_page(int delta)
+{
+    int start = page_start(cursor);
+    for (int guard = 0; guard < ROW_COUNT; guard++) {
+        if (delta > 0) {
+            start = page_end(start);
+            if (start >= ROW_COUNT) start = 0;
+        } else {
+            start = start > 0 ? page_start(start - 1) : page_start(ROW_COUNT - 1);
+        }
+        for (int i = start + 1; i < page_end(start); i++)
+            if (selectable(i)) { cursor = i; scroll = start + 1; return; }
     }
 }
 
@@ -442,6 +524,9 @@ bool settingsui_handle_key(int keycode, bool is_down)
     }
 
     switch (keycode) {
+    case KEY_TAB:
+    case KEY_PAGEDOWN: change_page(+1); draw(); break;
+    case KEY_PAGEUP:   change_page(-1); draw(); break;
     case KEY_UP:    move_cursor(-1); draw(); break;
     case KEY_DOWN:  move_cursor(+1); draw(); break;
     case KEY_LEFT:  change(-1); draw(); break;

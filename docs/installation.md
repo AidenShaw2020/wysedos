@@ -54,7 +54,9 @@ It is outside the disk presented to the guest. See [storage](storage.md).
    for example its own `SYS C:`. Confirm that the DOS version supports FAT32.
    Formatting C: removes DRIVERS as well as other files; save it first if needed.
 4. Install Windows normally from your media. Begin with standard VGA, then
-   follow the [VMDisp9x instructions](../drivers/windows9x/vmdisp9x/README.md).
+   follow [Velocity9x for Windows 98](../drivers/windows9x/velocity9x/README.md).
+   The latter is supplied in `C:\DRIVERS\VELOCITY`, with its GPL license,
+   third-party notices and corresponding modified source in `SRC.ZIP`.
 5. DOS mouse applications normally need CuteMouse or another PS/2 mouse driver.
    DOS USB storage needs the supplied USB drivers; Windows USB storage needs
    a separately supplied compatible driver.

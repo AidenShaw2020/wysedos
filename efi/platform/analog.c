@@ -328,10 +328,20 @@ static void apply_ssp_mode(void) {
     printf("analog: SSP2 mode %d, cr0 %08x tsa %x\n", m, r32(SSP2_BASE + SSCR0), r32(SSP2_BASE + SSTSA));
 }
 
+uint32_t g_analog_gap_max;       // longest pause between feeds, on either feeder core
+
 void analog_feed(void) {
     static int16_t last[2];
     static int half;
+    static uint64_t previous_feed;
     if (!analog_on) return;
+    uint32_t lo, hi;
+    __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
+    uint64_t now = (uint64_t)hi << 32 | lo;
+    uint64_t gap = now - previous_feed;
+    if (previous_feed && gap > g_analog_gap_max)
+        g_analog_gap_max = gap > UINT32_MAX ? UINT32_MAX : (uint32_t)gap;
+    previous_feed = now;
     if (ssp_mode != ssp_mode_wanted) {
         apply_ssp_mode();
         half = 0;
@@ -408,17 +418,9 @@ void mp_hang_watch(void);
 extern volatile uint64_t g_core_heartbeat[4];
 int gmsynth_step(void);
 
-uint32_t g_analog_gap_max;       // longest pause between two feeds on core 3, TSC ticks
-
 static void analog_core_run(void) {
     analog_core = true;
-    uint64_t last = 0;
     for (;;) {
-        uint32_t lo, hi;
-        __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
-        uint64_t now = (uint64_t)hi << 32 | lo;
-        if (last && now - last > g_analog_gap_max) g_analog_gap_max = (uint32_t)(now - last);
-        last = now;
         analog_feed();
         gmsynth_step();         // General MIDI renders ahead of the mixer, as on X86Pi's core 3
         mp_hang_watch();

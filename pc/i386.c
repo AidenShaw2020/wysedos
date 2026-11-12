@@ -2371,6 +2371,10 @@ static void seg_set_bounds(CPUI386 *cpu, int seg)
 	}
 }
 
+#if defined(WYSE_BUILD)
+static u8 wyse_real_loaded;
+#endif
+
 static bool set_seg(CPUI386 *cpu, int seg, int sel)
 {
 	if (seg == SEG_CS) {
@@ -2390,6 +2394,10 @@ static bool set_seg(CPUI386 *cpu, int seg, int sel)
 		cpu->seg[seg].base = sel << 4;
 		cpu->seg[seg].limit = 0xffff;
 		cpu->seg[seg].flags = 0; // D_BIT is not set
+#if defined(WYSE_BUILD)
+		if (!(cpu->cr0 & 1) && seg < SEG_LDT)
+			wyse_real_loaded |= 1u << seg;
+#endif
 		/* Real mode and virtual-8086 are left unchecked, as before. */
 		cpu->seg[seg].lo = 0;
 		cpu->seg[seg].hi = 0xffffffffu;
@@ -5565,8 +5573,14 @@ static bool wyse_burst_stop(CPUI386 *cpu)
 	if (b != 0x0f) return false;
 	if (!wyse_peek(cpu, ip, &b))
 		return true;
+	if (b == 0x01 || b == 0x22) return true;
 	if (b <= 0x09 && b != 0x05 && b != 0x07) return false;  /* system: lgdt, mov cr0 via lmsw, clts, invd */
 	if (b >= 0x20 && b <= 0x23) return false;   /* mov to/from cr, dr */
+	/* not interpreted, so the real CPU must run them: 0f ae (sfence, lfence,
+	 * mfence, clflush, fxsave, ldmxcsr...), rsm, popcnt, ud1, and the
+	 * undefined a6/a7. A guest storing to an MMIO BAR and then fencing (a GPU
+	 * submit) got #UD from the burst before this. */
+	if (b == 0xa6 || b == 0xa7 || b == 0xaa || b == 0xae || b == 0xb8 || b == 0xb9) return true;
 	if (b >= 0x80 && b <= 0xbf && b != 0xa2) return false;  /* jcc, setcc, push/pop fs/gs, bt*, shld, movzx... */
 	if (b == 0xc0 || b == 0xc1 || (b >= 0xc8 && b <= 0xcf)) return false;  /* xadd, bswap */
 	return true;    /* cpuid, rdtsc, msr, mmx/sse, ud2 and the rest */
@@ -7860,6 +7874,7 @@ static u32 wyse_import_limit[8], wyse_import_ar[8];
 
 void cpui386_import_state(CPUI386 *cpu, const WyseCpuState *s)
 {
+	wyse_real_loaded = 0;
 	for (int i = 0; i < 8; i++)
 		REGi(i) = s->gpr[i];
 	cpu->flags = s->eflags;
@@ -7956,7 +7971,10 @@ void cpui386_export_state(CPUI386 *cpu, WyseCpuState *s)
 				s->seg[i].limit = wyse_import_limit[i];
 			/* keep the hidden G and D/B bits (big real mode); VT-x wants G
 			 * set for a limit over 1 MB, and a page-granular limit with G */
-			u32 ar = (i == SEG_CS ? 0x9b : 0x93) | (wyse_import_ar[i] & 0xc000);
+			u32 cached = wyse_import_ar[i] & 0xc000;
+			if (wyse_real_loaded & (1u << i))
+				cached &= ~0x4000u;
+			u32 ar = (i == SEG_CS ? 0x9b : 0x93) | cached;
 			if (s->seg[i].limit > 0xfffff) {
 				ar |= 0x8000;
 				s->seg[i].limit |= 0xfff;

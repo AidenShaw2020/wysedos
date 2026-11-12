@@ -44,7 +44,7 @@ void    fdc_ioport_write(FDCState *s, uint32_t addr, uint8_t val);
 /* Called when a floppy image is inserted or ejected in drive 0 or 1 */
 void fdc_media_changed(FDCState *s, int drive);
 
-/* Periodic service – call from pc_step() once per emulated ms */
+/* Periodic service – call from pc_step() */
 void fdc_tick(FDCState *s);
 
 #endif /* FDC_H */

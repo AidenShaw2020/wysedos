@@ -39,7 +39,7 @@ across cores needs explicit ownership; [SB DMA](sound-dma.md) illustrates why.
 ## Graphics
 
 The guest sees VGA/EGA and a Bochs-compatible VBE PCI device (`1234:1111`).
-DOS accesses VGA directly; Windows can use VMDisp9x. Guest drivers never
+DOS accesses VGA directly; Windows uses Velocity9x. Guest drivers never
 control the physical Intel display hardware.
 
 Suitable modes use Cherry Trail's legacy VGA aperture/registers. Ordinary

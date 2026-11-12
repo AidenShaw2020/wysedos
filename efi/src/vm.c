@@ -209,11 +209,20 @@ void vm_map_mmio(vm_t *vm, uint64_t gpa, uint64_t hpa, uint64_t size) {
     ept_flush();
 }
 
+void vm_map_wc(vm_t *vm, uint64_t gpa, void *host, uint64_t size) {
+    (void)vm;
+    for (uint64_t off = 0; off < size; off += 4096) {
+        uint64_t *pte = ept_pte(gpa + off);
+        if (pte) *pte = ((uint64_t)host + off) | EPT_RWX | (1ULL << 3) | EPT_UC_IPAT;   // type 1 (WC), PAT ignored
+    }
+    ept_flush();
+}
+
 //--------------------------------------------------------------------+
 // VMCS
 //--------------------------------------------------------------------+
 
-static uint8_t guest_fx[512] __attribute__((aligned(16))), host_fx[512] __attribute__((aligned(16)));
+static WyseFxState guest_fx, host_fx;
 
 static void vmcs_host_state(void) {
     uint16_t cs, ss, ds, es;
@@ -349,6 +358,17 @@ const char *vm_create(vm_t *vm, void *ram, uint64_t ram_size) {
     vmcs_controls();
     vm_reset_real(vm, 0xf000, 0xfff0);
     return NULL;
+}
+
+bool vm_x87_store_prepare(uint64_t *bits, bool wide, bool pop, WyseFxState *next) {
+    if (!wyse_x87_store(&guest_fx, next, bits, wide, pop)) return false;
+    next->ip = vm_read(VMCS_GUEST_CS_BASE) + vm_read(VMCS_GUEST_RIP);
+    next->dp = vm_read(VMCS_GUEST_LINEAR_ADDR);
+    return true;
+}
+
+void vm_x87_store_commit(const WyseFxState *next) {
+    guest_fx = *next;
 }
 
 bool vm_run(vm_t *vm) {

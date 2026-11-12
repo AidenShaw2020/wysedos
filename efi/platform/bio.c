@@ -58,7 +58,11 @@ EFI_STATUS bio_read(EFI_BLOCK_IO_PROTOCOL *bio, uint64_t lba, uint64_t count, vo
 }
 
 EFI_STATUS bio_write(EFI_BLOCK_IO_PROTOCOL *bio, uint64_t lba, uint64_t count, const void *buf) {
+#if WYSE_POC_READ_ONLY
+    return EFI_WRITE_PROTECTED;
+#else
     return transfer(bio, true, lba, count, (void *)buf);
+#endif
 }
 
 EFI_STATUS bio_flush(EFI_BLOCK_IO_PROTOCOL *bio) { return bio->FlushBlocks(bio); }

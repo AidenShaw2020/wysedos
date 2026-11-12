@@ -14,6 +14,8 @@
 #include "edid.h"
 #include "ini.h"
 #include "config_save.h"
+#include "cpu_speed_policy.h"
+#include "vga.h"
 #include "ff.h"
 #include "blockdev.h"
 #include "osd.h"
@@ -28,6 +30,8 @@
 #include "gmsynth.h"
 #include "../include/efi.h"
 #include "../src/net.h"
+#include "gpu3d.h"
+#include "../../pc/voodoo2_gpu.h"
 
 extern EFI_SYSTEM_TABLE *gST;
 extern EFI_BOOT_SERVICES *gBS;
@@ -194,6 +198,16 @@ int load_rom(void *phys_mem, const char *file, uword addr, int backward) {
 void hostblk_list(void);
 void hostblk_usb_start(void (*change)(int port, BlockDev *dev, unsigned serial));
 static int usb_storage_enabled = 1;
+static int voodoo2_enabled;
+static int voodoo_async_enabled = 1;    // voodoo2_async=0: render on the main core
+static int voodoo2_mem = 12;            // voodoo2_mem=8: the 8 MB board
+static int wgpu_mb;                     // wgpu=32|64|128: the Intel GPU render channel, aperture MB
+static int wgpu_enabled = 1;            // old configurations use wgpu=0 to disable
+void intel_gpu_log_probe(void);
+void intel_gpu_status(void);
+void intel_gpu_blt_test(void);
+void intel_gpu_copy_test(bool fill);
+void gpu3d_close(void);
 static uint32_t firmware_timer_us = 5000; /* 0: retain firmware's hardware timer period */
 static void guest_usb_change(int port, BlockDev *dev, unsigned serial) {
     extern PC *g_wyse_pc;
@@ -277,8 +291,9 @@ static void local_to_rtc(const CmosDateTime *dt, EFI_TIME *t) {
 
 // The [pc] keys only wyseDOS reads, for config_save.c to write back
 const char *config_platform_lines(void) {
-    static char lines[128];
-    snprintf(lines, sizeof(lines), "timezone=%s\nusb_storage=%d\nfirmware_timer_us=%u\n%s", tz_cet ? "cet" : "utc", usb_storage_enabled,
+    static char lines[160];
+    snprintf(lines, sizeof(lines), "timezone=%s\nusb_storage=%d\n%sfirmware_timer_us=%u\n%s", tz_cet ? "cet" : "utc", usb_storage_enabled,
+             voodoo_async_enabled ? "" : "voodoo2_async=0\n",
              firmware_timer_us,
              g_net_accept_broadcast ? "devctl=1\n" : "");
     return lines;
@@ -327,6 +342,12 @@ static int cfg_handler(void *user, const char *section, const char *name, const 
     cfg_t *c = user;
     if (!strcmp(name, "devctl")) g_net_accept_broadcast = atoi(value) != 0;
     else if (!strcmp(name, "usb_storage")) usb_storage_enabled = atoi(value) != 0;
+    else if (!strcmp(name, "voodoo2")) voodoo2_enabled = atoi(value) != 0;
+    else if (!strcmp(name, "voodoo2_async")) voodoo_async_enabled = atoi(value) != 0;
+    else if (!strcmp(name, "voodoo2_mem")) voodoo2_mem = atoi(value) == 8 ? 8 : 12;
+    else if (!strcmp(name, "wgpu")) wgpu_mb = atoi(value);
+    else if (!strcmp(name, "wgpu_enabled")) wgpu_enabled = atoi(value) != 0;
+    else if (!strcmp(name, "voodoo2_turbo")) config_set_from_ini(name, value);   // older files had it here
     else if (!strcmp(name, "firmware_timer_us")) {
         char *end;
         unsigned long us=strtoul(value,&end,10);
@@ -383,6 +404,10 @@ static bool load_config(PCConfig *conf) {
     conf->cpu_gen = c.cpu;
     conf->fpu = c.fpu;
     conf->usb_storage = usb_storage_enabled;
+    conf->voodoo2 = voodoo2_enabled;
+    conf->voodoo2_mem = voodoo2_mem;
+    conf->wgpu_mb = wgpu_enabled ? wgpu_mb : 0;
+    if (voodoo2_enabled) intel_gpu_log_probe();
     conf->mem_size = parse_size(c.mem);
     if (!conf->mem_size) conf->mem_size = 16L << 20;
     conf->vga_mem_size = parse_size(c.vga_mem);
@@ -426,6 +451,7 @@ static uint32_t surf_w = 640, surf_h = 480;
 #define SURF_W surf_w
 #define SURF_H surf_h
 static uint32_t *surface, *shown;
+static bool voodoo_surface_active;
 static uint32_t *gop_fb;
 static uint32_t gop_w, gop_h, gop_stride;
 static uint32_t dst_w, dst_h, off_x, off_y;
@@ -476,6 +502,9 @@ static void redraw_body(int x, int y, int w, int h) {
             __asm__ volatile("rep movsl" : "+D"(d), "+S"(sp), "+c"(n) :: "memory");
         }
     }
+    /* Publish even the final partial WC cache line before marking this
+     * update complete; no later desktop change is required to drain it. */
+    __asm__ volatile("mfence" ::: "memory");
 }
 
 /* Prefer the EDID attached to this GOP, so a second output cannot supply
@@ -666,13 +695,76 @@ static void display_layout(int mode) {
 
 /* Called only by the renderer (or with the renderer held by the main loop).
  * All storage is allocated before starting it; no UEFI calls on an AP. */
+// Core 3 with a Voodoo2: run the guest's queued board writes, convert finished
+// frames, and keep watching the main loop and the sound core as core 3 does.
+static PC *voodoo_core_pc;
+static bool voodoo_core_started;
+
+// Core 2 between display refreshes: the odd lines of the Voodoo2's triangles
+static void voodoo_helper_idle(void) {
+    if (!voodoo2_helper_poll(voodoo_core_pc->voodoo2)) __asm__ volatile("pause");
+}
+
+static void voodoo_core_run(void) {
+    void mp_hang_watch(void);
+    extern volatile uint64_t g_core_heartbeat[4];
+    for (;;) {
+        bool work = voodoo2_worker_poll(voodoo_core_pc->voodoo2);
+        mp_hang_watch();
+        g_core_heartbeat[3]++;
+        if (!work) __asm__ volatile("pause");
+    }
+}
+
+// Code buffer for the Voodoo2 span recompiler: loader code pages stay
+// executable whatever NX policy the firmware applies to data.
+void *voodoo2_platform_alloc_exec(size_t size) {
+    EFI_PHYSICAL_ADDRESS address = 0;
+    uint64_t pages = (size + 4095) / 4096;
+    if (EFI_ERROR(gBS->AllocatePages(AllocateAnyPages, EfiLoaderCode, pages, &address))) return NULL;
+    memset((void *)(uintptr_t)address, 0, pages * 4096);
+    return (void *)(uintptr_t)address;
+}
+
+void voodoo2_platform_free_exec(void *pointer, size_t size) {
+    gBS->FreePages((EFI_PHYSICAL_ADDRESS)(uintptr_t)pointer, (size + 4095) / 4096);
+}
+
+bool wyse_voodoo_surface(PC *pc) {
+    unsigned width, height;
+    // Convert and redraw only when the Voodoo2 image changed; every 30th call
+    // repaints anyway so monitor overlays drawn over the picture get repaired.
+    static unsigned voodoo_refreshes;
+    bool updated, force = !voodoo_surface_active || ++voodoo_refreshes % 30 == 0;
+    if (!surface || !voodoo2_frame_update(pc->voodoo2, surface, SURF_MAX_W * SURF_MAX_H,
+                                          &width, &height, force, &updated)) return false;
+    voodoo_surface_active = true;
+    if (width != surf_w || height != surf_h) {
+        surf_w = width;
+        surf_h = height;
+        pc->vga->fb_dev->width = width;
+        pc->vga->fb_dev->height = height;
+        pc->vga->fb_dev->stride = width * 4;
+        int mode = layout_mode;
+        layout_mode = -1;
+        display_layout(mode < 0 ? g_picture : mode);
+        updated = true;
+    }
+    if (pc->redraw && updated) pc->redraw(pc->redraw_data, 0, 0, width, height);
+    return true;
+}
+
 void wyse_vga_surface(VGAState *v) {
     uint32_t w=640,h=480;
     if (vga_vbe_on(v)) {
         uint32_t vw=v->vbe_regs[VBE_DISPI_INDEX_XRES], vh=v->vbe_regs[VBE_DISPI_INDEX_YRES];
         if (vw>=640 && vh>=480 && vw<=SURF_MAX_W && vh<=SURF_MAX_H) { w=vw;h=vh; }
     }
-    if (w==surf_w && h==surf_h) return;
+    if (w==surf_w && h==surf_h && !voodoo_surface_active) return;
+    if (voodoo_surface_active) {
+        voodoo_surface_active=false;
+        v->graphic_mode=-1;
+    }
     surf_w=w;surf_h=h;
     v->fb_dev->width=w;v->fb_dev->height=h;v->fb_dev->stride=w*4;
     memset(surface,0,(size_t)w*h*4);
@@ -856,7 +948,9 @@ static void poll_control(PC *pc) {
         while (hash > cmd && hash[-1] == ' ') hash--;
         *hash = 0;
     }
-    printf("control: %s\n", cmd);
+    /* Pixel diagnostics must sample before any UDP log transmission: the
+     * transmission itself can change the timing of the display worker. */
+    if (strncmp(cmd, "scanpeek ", 9)) printf("control: %s\n", cmd);
     if (!strncmp(cmd, "reboot", 6)) {
         // "reboot pxe": netboot next; "reboot disk": the boot order (wyseDOS on the eMMC)
         wyse_reboot_to(strstr(cmd, "pxe") ? REBOOT_PXE : strstr(cmd, "disk") ? REBOOT_ORDER : REBOOT_SAME);
@@ -864,6 +958,89 @@ static void poll_control(PC *pc) {
         pc->reset_request = 1;
     } else if (!strncmp(cmd, "stats", 5)) {
         report(pc, 10000000);
+    } else if (!strncmp(cmd, "fastmmio ", 9)) {
+        extern int g_fast_mmio;
+        g_fast_mmio = atoi(cmd + 9) != 0;
+        printf("vmx: board accesses %s\n", g_fast_mmio ? "decoded in the exit handler" : "through the interpreter");
+    } else if (!strncmp(cmd, "cpuspeed ", 9)) {
+        // the processor speed in MHz for this session (0: unrestricted), as the menu sets it
+        g_cpu_speed_mhz = atoi(cmd + 9);
+        printf("cpu: speed %d MHz requested\n", g_cpu_speed_mhz);
+    } else if (!strncmp(cmd, "v2split ", 8)) {
+        int mode = atoi(cmd + 8);     // 0 one core, 1 split on core 3 alone, 2 with core 2
+        voodoo2_set_split(pc->voodoo2, mode != 0, mode == 2 && g_wyse_vga_core);
+        printf("voodoo2: split rendering %d\n", mode);
+    } else if (!strncmp(cmd, "v2busy ", 7)) {
+        voodoo2_set_queue_busy(pc->voodoo2, atoi(cmd + 7) != 0);
+        printf("voodoo2: queued work %s busy\n", atoi(cmd + 7) ? "shows as" : "does not show as");
+    } else if (!strncmp(cmd, "v2turbo ", 8)) {
+        g_voodoo2_turbo = atoi(cmd + 8) != 0;   // this session; the menu saves it
+        printf("voodoo2: processor turbo while the board shows %s\n", g_voodoo2_turbo ? "on" : "off");
+    } else if (!strncmp(cmd, "v2async ", 8)) {
+        bool on = atoi(cmd + 8) != 0 && voodoo_core_started;
+        voodoo2_set_async(pc->voodoo2, on);
+        printf("voodoo2: %s\n", on ? "queued writes, renderer on core 3" : "synchronous on the main core");
+    } else if (!strncmp(cmd, "wgpu", 4) && (cmd[4] == 0 || cmd[4] == ' ')) {
+        // the guest's Intel GPU render channel: "wgpu" state, "wgpu test|lfb [pitch]|hang"
+        void wgpu_command(WgpuState *s, const char *args);
+        wgpu_command(pc->wgpu, cmd + 4);
+    } else if (!strncmp(cmd, "v2gpu", 5)) {
+        // "v2gpu 1": triangles of the guest's Voodoo2 on the Intel GPU, "v2gpu 0" back to the CPU,
+        // "v2gpu" alone: statistics
+        static V2gState *live_gpu;
+        if (cmd[5] == ' ') {
+            bool on = atoi(cmd + 6) != 0;
+            if (on && !live_gpu) {
+                V2gBackend backend;
+                if (gpu3d_v2_backend(voodoo2_device(pc->voodoo2), &backend)) live_gpu = voodoo2_gpu_create(&backend);
+            }
+            voodoo2_set_gpu_after_swap(pc->voodoo2, on ? live_gpu : NULL);
+            printf("voodoo2: triangles %s\n", on && live_gpu ? "on the Intel GPU" : "on the CPU");
+        }
+        if (live_gpu) {
+            V2gStats st = voodoo2_gpu_stats(live_gpu);
+            printf("voodoo2 gpu: triangles %llu (CPU %llu, last reason %u), draws %llu, barriers %llu, finishes %llu, "
+                   "kernels %llu, pixels %llu\n", (unsigned long long)st.triangles, (unsigned long long)st.cpu_triangles,
+                   st.last_fallback, (unsigned long long)st.draws, (unsigned long long)st.barriers,
+                   (unsigned long long)st.finishes, (unsigned long long)st.kernels, (unsigned long long)st.pixels);
+            printf("voodoo2 gpu: setup %llu ms, batch building %llu ms, finish (with GPU wait) %llu ms\n",
+                   (unsigned long long)(st.setup_us / 1000), (unsigned long long)(st.draw_us / 1000),
+                   (unsigned long long)(st.finish_us / 1000));
+            gpu3d_v2_report();
+        }
+    } else if (!strncmp(cmd, "v2jit ", 6)) {
+        printf("voodoo2: span recompiler %s\n", voodoo2_set_jit(pc->voodoo2, atoi(cmd + 6) != 0) ? "on" : "off");
+    } else if (!strcmp(cmd, "v2stats")) {
+        Voodoo2Stats stats = voodoo2_stats(pc->voodoo2);
+        printf("voodoo2: guest waits for the queue %llu reads %llu ms, most at %04x (%u), status reads with swaps pending %llu\n", (unsigned long long)stats.sync_reads, (unsigned long long)(stats.sync_wait_us / 1000), stats.sync_top_offset, stats.sync_top_count, (unsigned long long)stats.status_pending_reads);
+        printf("voodoo2: live reads status %llu (in retrace %llu), vRetrace %llu, hvRetrace %llu, FIFO %llu\n", (unsigned long long)stats.live_counts[0], (unsigned long long)stats.live_counts[1], (unsigned long long)stats.live_counts[2], (unsigned long long)stats.live_counts[3], (unsigned long long)stats.live_counts[4]);
+        printf("voodoo2: busy %llu ms, scanout %llu ms in %llu frames, uptime %llu ms, jit %u (%u recompiles), async %u, queue full %llu, split %u (core 2 drew %llu, core 3 %llu)\n", (unsigned long long)(stats.busy_us / 1000), (unsigned long long)(stats.scanout_us / 1000), (unsigned long long)stats.scanouts, (unsigned long long)(time_us_64() / 1000), (unsigned)stats.jit, stats.recompiles, (unsigned)stats.async, (unsigned long long)stats.ring_full_waits, (unsigned)stats.split, (unsigned long long)stats.split_helped, (unsigned long long)stats.split_local);
+        printf("voodoo2: reads %llu writes %llu unsupported reads %llu writes %llu triangles %u swaps %u frames %u\n",
+               (unsigned long long)stats.reads, (unsigned long long)stats.writes,
+               (unsigned long long)stats.unsupported_reads, (unsigned long long)stats.unsupported_writes,
+               stats.triangles, stats.swaps, stats.frame_count);
+        printf("voodoo2: fbiInit0 %08x initEnable %08x pass-through %u video %ux%u front %08x draw %08x aux %08x row %u\n",
+               stats.fbi_init0, stats.init_enable, (unsigned)stats.pass_through, stats.h_disp, stats.v_disp,
+               stats.front_offset, stats.draw_offset, stats.aux_offset, stats.row_width);
+        printf("voodoo2: pixels in %u out %u rejected depth %u alpha %u chroma %u cmdfifo %u packets %u faults %u\n",
+               stats.pixels_in, stats.pixels_out, stats.depth_fail, stats.alpha_fail, stats.chroma_fail,
+               (unsigned)stats.cmdfifo_enabled, stats.cmdfifo_packets, stats.cmdfifo_faults);
+        PCIDevice *device = voodoo2_pci_device(pc->voodoo2);
+        if (device) {
+            uint32_t bar = 0;
+            for (unsigned byte = 0; byte < 4; byte++)
+                bar |= (uint32_t)pci_device_get_config8(device, 0x10 + byte) << (byte * 8);
+            printf("voodoo2: pci devfn %02x config reads %llu command %02x%02x bar0 %08x\n",
+                   pci_device_get_devfn(device), (unsigned long long)pci_device_get_config_reads(device),
+                   pci_device_get_config8(device, PCI_COMMAND + 1), pci_device_get_config8(device, PCI_COMMAND), bar);
+            Voodoo2CommandChange changes[VOODOO2_COMMAND_HISTORY];
+            unsigned total = voodoo2_command_changes(pc->voodoo2, changes, VOODOO2_COMMAND_HISTORY);
+            unsigned kept = total < VOODOO2_COMMAND_HISTORY ? total : VOODOO2_COMMAND_HISTORY;
+            for (unsigned index = 0; index < kept; index++)
+                printf("voodoo2: command change %u/%u %04x -> %04x at %04x:%08x\n",
+                       total - kept + index + 1, total, changes[index].before,
+                       changes[index].after, changes[index].cs, changes[index].eip);
+        }
     } else if (!strcmp(cmd, "sbstats")) {
         uint32_t d[8], starves, minfill;
         char state[384];
@@ -931,6 +1108,58 @@ static void poll_control(PC *pc) {
         char *end;
         uint32_t lin = (uint32_t)strtoul(cmd + 4, &end, 16);
         wyse_cpu_gmem(lin, (uint32_t)strtoul(end, NULL, 10));
+    } else if (!strncmp(cmd, "gphys ", 6)) {
+        void wyse_cpu_gphys(uint32_t phys, uint32_t n);
+        char *end;
+        uint32_t phys = (uint32_t)strtoul(cmd + 6, &end, 16);
+        wyse_cpu_gphys(phys, (uint32_t)strtoul(end, NULL, 10));
+    } else if (!strcmp(cmd, "gpu status")) {
+        intel_gpu_status();
+    } else if (!strncmp(cmd, "gpu copy", 8) || !strncmp(cmd, "gpu fill", 8)) {
+        // "gpu fill 0": the surfaces uncached (memory object control 0)
+        extern uint32_t g_gpu_copy_mocs;
+        g_gpu_copy_mocs = cmd[8] == ' ' ? (uint32_t)strtoul(cmd + 9, NULL, 0) : (3u << 5) | (3u << 3);
+        gpu3d_close();   /* the tests take the ring and drop forcewake */
+        intel_gpu_copy_test(cmd[4] == 'f');
+    } else if (!strcmp(cmd, "gpu blt")) {
+        gpu3d_close();   /* the tests take the ring and drop forcewake */
+        intel_gpu_blt_test();
+    } else if (!strcmp(cmd, "gpu tri") || !strcmp(cmd, "gpu tex")) {
+        void gpu3d_test(bool textured);
+        gpu3d_test(cmd[4] == 't' && cmd[5] == 'e');
+    } else if (!strncmp(cmd, "gpu coherent ", 13)) {
+        extern int g_gpu_coherent;
+        gpu3d_set_coherent(atoi(cmd + 13) != 0);
+        printf("gpu: CPU cache flushes %s\n", g_gpu_coherent ? "off (GPU snoops)" : "on");
+    } else if (!strncmp(cmd, "gpu rd ", 7)) {
+        // "gpu rd 40e0 [count]": GPU MMIO dwords
+        char *end;
+        uint32_t reg = (uint32_t)strtoul(cmd + 7, &end, 16);
+        unsigned count = *end ? (unsigned)strtoul(end, NULL, 10) : 1;
+        for (unsigned i = 0; i < count && i < 64; i++) printf("gpu %06x: %08x\n", reg + i * 4, gpu3d_read(reg + i * 4));
+    } else if (!strncmp(cmd, "gpu wr ", 7)) {
+        char *end;
+        uint32_t reg = (uint32_t)strtoul(cmd + 7, &end, 16);
+        uint32_t value = (uint32_t)strtoul(end, NULL, 16);
+        gpu3d_write(reg, value);
+        printf("gpu %06x <- %08x, now %08x\n", reg, value, gpu3d_read(reg));
+    } else if (!strncmp(cmd, "gpu v2serial", 12)) {
+        extern int g_gpu_v2_serialize;
+        g_gpu_v2_serialize = atoi(cmd + 12);
+        printf("gpu v2: barrier before every draw %s\n", g_gpu_v2_serialize ? "on" : "off");
+    } else if (!strncmp(cmd, "gpu v2test", 10)) {
+        // "gpu v2test [triangles] [mode]"
+        void gpu3d_v2_test(unsigned triangles, int mode);
+        char *end;
+        unsigned triangles = (unsigned)strtoul(cmd + 10, &end, 10);
+        int mode = *end ? (int)strtol(end, NULL, 10) : -1;
+        gpu3d_v2_test(triangles, mode);
+    } else if (!strcmp(cmd, "gpu close")) {
+        void gpu3d_close(void);
+        gpu3d_close();
+    } else if (!strcmp(cmd, "gregs")) {
+        void wyse_cpu_gregs(void);
+        wyse_cpu_gregs();
     } else if (!strncmp(cmd, "trapexc", 7)) {
         void wyse_cpu_trap_exceptions(int on);
         wyse_cpu_trap_exceptions(atoi(cmd + 7));
@@ -1020,6 +1249,26 @@ static void poll_control(PC *pc) {
     } else if (!strncmp(cmd, "ddr ", 4)) {
         void display_ddr(const char *how);
         display_ddr(cmd + 4);
+    } else if (!strncmp(cmd, "scanpeek ", 9)) {
+        char *end;
+        uint32_t x = (uint32_t)strtoul(cmd + 9, &end, 10);
+        uint32_t y = (uint32_t)strtoul(end, NULL, 10);
+        VGAState *v = pc->vga;
+        if (x < SURF_W && y < SURF_H && v->vbe_regs[VBE_DISPI_INDEX_BPP] == 16) {
+            if (g_wyse_vga_core) pc_vga_hold(1);
+            uint32_t a = v->vbe_start_addr * 4 + y * v->vbe_line_offset + x * 2;
+            uint16_t raw = a + 2 <= (uint32_t)v->vga_ram_size ? *(uint16_t *)(v->vga_ram + a) : 0;
+            uint32_t p = y * SURF_W + x;
+            uint32_t converted = surface[p], cached = shown[p];
+            uint32_t dx = off_x + (uint64_t)x * dst_w / SURF_W;
+            uint32_t dy = off_y + (uint64_t)y * dst_h / SURF_H;
+            uint32_t output = gop_fb[dy * gop_stride + dx];
+            uint32_t sh = (y * v->vbe_regs[VBE_DISPI_INDEX_XRES] + x) * 2;
+            uint16_t row = v->vbe_shadow && sh + 2 <= v->vbe_shadow_cap ? *(uint16_t *)(v->vbe_shadow + sh) : 0;
+            if (g_wyse_vga_core) pc_vga_hold(0);
+            printf("scanpeek %u %u: vram %04x shadow %04x surface %08x shown %08x GOP %08x at %u %u start %x pitch %u\n",
+                x, y, raw, row, converted, cached, output, dx, dy, v->vbe_start_addr, v->vbe_line_offset);
+        }
     } else if (!strncmp(cmd, "fbpeek", 6)) {
         // "fbpeek 1000": 16 pixels across that row of the framebuffer, and the picture's place
         uint32_t y = (uint32_t)strtoul(cmd + 6, NULL, 10);
@@ -1168,6 +1417,12 @@ static void report(PC *pc, uint64_t elapsed_us) {
                (unsigned long long)(g_vmx_emul_tsc / tsc_khz), (unsigned long long)(g_vmx_state_tsc / tsc_khz),
                (unsigned long long)(g_vmx_io_tsc / tsc_khz), (unsigned long long)(smi - last_smi),
                (unsigned long long)g_plane_faults, (unsigned long long)g_plane_switches);
+        extern uint64_t g_vmx_fast_mmio;
+        extern uint32_t g_vmx_board_burst16;
+        static uint64_t last_fast;
+        if (g_vmx_fast_mmio != last_fast)
+            printf("10s: board accesses decoded without the interpreter %llu, interpreter bursts take %u.%u accesses\n", (unsigned long long)(g_vmx_fast_mmio - last_fast), g_vmx_board_burst16 / 16, (g_vmx_board_burst16 % 16) * 10 / 16);
+        last_fast = g_vmx_fast_mmio;
         g_plane_faults = g_plane_switches = 0;
         extern uint32_t g_vga_keys[8], g_vga_key_n[8];
         for (int i = 0; i < 8; i++) {
@@ -1357,6 +1612,8 @@ void wyse_main(void) {
     config_note_machine((int)(conf.mem_size >> 20), conf.cpu_gen);
     config_note_vga_mem((int)(conf.vga_mem_size >> 10));
     config_note_fpu(conf.fpu);
+    config_note_voodoo2(conf.voodoo2, conf.voodoo2_mem);
+    config_note_wgpu(wgpu_mb, conf.wgpu_mb != 0);
     config_bind_pc(pc);
     config_apply_all();
     osd_init();
@@ -1395,6 +1652,11 @@ void wyse_main(void) {
     console_log = false;    // the screen belongs to the guest from here on
     splash_end();
     display_layout(g_picture);      // clears the screen for the PC's picture
+    void wyse_cpu_set_speed(int mhz, int gen);
+    int speed_applied = g_cpu_speed_mhz, gen_applied = g_cpu_speed_gen;
+    CpuWindows3DBoost graphics_boost = {0};
+    bool turbo_applied = false;
+    wyse_cpu_set_speed(speed_applied, gen_applied);
     load_bios_and_reset(pc);
 
     // helper cores: the display on core 2
@@ -1402,8 +1664,23 @@ void wyse_main(void) {
     if (cores >= 3 && mp_start(2, pc_vga_core_run)) g_wyse_vga_core = 1;
     // the sound on core 1
     if (cores >= 2 && (have_audio || have_analog)) audio_start(pc);
-    // the headphone FIFO on core 3
-    if (cores >= 4 && have_analog) analog_start();
+    // core 3: the Voodoo2's renderer when the board is in, otherwise the
+    // headphone FIFO (the sound core then feeds the headphones and renders
+    // General MIDI itself, as with fewer cores)
+    if (cores >= 4 && pc->voodoo2 && voodoo_async_enabled) {
+        voodoo_core_pc = pc;
+        if (mp_start(3, voodoo_core_run)) {
+            voodoo_core_started = true;
+            voodoo2_set_async(pc->voodoo2, true);
+            if (g_wyse_vga_core) {
+                extern void (*volatile g_vga_core_idle)(void);
+                voodoo2_set_split(pc->voodoo2, true, true);
+                g_vga_core_idle = voodoo_helper_idle;
+                printf("Voodoo2: odd lines of each triangle on core 2 when it is free\n");
+            }
+            printf("Voodoo2: renderer on core 3, headphones and General MIDI on core 1\n");
+        }
+    } else if (cores >= 4 && have_analog) analog_start();
 
     uint64_t last_report = wyse_ticks_us(), last_input = 0, last_ctl = 0, last_watchdog = 0, last_sync = 0;
     hang_detector_start();
@@ -1459,12 +1736,34 @@ void wyse_main(void) {
             // the headphone level from the mixer menu: 16 is the codec's
             // full +12 dB, each step below 3 dB less, 0 mutes
             // the processor's speed from the menu (or config.ini)
-            static int speed_applied = -2, gen_applied;
-            if (g_cpu_speed_mhz != speed_applied || g_cpu_speed_gen != gen_applied) {
-                void wyse_cpu_set_speed(int mhz, int gen);
-                speed_applied = g_cpu_speed_mhz;
+            // ...unrestricted while the Voodoo2 drives the monitor: its games
+            // were made for far faster processors than the old DOS titles the
+            // speed setting exists for, and the guest's CPU limits them first
+            bool turbo = g_voodoo2_turbo && pc->voodoo2 && voodoo2_owns_display(pc->voodoo2);
+            /* Only accepted, explicitly tagged application 3D work permits
+             * Windows boost. VBE, GDI and driver probing cannot enable it. */
+            bool graphics_active = pc->vga &&
+                (pc->vga->vbe_regs[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_ENABLED) != 0;
+            int boost_was_active = graphics_boost.active;
+            graphics_active = cpu_windows_3d_boost_step(&graphics_boost,
+                (uint32_t)now, pc->vga ? pc->vga->vbe_disable_epoch : 0,
+                pc->wgpu ? wgpu_reg_read(pc->wgpu, WGPU_REG_USER_3D_SUBMITS) : 0,
+                g_graphics_turbo, graphics_active);
+            if (graphics_boost.active != boost_was_active) {
+                printf("Windows 3D boost: %s (base %d MHz, tagged %u)\n",
+                    graphics_boost.active ? "active" : "off", g_cpu_speed_mhz,
+                    graphics_boost.last_count);
+            }
+            int speed_wanted = cpu_speed_effective(g_cpu_speed_mhz,
+                g_graphics_turbo, graphics_active, g_voodoo2_turbo, turbo);
+            if (speed_wanted != speed_applied || g_cpu_speed_gen != gen_applied) {
+                speed_applied = speed_wanted;
                 gen_applied = g_cpu_speed_gen;
                 wyse_cpu_set_speed(speed_applied, gen_applied);
+            }
+            if (turbo != turbo_applied) {
+                printf("Voodoo2: %s\n", turbo ? "3D picture on, processor unrestricted" : "3D picture off, processor follows graphics/base setting");
+                turbo_applied = turbo;
             }
             static int hp_applied = -1;
             if (g_mix_level[MIX_HEADPHONES] != hp_applied) {
@@ -1530,6 +1829,14 @@ void wyse_main(void) {
         }
         if (pc->reset_request) {
             pc->reset_request = 0;
+            /* A new Windows boot must start at the configured base speed,
+             * before pc_step can execute even its first BIOS instruction. */
+            g_cpu_speed_mhz = config_get_speed_mhz();
+            g_cpu_speed_gen = config_get_cpu_gen();
+            speed_applied = g_cpu_speed_mhz;
+            gen_applied = g_cpu_speed_gen;
+            turbo_applied = false;
+            wyse_cpu_set_speed(speed_applied, gen_applied);
             load_bios_and_reset(pc);
         }
         {

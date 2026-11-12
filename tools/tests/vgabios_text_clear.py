@@ -7,6 +7,7 @@ clear a seeded 80x25 page with AH=06 AL=00 CX=0000 DX=184f BH=07.
 Nonzero upper halves and unknown-DS candidates are synthetic, not a replay
 of a complete hardware snapshot. EFLAGS=27002 includes VM/IOPL as requested;
 Unicorn real-mode execution is not an EMM386/VMX environment.
+--vbe-state-only checks INT10 4F04 across a text-mode transition.
 """
 
 import argparse
@@ -46,6 +47,7 @@ class Harness:
         self.index = {0x3c4: 0, 0x3ce: 0, 0x3b4: 0, 0x3d4: 0}
         self.bank = {port: bytearray(256) for port in self.index}
         self.misc = 1
+        self.feature_control = 0
         self.attr = bytearray(32)
         self.attr_index = 0
         self.attr_data = False
@@ -97,6 +99,8 @@ class Harness:
             return 8 if self.reads[(port, size)] & 1 else 0
         if port == 0x3cc:
             return self.misc
+        if port == 0x3ca:
+            return self.feature_control
         if port == 0x3c0:
             return self.attr_index | 0x20
         if port == 0x3c1:
@@ -130,6 +134,8 @@ class Harness:
             self.bank[base][self.index[base]] = value & 0xff
         elif port == 0x3c2:
             self.misc = value & 0xff
+        elif port in (0x3ba, 0x3da):
+            self.feature_control = value & 0xff
         elif port == 0x3c0:
             if self.attr_data:
                 self.attr[self.attr_index] = value & 0xff
@@ -207,10 +213,62 @@ class Harness:
               'INT:', dict(self.interrupts))
 
 
+def check_vbe_state_restore(rom):
+    for mode in (0x111, 0x114, 0x117):
+        for mask in (8, 15):
+            harness = Harness(rom)
+            try:
+                harness.phase = 'VBE state boot'
+                harness.execute(3, boot=True)
+                entry, segment = struct.unpack('<HH', harness.uc.mem_read(0x40, 4))
+                if segment != 0xc000:
+                    raise RuntimeError('unexpected INT10 segment')
+                harness.phase = 'VBE mode setup'
+                _, result = harness.execute(entry, values={'eax': 0x4f02,
+                    'ebx': mode | 0xc000})
+                if int(result['eax'], 16) & 0xffff != 0x4f:
+                    raise AssertionError('VBE mode setup failed')
+                harness.dispi.update({5: 2, 6: 1280, 8: 16, 9: 24})
+                expected = {index: harness.dispi[index] for index in (1, 2, 3, 4, 5, 6, 8, 9)}
+                harness.phase = 'VBE state size'
+                _, result = harness.execute(entry, values={'eax': 0x4f04,
+                    'ecx': mask, 'edx': 0})
+                blocks = int(result['ebx'], 16) & 0xffff
+                if int(result['eax'], 16) & 0xffff != 0x4f or not 0 < blocks <= 32:
+                    raise AssertionError('invalid VBE state size')
+                harness.phase = 'VBE state save'
+                _, result = harness.execute(entry, values={'eax': 0x4f04,
+                    'ecx': mask, 'edx': 1, 'ebx': 0x7000})
+                if int(result['eax'], 16) & 0xffff != 0x4f:
+                    raise AssertionError('VBE state save failed')
+                harness.phase = 'VBE state text transition'
+                harness.execute(entry, values={'eax': 3})
+                if harness.dispi[4] & 1:
+                    raise AssertionError('mode3 did not disable VBE')
+                harness.dispi.update({1: 320, 2: 200, 3: 8, 5: 0, 6: 320, 8: 0, 9: 0})
+                harness.phase = 'VBE state restore'
+                _, result = harness.execute(entry, values={'eax': 0x4f04,
+                    'ecx': mask, 'edx': 2, 'ebx': 0x7000})
+                actual = {index: harness.dispi[index] for index in expected}
+                if int(result['eax'], 16) & 0xffff != 0x4f or actual != expected:
+                    raise AssertionError(f'VBE restore mismatch: {expected=} {actual=}')
+                print(f'PASS VBE state mode={mode:04x} mask={mask:02x} blocks={blocks}:', actual)
+            except AssertionError as exc:
+                print('FAIL:', exc)
+                return 1
+            except (UcError, RuntimeError) as exc:
+                print('INCOMPLETE:', exc)
+                harness.diagnostics()
+                return 2
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('rom', nargs='?', type=Path,
                         default=Path(__file__).resolve().parents[2] / 'disks/386/vgabios.bin')
+    parser.add_argument('--vbe-state-only', action='store_true',
+                        help='check VBE state save/text transition/restore only')
     args = parser.parse_args()
     rom = args.rom.read_bytes()
     if rom[:2] != b'\x55\xaa' or len(rom) != rom[2] * 512 or sum(rom) % 256:
@@ -218,6 +276,8 @@ def main():
     if rom[0x9a00:0x9a04] != b'\x3d\x0a\x4f\x74':
         parser.error('expected actual locally patched SeaVGABIOS at 9a00')
     print('ROM:', args.rom, 'bytes:', len(rom), 'SHA256:', hashlib.sha256(rom).hexdigest())
+    if args.vbe_state_only:
+        return check_vbe_state_restore(rom)
     h = Harness(rom)
     try:
         h.phase = 'boot'

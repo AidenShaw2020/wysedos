@@ -126,6 +126,7 @@ static long double fromf80(F80 f80)
 #endif
 
 struct FPU {
+	FpuNativeStore *native_store;
 	u16 cw, sw; // TODO: tag word
 	unsigned int top;
 
@@ -157,6 +158,11 @@ FPU *fpu_new()
 void fpu_delete(FPU *fpu)
 {
 	free(fpu);
+}
+
+void fpu_set_native_store(FPU *fpu, FpuNativeStore *store)
+{
+	if (fpu) fpu->native_store = store;
 }
 
 static double fpget(FPU *fpu, int i)
@@ -447,6 +453,8 @@ static void fparith(FPU *fpu, int group, unsigned int d, double a, double b)
 
 bool fpu_exec2(FPU *fpu, void *cpu, bool opsz16, int op, int group, int seg, uint32_t addr)
 {
+	if (fpu->native_store && (op == 1 || op == 5) && (group == 2 || group == 3))
+		return fpu->native_store(cpu, op == 5, group == 3, seg, addr);
 	double a;
 	switch (op) {
 	case 0: {

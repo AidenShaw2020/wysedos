@@ -26,6 +26,19 @@ installer rebuilds its runtime tree and prepares DRIVERS. For a distinct image:
 ./tools/installer/build.sh out/wysedos-installer-test.img
 ```
 
+The 3D installer uses checked-in `tools/installer/runtime.ini`, not the local
+development machine's mounted-media configuration. Runtime assets use an
+explicit allowlist so diagnostic images, configuration backups and old EFI
+copies do not enter the release image. Defaults are 128 MB guest RAM,
+Pentium/133 and independent DOS/Windows 3D boost switches.
+
+The Velocity import includes a driver archive and corresponding source
+archive under `drivers/windows9x/velocity9x`. Maintainers generate them with
+`tools/installer/package_velocity.py` after running the fork's build gates
+and native checks. Open Watcom and the Microsoft DDK are separate build
+dependencies and are not redistributed. Installer package hashes are pinned
+in `prepare_drivers.py`; regenerate manifests whenever a bundled file changes.
+
 Outputs, captures, OS images and rig state are ignored by Git. Incremental
 builds use source timestamps and a shared-header stamp. After restoring old
 source with old timestamps, remove the repository's generated `efi/build`

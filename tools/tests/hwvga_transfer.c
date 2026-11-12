@@ -98,10 +98,8 @@ static void surface_setup(void) {
     }
     /* All 2000 cells initially old; text CPU address 2*i -> physical dword 2*i. */
     for(unsigned i=0;i<2000;i++) physical[2*i]=(physical[2*i]&0xffff0000u)|0x074f;
-    /* vga_text_refresh's full_update || update_palette16 short-circuits;
-     * seed the palette so forced-render controls cannot pass on black pixels. */
-    update_palette16(&state,state.last_palette);
     hwvga_fetch(&state);vga_text_refresh(&state,redraw,NULL,1);
+    CHECK(surface[0]!=0 && state.last_palette[7]!=0);
 }
 static void unchanged_native_trace(void) {
     reset();surface_setup();
@@ -266,9 +264,140 @@ static void planar_graphics_backend(void) {
     safe_planar=1;
     puts("PASS planar graphics backend: 16-color mode and latch copy use software; all planes survive Mode X return; chain4 stays RAM; explicit native override remains");
 }
+static void chain4_planar_handoff(void) {
+    for(unsigned trapped=0;trapped<2;trapped++) {
+    reset();state.sr[4]=0x0e;state.sr[2]=15;state.gr[5]=0x40;state.gr[6]=5;
+    hw_update(false);
+    CHECK(win_mode==WIN_RAM && ram_13h);
+    for(unsigned index=0;index<0x10000;index++)
+        ((uint8_t *)model)[index]=(uint8_t)(index*37+(index>>8));
+    hwvga_store_chain4((uint8_t *)model);
+    memcpy(saved,physical,sizeof saved);
+    if(trapped) {
+        state.sr[2]=1;hw_update(false);
+        CHECK(win_mode==WIN_EMU && ram_13h);
+    }
+    state.sr[4]=6;state.gr[5]=0;
+    hw_update(false);
+    CHECK(win_mode==WIN_EMU && ram_planar && !ram_13h);
+    CHECK(!memcmp(model,saved,sizeof saved));
+    state.gr[5]=0x40;hw_update(false);
+    CHECK(win_mode==WIN_HW && !memcmp(physical,saved,sizeof saved));
+    }
+    puts("PASS direct and trapped chain4 -> software planar -> native Mode X preserve all VGA planes");
+    reset();
+    state.vga_ram_size=0x100000;
+    state.vbe_regs[VBE_DISPI_INDEX_XRES]=640;
+    state.vbe_regs[VBE_DISPI_INDEX_YRES]=480;
+    state.vbe_regs[VBE_DISPI_INDEX_BPP]=15;
+    vbe_write(&state,0,VBE_DISPI_INDEX_ENABLE);
+    vbe_write(&state,1,VBE_DISPI_ENABLED);
+    CHECK(!(state.gr[VGA_GFX_MODE]&0x10));
+    vbe_write(&state,0,VBE_DISPI_INDEX_BANK);
+    vbe_write(&state,1,2);
+    /* SeaVGABIOS 4F02 tail writes after DISPI ENABLE must not retire VBE. */
+    vga_ioport_write(&state,0x3ce,6);vga_ioport_write(&state,0x3cf,0x05);
+    vga_ioport_write(&state,0x3c4,2);vga_ioport_write(&state,0x3c5,0x0f);
+    vga_ioport_write(&state,0x3c4,4);vga_ioport_write(&state,0x3c5,0x0a);
+    vga_ioport_write(&state,0x3ce,5);vga_ioport_write(&state,0x3cf,0x40);
+    CHECK(vbe_enabled(&state) && state.bank_offset==0x20000);
+    vga_ioport_write(&state,0x3ce,6);vga_ioport_write(&state,0x3cf,0x07);
+    CHECK(vbe_enabled(&state) && state.bank_offset==0x20000);
+    vga_ioport_write(&state,0x3cf,0x05);
+    CHECK(vbe_enabled(&state) && state.bank_offset==0x20000);
+    vga_mem_write16(&state,0,0x7fff);
+    CHECK(*(uint16_t *)((uint8_t *)model+0x20000)==0x7fff);
+    vbe_write(&state,0,VBE_DISPI_INDEX_BANK);
+    vbe_write(&state,1,9);
+    CHECK(vbe_enabled(&state) && state.bank_offset==0x90000);
+    state.vga_ram_size=VGA_BYTES;
+    vga_ioport_write(&state,0x3c4,4);vga_ioport_write(&state,0x3c5,0x0a);
+    vga_ioport_write(&state,0x3ce,5);vga_ioport_write(&state,0x3cf,0x50);
+    vga_ioport_write(&state,0x3ce,6);vga_ioport_write(&state,0x3cf,0x05);
+    CHECK(vbe_enabled(&state) && state.bank_offset==0x90000);
+    vga_ioport_write(&state,0x3c4,4);vga_ioport_write(&state,0x3c5,0x06);
+    CHECK(!vbe_enabled(&state) && state.bank_offset==0);
+    vga_ioport_write(&state,0x3c4,4);vga_ioport_write(&state,0x3c5,0x0a);
+    vga_ioport_write(&state,0x3d4,0x13);vga_ioport_write(&state,0x3d5,0x50);
+    CHECK(!vbe_enabled(&state) && state.bank_offset==0);
+    const uint8_t legacy_gr6[] = {0x04,0x01,0x09,0x0d,0x0e};
+    for (unsigned index=0;index<sizeof(legacy_gr6);index++) {
+        state.vbe_regs[VBE_DISPI_INDEX_ENABLE] |= VBE_DISPI_ENABLED;
+        state.bank_offset=0x90000;
+        vga_ioport_write(&state,0x3ce,6);vga_ioport_write(&state,0x3cf,legacy_gr6[index]);
+        CHECK(!vbe_enabled(&state) && state.bank_offset==0);
+    }
+    vga_ioport_write(&state,0x3cf,0x05);
+    hw_update(false);
+    CHECK(win_mode==WIN_RAM && ram_13h);
+    puts("PASS VBE BIOS tail writes preserve VBE; direct legacy reprogramming retires active VBE banking");
+}
+static void vbe_depth_shadow(void) {
+    reset();
+    uint32_t pixels[32]={0};
+    FBDevice display={0};display.width=8;display.height=4;display.stride=32;
+    display.fb_data=(uint8_t *)pixels;state.fb_dev=&display;
+    state.palette[0]=state.palette[1]=state.palette[2]=63;
+    state.vbe_regs[VBE_DISPI_INDEX_XRES]=8;state.vbe_regs[VBE_DISPI_INDEX_YRES]=4;
+    state.vbe_regs[VBE_DISPI_INDEX_BPP]=8;
+    vbe_write(&state,0,VBE_DISPI_INDEX_ENABLE);vbe_write(&state,1,VBE_DISPI_ENABLED);
+    vga_refresh(&state,redraw,NULL,1);
+    for(unsigned index=0;index<32;index++) CHECK(pixels[index]==0x00ffffff);
+    uint8_t retained[64];memset(retained,0x5a,sizeof retained);
+    memcpy(model,retained,sizeof retained);
+    vbe_write(&state,0,VBE_DISPI_INDEX_ENABLE);vbe_write(&state,1,0);
+    CHECK(!memcmp(model,retained,sizeof retained));
+    vbe_write(&state,1,VBE_DISPI_GETCAPS);
+    CHECK(!memcmp(model,retained,sizeof retained));
+    vbe_write(&state,1,VBE_DISPI_ENABLED|VBE_DISPI_NOCLEARMEM);
+    CHECK(!memcmp(model,retained,sizeof retained));
+    vbe_write(&state,1,VBE_DISPI_ENABLED);
+    CHECK(!memcmp(model,retained,sizeof retained));
+    vbe_write(&state,1,0);
+    puts("PASS VBE disable, capability queries and active-enable writes preserve framebuffer memory");
+    vbe_write(&state,0,VBE_DISPI_INDEX_BPP);vbe_write(&state,1,15);
+    vbe_write(&state,0,VBE_DISPI_INDEX_ENABLE);vbe_write(&state,1,VBE_DISPI_ENABLED);
+    vga_refresh(&state,redraw,NULL,0);
+    for(unsigned index=0;index<32;index++) CHECK(pixels[index]==0);
+    vbe_write(&state,0,VBE_DISPI_INDEX_ENABLE);vbe_write(&state,1,0);
+    vga_graphic_refresh(&state,redraw,NULL,1);
+    for(unsigned index=0;index<5;index++) CHECK(state.vbe_shadow_key[index]==0);
+    free(state.vbe_shadow);
+    puts("PASS same-size 8 -> 15 bpp invalidates zero-filled shadow rows");
+}
+/* Windows 98 VDD, physically traced (0028:c0259d30..d93) when a windowed DOS
+ * box opens over the 800x600x32 LFB desktop: plane-2 font access, then the
+ * exact restore. The LFB desktop must keep scanning out throughout. */
+static void vbe_lfb_survives_vdd_font_access(void) {
+    reset();
+    state.vga_ram_size=0x800000;
+    state.vbe_regs[VBE_DISPI_INDEX_XRES]=800;
+    state.vbe_regs[VBE_DISPI_INDEX_YRES]=600;
+    state.vbe_regs[VBE_DISPI_INDEX_BPP]=32;
+    vbe_write(&state,0,VBE_DISPI_INDEX_ENABLE);
+    vbe_write(&state,1,VBE_DISPI_ENABLED|VBE_DISPI_LFB_ENABLED|VBE_DISPI_NOCLEARMEM);
+    vga_ioport_write(&state,0x3c4,2);vga_ioport_write(&state,0x3c5,0x0f);
+    vga_ioport_write(&state,0x3c4,4);vga_ioport_write(&state,0x3c5,0x0a);
+    vga_ioport_write(&state,0x3ce,5);vga_ioport_write(&state,0x3cf,0x40);
+    vga_ioport_write(&state,0x3ce,6);vga_ioport_write(&state,0x3cf,0x07);
+    static const uint16_t save[] = {0x0302,0x0204,0x0000,0x0001,0x0002,0x0003,0x0004,0x5005,0x0f06,0x0f07,0xff08};
+    static const uint16_t restore[] = {0x0f02,0x0a04,0x0000,0x0001,0x0002,0x0003,0x0004,0x4005,0x0706,0x0f07,0xff08};
+    for (unsigned pass=0;pass<2;pass++) {
+        const uint16_t *list=pass?restore:save;
+        for (unsigned index=0;index<11;index++) {
+            uint32_t port=index<2?0x3c4:0x3ce;
+            vga_ioport_write(&state,port,list[index]&0xff);
+            vga_ioport_write(&state,port+1,list[index]>>8);
+            CHECK(vbe_enabled(&state));
+        }
+    }
+    CHECK(state.vbe_regs[VBE_DISPI_INDEX_XRES]==800 && state.vbe_regs[VBE_DISPI_INDEX_BPP]==32);
+    puts("PASS LFB VBE desktop survives the Windows 98 VDD plane-2 font save/restore sequence");
+}
 int main(void) {
     transfer_controls();unchanged_native_trace();concrete_handoff_loss();surface_handoff_and_proposal();old_new_selector_loss();
-    vbe_clear_handoff();planar_graphics_backend();
+    vbe_clear_handoff();planar_graphics_backend();chain4_planar_handoff();vbe_depth_shadow();
+    vbe_lfb_survives_vdd_font_access();
     puts("PASS VGA transfers: native/planar controls and VBE clear/display-core transition regressions");
     return 0;
 }

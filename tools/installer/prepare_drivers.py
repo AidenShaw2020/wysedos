@@ -12,8 +12,8 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'tools/installer/out'
 DEST = OUT / 'DRIVERS'
 PACKAGES = {
-    'VGA': ('drivers/windows9x/vmdisp9x/vmdisp9x-1.2025.0.119b-driver-2d.zip',
-            'e0d698a6089347a6a619ed439c092f247392fbafac6b342f4651c1380911fb23'),
+    'VELOCITY': ('drivers/windows9x/velocity9x/velocity9x-wysedos-g5j-driver.zip',
+                 'd35b0f07c97d0ec0dd079ad64efbcc68764ee3c4699a8ef52d2ceaf0aec99237'),
     'USBDOS': ('drivers/dos/usbdos/usbdos.zip',
                '45937257ac508443b8c30d31e9b492e50ee50ccc9250e7f8d831fd4aa3cf46ba'),
     'CTMOUSE': ('drivers/dos/ctmouse.zip',

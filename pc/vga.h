@@ -31,6 +31,7 @@ void vga_ioport_write(VGAState *s, uint32_t addr, uint32_t val);
 uint32_t vga_ioport_read(VGAState *s, uint32_t addr);
 
 void vbe_write(VGAState *s, uint32_t offset, uint32_t val);
+void vga_reset_display(VGAState *s);
 uint32_t vbe_read(VGAState *s, uint32_t offset);
 
 void vga_mem_write(VGAState *s, uint32_t addr, uint8_t val);
@@ -252,6 +253,7 @@ struct VGAState {
     /* VBE extension */
     uint16_t vbe_index;
     uint16_t vbe_regs[VBE_DISPI_INDEX_NB];
+    uint32_t vbe_disable_epoch; /* Revokes delayed boost on every text return. */
     uint32_t vbe_start_addr;
     uint32_t vbe_line_offset;
 

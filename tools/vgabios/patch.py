@@ -25,13 +25,20 @@ def assemble():
         subprocess.run([os.path.join(LLVM, "clang"), "--target=i386-unknown-elf", "-c",
                         os.path.join(HERE, "vbe_pm.S"), "-o", obj], check=True)
         subprocess.run([os.path.join(LLVM, "llvm-objcopy"), "-O", "binary", "-j", ".text", obj, out], check=True)
-        return open(out, "rb").read()
+        symbols = {}
+        listing = subprocess.check_output([os.path.join(LLVM, "llvm-nm"),
+                                           "--defined-only", obj], text=True)
+        for line in listing.splitlines():
+            parts = line.split()
+            if len(parts) == 3:
+                symbols[parts[2]] = int(parts[0], 16)
+        return open(out, "rb").read(), symbols
 
 
 def main():
     rom = bytearray(open(os.path.join(HERE, "seavgabios.orig.bin"), "rb").read())
     assert len(rom) == BASE and rom[2] * 512 == BASE, "not the SeaVGABIOS build this was made for"
-    blob = assemble()
+    blob, symbols = assemble()
     bank_hook = blob.find(b"\x9c\x9a\x97\x55\x00\xc0\x9d\xcb")
     assert bank_hook >= 0, "missing real-mode bank flags hook"
     assert rom[0x40b1:0x40b5] == b"\x97\x55\x00\x00", "unexpected WinFuncPtr offset"
@@ -53,7 +60,11 @@ def main():
         assert blob[jmp] == 0xe9 and (hook + 8 + int.from_bytes(blob[jmp + 1:jmp + 3], "little")) & 0xffff == dispatch
         d = dispatch - BASE
         assert blob[d:d+4] == b"\x3d\x10\x4f\x74"
-        assert blob[d+5] == 0xe9 and (dispatch + 8 + int.from_bytes(blob[d+6:d+8], "little")) & 0xffff == entry
+        legacy = BASE + symbols[("legacy_10", "legacy_10_extrastack")[i]]
+        assert blob[d+5] == 0xe9 and (dispatch + 8 + int.from_bytes(blob[d+6:d+8], "little")) & 0xffff == legacy
+        wrapper = legacy - BASE
+        assert blob[wrapper] == 0xe8 and blob[wrapper+3] == 0xe9
+        assert (legacy + 6 + int.from_bytes(blob[wrapper+4:wrapper+6], "little")) & 0xffff == entry
         rom[at + 2:at + 6] = hook.to_bytes(4, "little")
     rom += blob
     rom += bytes(-(len(rom) + 1) % 512 + 1)     # room for the checksum byte

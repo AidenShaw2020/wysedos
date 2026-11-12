@@ -260,7 +260,23 @@ const DriveInfo* diskui_get_drive_info(DiskUIDrive drive) {
 // Drawing
 // --------------------------------------------------------------------------
 
+/*
+ * Every redraw builds the whole picture again: the OSD keeps a list of the
+ * panels drawn since it was last cleared, OSD_MAX_PANELS long, and the panel
+ * drawn last owns its cells.  Drawn over the previous picture, each cursor
+ * move added another copy of the panel; once the list was full the main menu
+ * coming back from the file browser was not added at all, and the browser's
+ * stale panel kept the FDD-1 row (its top edge) until the menu was opened
+ * again.
+ */
+static void draw_main_panel(void);
+
 static void draw_main_menu(void) {
+    osd_clear();
+    draw_main_panel();
+}
+
+static void draw_main_panel(void) {
 
     osd_draw_box(MENU_X, MENU_Y, MENU_W, MENU_H, OSD_ATTR_BORDER);
     osd_fill(MENU_X + 1, MENU_Y + 1, MENU_W - 2, MENU_H - 2, ' ', OSD_ATTR_NORMAL);
@@ -337,6 +353,8 @@ static void draw_main_menu(void) {
 }
 
 static void draw_file_browser(void) {
+    osd_clear();
+    draw_main_panel();
 
     osd_draw_box(FILE_X, FILE_Y, FILE_W, FILE_H, OSD_ATTR_BORDER);
     osd_fill(FILE_X + 1, FILE_Y + 1, FILE_W - 2, FILE_H - 2, ' ', OSD_ATTR_NORMAL);
@@ -553,6 +571,8 @@ static void select_file(void) {
     draw_main_menu();
 }
 static void draw_usb_confirm(void) {
+    osd_clear();
+    draw_main_panel();
     osd_draw_box(FILE_X,FILE_Y,FILE_W,FILE_H,OSD_ATTR_BORDER);
     osd_fill(FILE_X+1,FILE_Y+1,FILE_W-2,FILE_H-2,' ',OSD_ATTR_NORMAL);
     osd_print_center(FILE_Y," USB media ownership ",OSD_ATTR_HIGHLIGHT);

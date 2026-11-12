@@ -39,6 +39,12 @@ static int cfg_joystick     = 0;
 static int cfg_power_restore = POWER_RESTORE_ON;
 static int cfg_power_button  = 0;
 static int cfg_picture       = PICTURE_4_3;
+static int cfg_voodoo2       = 0;
+static int cfg_voodoo2_mem   = 12;
+static int cfg_wgpu_mb       = 64;
+static int cfg_wgpu_enabled  = 0;
+static int cfg_voodoo2_turbo = 1;
+static int cfg_graphics_turbo = 0;
 
 /* The mixer: a level for each sound source and for the headphone output,
  * 0..16 with 16 as unity (for the headphones, the codec's full +12 dB). */
@@ -54,6 +60,8 @@ int g_mouse_invert_y = 0;
 int g_picture = PICTURE_4_3;
 int g_cpu_speed_mhz, g_cpu_speed_gen;   /* read by the host: 0 MHz = no limit */
 int g_mouse_speed = 100;
+int g_voodoo2_turbo = 1;
+int g_graphics_turbo = 0;
 
 void config_bind_pc(PC *pc) { bound_pc = pc; }
 
@@ -66,6 +74,8 @@ static void apply_live(void)
     g_cpu_speed_mhz = config_get_speed_mhz();
     g_cpu_speed_gen = cfg_cpu_gen;
     g_mouse_speed = cfg_mouse_speed;
+    g_voodoo2_turbo = cfg_voodoo2_turbo;
+    g_graphics_turbo = cfg_graphics_turbo;
     if (!bound_pc) return;
     bound_pc->pcspk_enabled    = cfg_pcspeaker;
     bound_pc->adlib_enabled    = cfg_adlib;
@@ -114,6 +124,68 @@ LIVE_SETTING(joystick,     cfg_joystick)
 LIVE_SETTING(power_restore, cfg_power_restore)
 LIVE_SETTING(power_button, cfg_power_button)
 LIVE_SETTING(picture,      cfg_picture)
+LIVE_SETTING(voodoo2_turbo, cfg_voodoo2_turbo)
+LIVE_SETTING(graphics_turbo, cfg_graphics_turbo)
+
+/* The board is part of the machine: fitting it or changing its memory means
+ * building the machine again. */
+static const int voodoo2_mem_options[] = { 8, 12 };
+static const int wgpu_mem_options[] = { 32, 64, 128 };
+
+int config_get_wgpu(void) { return cfg_wgpu_enabled; }
+void config_set_wgpu(int enabled)
+{
+    enabled = enabled != 0;
+    if (cfg_wgpu_enabled == enabled) return;
+    cfg_wgpu_enabled = enabled; changed = true; restart_needed = true;
+}
+
+const int *config_wgpu_mem_options(int *count)
+{
+    *count = (int)(sizeof wgpu_mem_options / sizeof *wgpu_mem_options);
+    return wgpu_mem_options;
+}
+
+int config_get_wgpu_mem(void) { return cfg_wgpu_mb; }
+void config_set_wgpu_mem(int mb)
+{
+    if (mb != 32 && mb != 64 && mb != 128) return;
+    if (cfg_wgpu_mb == mb) return;
+    cfg_wgpu_mb = mb; changed = true; restart_needed = true;
+}
+
+void config_note_wgpu(int mb, int enabled)
+{
+    int valid = mb == 32 || mb == 64 || mb == 128;
+    cfg_wgpu_mb = valid ? mb : 64;
+    cfg_wgpu_enabled = valid && enabled;
+}
+
+const int *config_voodoo2_mem_options(int *count)
+{
+    *count = (int)(sizeof voodoo2_mem_options / sizeof *voodoo2_mem_options);
+    return voodoo2_mem_options;
+}
+
+int config_get_voodoo2(void) { return cfg_voodoo2; }
+void config_set_voodoo2(int fitted)
+{
+    if (cfg_voodoo2 == fitted) return;
+    cfg_voodoo2 = fitted; changed = true; restart_needed = true;
+}
+
+int config_get_voodoo2_mem(void) { return cfg_voodoo2_mem; }
+void config_set_voodoo2_mem(int mb)
+{
+    if (cfg_voodoo2_mem == mb) return;
+    cfg_voodoo2_mem = mb; changed = true; restart_needed = true;
+}
+
+void config_note_voodoo2(int fitted, int mem_mb)
+{
+    cfg_voodoo2 = fitted != 0;
+    if (mem_mb == 8 || mem_mb == 12) cfg_voodoo2_mem = mem_mb;
+}
 
 /* These two describe the machine rather than its devices, so they cannot
  * take effect until it is built again. */
@@ -255,6 +327,8 @@ void config_set_from_ini(const char *name, const char *value)
     else if (!strcmp(name, "power_button")) cfg_power_button = v != 0;
     else if (!strcmp(name, "speed"))        cfg_speed = v < 0 ? -1 : v;
     else if (!strcmp(name, "picture"))      cfg_picture = v < 0 || v > 2 ? PICTURE_4_3 : v;
+    else if (!strcmp(name, "voodoo2_turbo")) cfg_voodoo2_turbo = v != 0;
+    else if (!strcmp(name, "graphics_turbo")) cfg_graphics_turbo = v != 0;
     else
         for (int i = 0; i < MIX_COUNT; i++)
             if (!strcmp(name, mix_keys[i])) cfg_mix[i] = v < 0 ? 0 : v > 16 ? 16 : v;
@@ -324,6 +398,10 @@ static bool write_config(void)
     ok &= put(&fp, line);
     ok &= putf(&fp, "cpu", cfg_cpu_gen);
     ok &= putf(&fp, "fpu", cfg_fpu);
+    ok &= putf(&fp, "voodoo2", cfg_voodoo2);
+    ok &= putf(&fp, "voodoo2_mem", cfg_voodoo2_mem);
+    ok &= putf(&fp, "wgpu", cfg_wgpu_mb);
+    ok &= putf(&fp, "wgpu_enabled", cfg_wgpu_enabled);
     ok &= put(&fp, "bios=bios.bin\n");
     ok &= put(&fp, "vga_bios=vgabios.bin\n");
 
@@ -364,6 +442,8 @@ static bool write_config(void)
     ok &= putf(&fp, "power_restore", cfg_power_restore);
     ok &= putf(&fp, "power_button", cfg_power_button);
     ok &= putf(&fp, "picture", cfg_picture);
+    ok &= putf(&fp, "voodoo2_turbo", cfg_voodoo2_turbo);
+    ok &= putf(&fp, "graphics_turbo", cfg_graphics_turbo);
     if (cfg_speed >= 0) ok &= putf(&fp, "speed", cfg_speed);
 
     return f_close(&fp) == FR_OK && ok;

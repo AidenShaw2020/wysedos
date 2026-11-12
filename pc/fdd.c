@@ -10,8 +10,8 @@
  * Design notes:
  *   • Full MSR-based handshake (RQM/DIO/CB) so poll-mode drivers work.
  *   • FIFO buffer (16 bytes) for command/result bytes.
- *   • Delayed IRQ: raised one fdc_tick() after command completion so the
- *     guest BIOS has time to set up its ISR before we fire.
+ *   • Completion IRQ accompanies result availability; reset/seek IRQs
+ *     are deferred. READ ID has monotonic-clock rotational latency.
  *   • DMA transfer handler registered on channel 2; DREQ/DACK cycle
  *     triggered by SEEK→transfer commands.
  *   • media-change (DIR bit 7) tracked per-drive.
@@ -42,6 +42,7 @@
 #define FIFO_DEPTH        16      /* bytes in command / result FIFO     */
 #define FDC_SECTOR_SIZE   512     /* always 512 for FDD images          */
 #define FDC_IRQ_DELAY_MS  1       /* ticks before IRQ fires             */
+#define FDC_READ_ID_DELAY_US 20000
 
 /* ------------------------------------------------------------------ */
 /*  MSR bits (0x3F4, read)                                              */
@@ -125,6 +126,7 @@ typedef struct {
     uint8_t  dir;            /* direction of last seek (+1 / -1)       */
     uint8_t  media_changed;  /* DIR bit: set on insert/eject           */
     uint8_t  seeking;        /* seek in progress flag                  */
+    uint8_t  next_id_sector;
 } FDCDrive;
 
 /* ------------------------------------------------------------------ */
@@ -168,6 +170,8 @@ struct FDCState {
      * for each of 4 logical drives in turn.  SeaBIOS calls SENSEI 4 times
      * and expects 0xC0 each time; on the 5th call it gets 0x80 and stops. */
     int      reset_sensei;   /* number of queued reset SENSEI responses  */
+    uint64_t read_id_deadline;
+    uint8_t  read_id_pending;
 
     /* DMA transfer state */
     int      dma_active;     /* DMA transfer in progress                */
@@ -305,6 +309,9 @@ static void fdc_finish_rw(FDCState *s, uint8_t st0, uint8_t st1, uint8_t st2,
     uint8_t res[7] = { st0, st1, st2, cyl, head, sect, n };
     fdc_set_result(s, res, 7);
     fdc_schedule_irq(s, st0, cyl);
+    s->irq_pending = 0;
+    s->irq_delay = 0;
+    fdc_raise_irq(s);
 }
 
 /* ------------------------------------------------------------------ */
@@ -331,6 +338,7 @@ static void fdc_reset(FDCState *s, int software_reset)
     s->result_len   = 0;
     s->irq_pending  = 0;
     s->int_result_valid = 0;
+    s->read_id_pending = 0;
 
     /* Abort any in-progress DMA transfer cleanly */
     if (s->dma_active) {
@@ -341,6 +349,7 @@ static void fdc_reset(FDCState *s, int software_reset)
     for (int i = 0; i < FDC_MAX_DRIVES; i++) {
         s->drive[i].seeking = 0;
         s->drive[i].track   = 0;
+        s->drive[i].next_id_sector = 1;
     }
 
     /* After a software reset (DOR bit2: 0->1), the FDC signals completion
@@ -383,6 +392,7 @@ static int fdc_dma_handler(void *opaque, int nchan, int dma_pos, int dma_len)
     int drivenum = s->dma_drivenum;
     int transferred = 0;
     int bytes_remaining = dma_len - dma_pos;  /* bytes still needed by DMA */
+    uint8_t seek_status = 0;
 
     while (bytes_remaining > 0) {
         /* Load next sector into buffer when current one is exhausted */
@@ -444,8 +454,11 @@ static int fdc_dma_handler(void *opaque, int nchan, int dma_pos, int dma_len)
             if (s->cur_sector > spt || s->cur_sector > s->eot) {
                 s->cur_sector = 1;
                 s->cur_head ^= 1;
-                if (s->cur_head == 0)
+                if (s->cur_head == 0) {
                     s->cur_cyl++;
+                    s->drive[drivenum].track = s->cur_cyl;
+                    seek_status = ST0_SE;
+                }
             }
         }
     }
@@ -460,7 +473,7 @@ static int fdc_dma_handler(void *opaque, int nchan, int dma_pos, int dma_len)
     s->dma_active = 0;
     i8257_dma_release_DREQ((IsaDma *)s->dma, FDC_DMA_CHAN);
     {
-        uint8_t st0 = (s->cur_head ? ST0_HD : 0) | (uint8_t)(drivenum & ST0_DS);
+        uint8_t st0 = seek_status | (s->cur_head ? ST0_HD : 0) | (uint8_t)(drivenum & ST0_DS);
         fdc_finish_rw(s, st0, 0, 0,
                       s->cur_cyl, s->cur_head, s->cur_sector, 2 /*N=512*/);
     }
@@ -616,8 +629,8 @@ static void fdc_execute_command(FDCState *s)
             fdc_lower_irq(s);
         } else {
             /* No interrupt pending — IC=invalid terminates SENSEI loop */
-            uint8_t res[2] = { ST0_IC_INVAL, 0 };
-            fdc_set_result(s, res, 2);
+            uint8_t res[1] = { ST0_IC_INVAL };
+            fdc_set_result(s, res, 1);
         }
         break;
 
@@ -748,6 +761,13 @@ static void fdc_execute_command(FDCState *s)
 
     /* ---- READ ID (0Ah) ------------------------------------------- */
     case 0x0A: {
+        if (!s->read_id_pending) {
+            s->read_id_pending = 1;
+            s->read_id_deadline = time_us_64() + FDC_READ_ID_DELAY_US;
+            s->phase = PHASE_EXEC;
+            break;
+        }
+        s->read_id_pending = 0;
         if (!fdc_drive_ready(dn)) {
             uint8_t st0 = ST0_IC_ABNORM | ST0_NR | (uint8_t)(dn);
             fdc_finish_rw(s, st0, ST1_MA, 0,
@@ -755,8 +775,12 @@ static void fdc_execute_command(FDCState *s)
             break;
         }
         uint8_t st0 = (head ? ST0_HD : 0) | (uint8_t)(dn & ST0_DS);
+        uint16_t sectors = fdd_get_sects((uint8_t)dn);
+        uint8_t sector = s->drive[dn].next_id_sector;
+        if (!sector || sector > sectors) sector = 1;
+        s->drive[dn].next_id_sector = sector < sectors ? sector + 1 : 1;
         fdc_finish_rw(s, st0, 0, 0,
-                      s->drive[dn].track, (uint8_t)head, 1, 2);
+                      s->drive[dn].track, (uint8_t)head, sector, 2);
         break;
     }
 
@@ -871,6 +895,8 @@ uint8_t fdc_ioport_read(FDCState *s, uint32_t addr)
         } else {
             /* PHASE_CMD: ready to accept command bytes                 */
             msr = MSR_RQM;
+            if (s->cmd_received)
+                msr |= MSR_CB;
         }
 
         /* Drive busy flags */
@@ -1017,10 +1043,12 @@ void fdc_media_changed(FDCState *s, int drive)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Periodic tick (call ~1 ms from pc_step)                             */
+/*  Periodic service from pc_step                                     */
 /* ------------------------------------------------------------------ */
 void fdc_tick(FDCState *s)
 {
+    if (s->read_id_pending && time_us_64() >= s->read_id_deadline)
+        fdc_execute_command(s);
     if (s->irq_pending) {
         if (s->irq_delay > 0) {
             debug_write("IRQ 6 pending %d\n", s->irq_delay);

@@ -267,7 +267,18 @@ static void image_ownership(void) {
 int main(void) {
     services.LocateHandleBuffer = handles; services.HandleProtocol = protocol;
     services.FreePool = free_pool; gBS = &services;
+#if WYSE_POC_READ_ONLY
+    reset(); partition(0x0c, 63);
+    BlockDev device = {0}; uint8_t data[512];
+    CHECK(blk_bind_host(&device, "uhd1"));
+    CHECK(blk_pread(&device, 512, data, sizeof(data)) == sizeof(data));
+    memset(data, 0x56, sizeof(data));
+    CHECK(blk_pwrite(&device, 512, data, sizeof(data)) == sizeof(data));
+    CHECK(blk_sync(&device) < 0 && writes[0] == 0 && physical[0][512] == 0x7b);
+    puts("PASS: isolated POC rejects USB cache writes before firmware access");
+#else
     standard_and_bounds(); overlays(); identities(); media_bounds(); hotplug(); image_ownership(); reset();
     puts("PASS: standard MBR read/write, all overlay RO, GPT fallback, primary-only VBR, cache unplug/MediaId rejection, pinned bio, duplicate binding, bounds, 512/2048, FlushBlocks and no write retries");
+#endif
     return 0;
 }

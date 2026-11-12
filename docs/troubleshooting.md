@@ -18,7 +18,7 @@ resolution and whether input/animation still works. Do not immediately format.
 
 ## Graphics and power saving
 
-**Windows offers only 16 colours:** install [VMDisp9x](../drivers/windows9x/vmdisp9x/README.md)
+**Windows offers only 16 colours:** install [Velocity9x](../drivers/windows9x/velocity9x/README.md)
 for PCI 1234:1111, not an Intel physical GPU driver.
 
 **Broken moving objects:** report the title/version, scene and build. v1.1.8

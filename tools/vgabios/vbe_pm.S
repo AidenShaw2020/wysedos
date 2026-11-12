@@ -40,13 +40,13 @@ dispatch_10:
         cmp     $0x4f10, %ax
         je      dpms_info
         .byte   0xe9
-        .word   ENTRY_10 - (BASE + (1f - start))
+        .word   BASE + (legacy_10 - start) - (BASE + (1f - start))
 1:
 dispatch_10_extrastack:
         cmp     $0x4f10, %ax
         je      dpms_info
         .byte   0xe9
-        .word   ENTRY_10_EXTRASTACK - (BASE + (1f - start))
+        .word   BASE + (legacy_10_extrastack - start) - (BASE + (1f - start))
 1:
 
 // BL=0: ES:DI = the table, CX = its length (code included)
@@ -259,6 +259,36 @@ bankcall_flags:
         lcall   $0xc000, $0x5597
         popf
         lret
+// Windows' VDD restores the standard BDA for a DOS VM, without restoring
+// SeaVGABIOS's private mode cache. Refresh it before ANY legacy operation:
+// character output and scrolling otherwise copy text into the inherited LFB
+// through INT 15h/87h. This changes VM-local BDA only, never hardware mode.
+legacy_10:
+        call    sync_legacy_cache
+        .byte   0xe9
+        .word   ENTRY_10 - (BASE + (1f - start))
+1:
+legacy_10_extrastack:
+        call    sync_legacy_cache
+        .byte   0xe9
+        .word   ENTRY_10_EXTRASTACK - (BASE + (1f - start))
+1:
+sync_legacy_cache:
+        pushf
+        push    %eax
+        push    %ebx
+        push    %es
+        mov     $0x40, %ax
+        mov     %ax, %es
+        // FFh denotes a VBE mode, whose full number is in the private BDA.
+        cmpb    $0xff, %es:0x49
+        je      1f
+        call    text_mode_cached
+1:      pop     %es
+        pop     %ebx
+        pop     %eax
+        popf
+        ret
 text_mode_cached:
         pushf
         push    %eax
