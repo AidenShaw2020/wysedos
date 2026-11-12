@@ -28,6 +28,33 @@ before claiming either preserved performance or a firmware regression.
 
 ## Measurements in the new recordings
 
+**Methodology audit:** the captions below report backend counters or the game's
+rotation benchmark; they are not independently verified display FPS. The
+shared MJPEG input was timestamped on a 1/25-second time base and converted
+to a 60 fps output with dropped/duplicated frames. HTTP streaming also keeps
+only the latest frame. These recordings cannot independently validate frame
+cadence, even though average playback duration followed wall time.
+
+DirectX counts handled Flips; it does not include presentation through a
+DirectDraw fallback copy (`Blt`). Fallback activity was not measured in this
+recording, so 20.79 Flips/s must not be equated unconditionally with all
+presented frames/s. The Windows Glide census counts swap calls before the
+device operation and does not check successful display completion. The DOS
+Voodoo2 sample had matching deltas of 130 swap commands and 130 completed
+buffer changes. Quake II's number is the separate game rotation benchmark.
+
+The DirectX time denominator agrees between host wall time (20.105110 s) and
+guest ticks (20.102 s). The DOS interval is 20.155 s with the host video start
+within approximately 0.12 s of its first counter snapshot. No several-fold
+time-denominator error was found. Pixel-change analysis is only a capture
+cross-check: it cannot recover frames already lost by the capture pipeline
+or distinguish every newly rendered static image.
+
+A replacement comparison must use the earlier DX5 path and the same DOS
+scene/configuration, direct capture with an explicitly negotiated frame rate,
+synchronized host timestamps, and presentation/fallback counters. The current
+MP4 captions remain the original, provisional counter-derived annotations.
+
 | Recording | Game mode | Measurement |
 | --- | --- | --- |
 | [DOS Tomb Raider / Glide](05-tombraider-dos-glide.mp4) | 640x480, Voodoo2 emulation, CPU span renderer | 130 completed swaps / 20.155 s = **6.45 FPS**, moving sample |
