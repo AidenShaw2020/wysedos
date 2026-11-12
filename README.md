@@ -99,7 +99,7 @@ The measured section is the original stationary level start, followed by
 unmeasured movement. After using Windows 3D, a repeat through a DOS boot
 measured 21.68 FPS in the same scene.
 
-[![Tomb Raider / DOS Glide](docs/video/05-tombraider-dos-glide.jpg)](docs/video/05-tombraider-dos-glide.mp4)
+https://github.com/user-attachments/assets/ccedbfa9-1434-4aef-a04d-e2ba064c99da
 
 </details>
 
@@ -108,7 +108,7 @@ measured 21.68 FPS in the same scene.
 
 Hometown / Corvette, driving with the original DX5 renderer, VSync and sound.
 
-[![NFS III / DirectX DX5](docs/video/06-nfs3-directx.jpg)](docs/video/06-nfs3-directx.mp4)
+https://github.com/user-attachments/assets/84a64f80-00bb-4efa-81c9-812f942ede15
 
 </details>
 
@@ -118,7 +118,7 @@ Hometown / Corvette, driving with the original DX5 renderer, VSync and sound.
 Velocity9x Glide3, Hometown / Corvette. The caption reports swap calls;
 it does not independently measure display completion.
 
-[![NFS III / Windows Glide](docs/video/07-nfs3-glide.jpg)](docs/video/07-nfs3-glide.mp4)
+https://github.com/user-attachments/assets/a029aa05-ff47-4114-88f9-09dfd7e0ad3d
 
 </details>
 
@@ -128,7 +128,7 @@ it does not independently measure display completion.
 Velocity9x Intel Gen8 OpenGL. The 35.09 FPS result is the separate opening
 rotation benchmark, not the moving footage's average.
 
-[![Quake II / OpenGL](docs/video/08-quake2-opengl.jpg)](docs/video/08-quake2-opengl.mp4)
+https://github.com/user-attachments/assets/25071566-8de0-40da-a41e-ed08b81dc538
 
 </details>
 
