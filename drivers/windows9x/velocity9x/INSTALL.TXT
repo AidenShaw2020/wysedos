@@ -1,4 +1,4 @@
-Velocity9x for wyseDOS - local Gen8 fork, wysedos-g5j
+Velocity9x for wyseDOS - local Gen8 fork, wysedos-g5k
 ==================================================
 This modified build is based on Velocity9x 0.44.0. It is not an official
 upstream release. It adds the wyseDOS WGPU render channel for Intel Gen8.

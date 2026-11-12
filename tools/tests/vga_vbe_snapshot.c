@@ -33,6 +33,22 @@ static void redraw(void *o,int x,int y,int w,int h) {
 }
 int main(void)
 {
+    FBDevice caps_fb = {0};
+    VGAState caps_vga = {0};
+    caps_fb.width = 640; caps_fb.height = 480;
+    caps_vga.fb_dev = &caps_fb;
+    caps_vga.vbe_regs[VBE_DISPI_INDEX_ENABLE] = VBE_DISPI_GETCAPS;
+    caps_vga.vbe_index = VBE_DISPI_INDEX_XRES;
+    CHECK(vbe_read(&caps_vga, 2) == 640);
+    caps_fb.max_width = 1600; caps_fb.max_height = 1200;
+    CHECK(vbe_read(&caps_vga, 2) == 1600);
+    caps_vga.vbe_index = VBE_DISPI_INDEX_YRES;
+    CHECK(vbe_read(&caps_vga, 2) == 1200);
+    caps_fb.width = 800; caps_fb.height = 600;
+    CHECK(vbe_read(&caps_vga, 2) == 1200);
+    caps_vga.vbe_regs[VBE_DISPI_INDEX_ENABLE] = VBE_DISPI_ENABLED;
+    caps_vga.vbe_regs[VBE_DISPI_INDEX_YRES] = 600;
+    CHECK(vbe_read(&caps_vga, 2) == 600);
     const unsigned depths[] = {8,15,16,32};
     for (unsigned i=0;i<4;i++) {
         uint8_t vram[64], original[64];

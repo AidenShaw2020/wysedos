@@ -39,12 +39,12 @@ static int cfg_joystick     = 0;
 static int cfg_power_restore = POWER_RESTORE_ON;
 static int cfg_power_button  = 0;
 static int cfg_picture       = PICTURE_4_3;
-static int cfg_voodoo2       = 0;
+static int cfg_voodoo2       = 1;
 static int cfg_voodoo2_mem   = 12;
 static int cfg_wgpu_mb       = 64;
-static int cfg_wgpu_enabled  = 0;
+static int cfg_wgpu_enabled  = 1;
 static int cfg_voodoo2_turbo = 1;
-static int cfg_graphics_turbo = 0;
+static int cfg_graphics_turbo = 1;
 
 /* The mixer: a level for each sound source and for the headphone output,
  * 0..16 with 16 as unity (for the headphones, the codec's full +12 dB). */
@@ -61,7 +61,7 @@ int g_picture = PICTURE_4_3;
 int g_cpu_speed_mhz, g_cpu_speed_gen;   /* read by the host: 0 MHz = no limit */
 int g_mouse_speed = 100;
 int g_voodoo2_turbo = 1;
-int g_graphics_turbo = 0;
+int g_graphics_turbo = 1;
 
 void config_bind_pc(PC *pc) { bound_pc = pc; }
 

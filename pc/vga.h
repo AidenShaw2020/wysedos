@@ -139,6 +139,8 @@ struct FBDevice {
     int height;
     int stride; /* current stride in bytes */
     uint8_t *fb_data; /* current pointer to the pixel data */
+    /* Zero keeps a fixed-size backend's current dimensions as its limits. */
+    int max_width, max_height;
 };
 
 struct VGAState {

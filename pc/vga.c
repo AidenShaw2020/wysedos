@@ -2469,16 +2469,16 @@ uint32_t vbe_read(VGAState *s, uint32_t offset)
             switch(s->vbe_index) {
             case VBE_DISPI_INDEX_XRES:
 #ifdef SCALE_3_2
-                val = s->fb_dev->width * 3 / 2;
+                val = (s->fb_dev->max_width ? s->fb_dev->max_width : s->fb_dev->width) * 3 / 2;
 #else
-                val = s->fb_dev->width;
+                val = s->fb_dev->max_width ? s->fb_dev->max_width : s->fb_dev->width;
 #endif
                 break;
             case VBE_DISPI_INDEX_YRES:
 #ifdef SCALE_3_2
-                val = s->fb_dev->height * 3 / 2;
+                val = (s->fb_dev->max_height ? s->fb_dev->max_height : s->fb_dev->height) * 3 / 2;
 #else
-                val = s->fb_dev->height;
+                val = s->fb_dev->max_height ? s->fb_dev->max_height : s->fb_dev->height;
 #endif
                 break;
             case VBE_DISPI_INDEX_BPP:

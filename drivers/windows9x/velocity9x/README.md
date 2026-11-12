@@ -1,6 +1,6 @@
 # Velocity9x for the wyseDOS WGPU channel
 
-This is a modified **Velocity9x 0.44.0** build, `wysedos-g5j`, for Windows 98
+This is a modified **Velocity9x 0.44.0** build, `wysedos-g5k`, for Windows 98
 on wyseDOS. It adds an Intel Gen8 backend through the monitor's virtual WGPU
 render channel. The display remains the emulated VGA/VBE adapter.
 

@@ -187,7 +187,7 @@ driven by the RT5672/I2S backend on the qualified unit.
 ## Installing on the Wyse 3040
 
 1. Download **`wysedos-installer.img`** from
-   [wyseDOS v1.1.15](https://github.com/AidenShaw2020/wysedos/releases/tag/v1.1.15) (or build it
+   [wyseDOS v1.1.16](https://github.com/AidenShaw2020/wysedos/releases/tag/v1.1.16) (or build it
    from source with `./tools/installer/build.sh`).
 2. Write `wysedos-installer.img` to a USB flash drive in raw / DD mode (using
    Rufus in DD mode, balenaEtcher or `dd`).

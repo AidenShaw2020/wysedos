@@ -198,10 +198,10 @@ int load_rom(void *phys_mem, const char *file, uword addr, int backward) {
 void hostblk_list(void);
 void hostblk_usb_start(void (*change)(int port, BlockDev *dev, unsigned serial));
 static int usb_storage_enabled = 1;
-static int voodoo2_enabled;
+static int voodoo2_enabled = 1;
 static int voodoo_async_enabled = 1;    // voodoo2_async=0: render on the main core
 static int voodoo2_mem = 12;            // voodoo2_mem=8: the 8 MB board
-static int wgpu_mb;                     // wgpu=32|64|128: the Intel GPU render channel, aperture MB
+static int wgpu_mb = 64;                // wgpu=32|64|128: the Intel GPU render channel, aperture MB
 static int wgpu_enabled = 1;            // old configurations use wgpu=0 to disable
 void intel_gpu_log_probe(void);
 void intel_gpu_status(void);
@@ -1605,6 +1605,10 @@ void wyse_main(void) {
     bool have_analog = analog_init();
     PC *pc = pc_new(redraw, NULL, NULL, (uint8_t *)surface, &conf);
     if (!pc) wyse_fatal("pc_new failed");
+    /* GETCAPS describes the allocated surface capacity, not today's DOS or
+     * Windows mode. Otherwise the VGA BIOS hides every mode above 640x480. */
+    pc->vga->fb_dev->max_width = SURF_MAX_W;
+    pc->vga->fb_dev->max_height = SURF_MAX_H;
     g_wyse_pc = pc;
     if (pc->uhci) hostblk_usb_start(guest_usb_change);
     net_bind_host(pc->ne2000);

@@ -11,7 +11,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 VENDOR = ROOT / 'drivers/windows9x/velocity9x'
-VERSION = 'wysedos-g5j'
+VERSION = 'wysedos-g5k'
 UPSTREAM = 'https://github.com/michaeldale/velocity9x'
 
 

@@ -12,8 +12,8 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'tools/installer/out'
 DEST = OUT / 'DRIVERS'
 PACKAGES = {
-    'VELOCITY': ('drivers/windows9x/velocity9x/velocity9x-wysedos-g5j-driver.zip',
-                 'd35b0f07c97d0ec0dd079ad64efbcc68764ee3c4699a8ef52d2ceaf0aec99237'),
+    'VELOCITY': ('drivers/windows9x/velocity9x/velocity9x-wysedos-g5k-driver.zip',
+                 '018420411dd5ff77205589031d137424d2c6ed5ae764ffabd33a888e1744ac57'),
     'USBDOS': ('drivers/dos/usbdos/usbdos.zip',
                '45937257ac508443b8c30d31e9b492e50ee50ccc9250e7f8d831fd4aa3cf46ba'),
     'CTMOUSE': ('drivers/dos/ctmouse.zip',

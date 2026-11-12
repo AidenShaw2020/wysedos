@@ -84,6 +84,10 @@ higher FPS.
 The persisted keys are `[pc] wgpu` (workspace MB) and `wgpu_enabled` (on/off).
 Older configurations with `wgpu=0` still disable the channel.
 
+Fresh firmware and the installer both enable Voodoo2 (12 MB), the Windows
+accelerator (64 MB), and both CPU Boost switches by default. Missing keys use
+these defaults; an explicit saved OFF value is preserved during an upgrade.
+
 VBE activation alone does not establish that an application is rendering
 3D. A fixed boot delay and a separate Windows helper are not used.
 

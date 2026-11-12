@@ -110,6 +110,15 @@ static bool selected_row(const char *label)
 
 static void settings_tests(void)
 {
+    /* Fresh firmware and installer defaults must agree before any INI or
+     * hardware discovery has supplied a value. Explicit OFF still wins. */
+    assert(config_get_voodoo2() == 1 && config_get_voodoo2_mem() == 12);
+    assert(config_get_wgpu() == 1 && config_get_wgpu_mem() == 64);
+    assert(config_get_graphics_turbo() == 1 && g_graphics_turbo == 1);
+    assert(config_get_voodoo2_turbo() == 1 && g_voodoo2_turbo == 1);
+    config_set_from_ini("graphics_turbo", "0");
+    config_apply_all();
+    assert(config_get_graphics_turbo() == 0 && g_graphics_turbo == 0);
     config_note_machine(64, 5);
     config_note_voodoo2(1, 12);
     config_note_wgpu(64, 1);

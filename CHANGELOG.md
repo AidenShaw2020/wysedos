@@ -3,6 +3,17 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.16 - 2026-11-13
+
+- Report the allocated display surface capacity to the VGA BIOS, allowing
+  Windows to enumerate modes above the initial 640x480 desktop.
+- Correct Velocity9x's status panel to identify the discovered WGPU render
+  channel and its hardware Direct3D default instead of generic VGA metadata.
+  Include the complete G5k driver and corresponding sources.
+- Enable Voodoo2, the 64 MB Windows accelerator, and both CPU Boost switches
+  consistently in firmware and installation defaults. Preserve explicit
+  saved choices during upgrades.
+
 ## v1.1.15 - 2026-11-12
 
 - Add Windows 98 Direct3D, Glide and OpenGL through the Intel Gen8 WGPU
