@@ -1,6 +1,6 @@
 # wyseDOS documentation
 
-These guides describe the v1.1.16 implementation on the Dell Wyse 3040.
+These guides describe the v1.1.17 implementation on the Dell Wyse 3040.
 They distinguish supported mechanisms from configurations actually tested on
 hardware. Detailed engineering reports retain their original test conditions.
 

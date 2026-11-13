@@ -61,7 +61,9 @@ volatile int g_audio_pause;    // the monitor's menu is open: silence
 
 /* With Voodoo2 on core 3 the mixer owns the analog FIFO too. Its sixteen
  * stereo frames cannot cover an entire 512-frame mix or synthesis catch-up.
- * The dedicated analog core remains the sole feeder when it is present. */
+ * The dedicated analog core remains the sole feeder when it is present.
+ * With Voodoo2, its worker also services the FIFO between render batches;
+ * analog_feed serializes these offers without waiting for the other core. */
 static void audio_service_analog(void) {
     if (!analog_owns_core()) analog_feed();
 }

@@ -3,6 +3,16 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.17 - 2026-11-13
+
+- Service the analog FIFO from the Voodoo2 worker even while the board is
+  idle, with nonblocking ownership shared with the mixer. This avoids
+  starving headphone output when synthesis and input activity overlap.
+- Keep unchained VGA graphics, including Mode X, in RAM to avoid dropped
+  unaligned writes in the legacy aperture. Preserve the fast single-plane
+  RAM path, chain-4 handling and explicit native diagnostic override.
+- Add overlapping stereo FIFO and Mode X boundary-write regression coverage.
+
 ## v1.1.16 - 2026-11-13
 
 - Report the allocated display surface capacity to the VGA BIOS, allowing

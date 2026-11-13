@@ -477,8 +477,11 @@ void hwvga_store_planar(const uint8_t *src);
 
 static void hw_update(bool resync) {
     VGAState *v = g_pc->vga;
-    const bool planar_16 = !(v->sr[4] & 8) && (v->gr[6] & 1) && !(v->gr[5] & 0x60);
-    int want = vga_vbe_on(v) || (safe_planar && (planar_16 || vga_native_planar_needs_software(v))) ? WIN_EMU
+    /* Mode X has the same aperture store-boundary loss as 16-colour VGA.
+     * Keep all unchained graphics in RAM. plane_update still maps simple
+     * single-plane writes directly, so those stores do not need emulation. */
+    const bool planar_graphics = !(v->sr[4] & 8) && (v->gr[6] & 1);
+    int want = vga_vbe_on(v) || (safe_planar && (planar_graphics || vga_native_planar_needs_software(v))) ? WIN_EMU
              : (v->sr[4] & 0x08) ? (vga_chain4_simple(v) ? WIN_RAM : WIN_EMU)
              : g_hwvga_on ? WIN_HW : WIN_EMU;
     const bool trap_text = want == WIN_HW && safe_planar && !(v->gr[6] & 1);

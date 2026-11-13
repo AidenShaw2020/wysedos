@@ -330,7 +330,7 @@ static void apply_ssp_mode(void) {
 
 uint32_t g_analog_gap_max;       // longest pause between feeds, on either feeder core
 
-void analog_feed(void) {
+static void analog_feed_locked(void) {
     static int16_t last[2];
     static int half;
     static uint64_t previous_feed;
@@ -339,9 +339,9 @@ void analog_feed(void) {
     __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi));
     uint64_t now = (uint64_t)hi << 32 | lo;
     uint64_t gap = now - previous_feed;
-    if (previous_feed && gap > g_analog_gap_max)
+    if (previous_feed && now > previous_feed && gap > g_analog_gap_max)
         g_analog_gap_max = gap > UINT32_MAX ? UINT32_MAX : (uint32_t)gap;
-    previous_feed = now;
+    if (now > previous_feed) previous_feed = now;
     if (ssp_mode != ssp_mode_wanted) {
         apply_ssp_mode();
         half = 0;
@@ -391,6 +391,17 @@ void analog_feed(void) {
         w32(SSP2_BASE + SSDR, (uint16_t)last[half]);
         half ^= 1;
     }
+}
+
+/* The mixer and the Voodoo worker may both offer FIFO service. Never wait
+ * for the other core: a slow synthesis/render pass must not hold up audio.
+ * Serialize the SSP writes and the private half-frame/last-sample state. */
+static unsigned feeder_busy;
+
+void analog_feed(void) {
+    if (!analog_on || __atomic_exchange_n(&feeder_busy, 1, __ATOMIC_ACQUIRE)) return;
+    analog_feed_locked();
+    __atomic_store_n(&feeder_busy, 0, __ATOMIC_RELEASE);
 }
 
 // Headphone volume in 1.5 dB steps: 0 is full (+12 dB), 8 is 0 dB, 39 is -46.5 dB;

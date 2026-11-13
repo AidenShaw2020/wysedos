@@ -254,8 +254,17 @@ static void planar_graphics_backend(void) {
     CHECK(model[700]==source);
     saved[700]=source;
     state.gr[5]=0x40;hw_update(false);
-    CHECK(win_mode==WIN_HW && hw_on && state.hw_mem && stores==VGA_BYTES);
-    CHECK(!memcmp(physical,saved,sizeof saved));
+    CHECK(win_mode==WIN_EMU && !hw_on && !state.hw_mem && !stores);
+    CHECK(!memcmp(model,saved,sizeof saved));
+    /* Unaligned multi-plane words must retain both bytes across an 8-byte
+     * aperture boundary; simple single-plane stores still qualify for RAM. */
+    state.sr[2]=15;
+    vga_mem_write16(&state,7,0x6655);
+    CHECK(model[7]==0x55555555 && model[8]==0x66666666);
+    state.sr[2]=1;
+    uint32_t base=~0u;
+    CHECK(vga_simple_plane(&state,&base)==0 && base==0);
+    state.sr[2]=15;
     state.sr[4]=0x0e;hw_update(false);
     CHECK(win_mode==WIN_RAM && !hw_on && ram_13h);
     reset();state.sr[4]=6;state.sr[2]=15;state.gr[6]=5;state.gr[5]=0;
@@ -282,9 +291,9 @@ static void chain4_planar_handoff(void) {
     CHECK(win_mode==WIN_EMU && ram_planar && !ram_13h);
     CHECK(!memcmp(model,saved,sizeof saved));
     state.gr[5]=0x40;hw_update(false);
-    CHECK(win_mode==WIN_HW && !memcmp(physical,saved,sizeof saved));
+    CHECK(win_mode==WIN_EMU && !memcmp(model,saved,sizeof saved));
     }
-    puts("PASS direct and trapped chain4 -> software planar -> native Mode X preserve all VGA planes");
+    puts("PASS direct and trapped chain4 -> software planar -> safe Mode X preserve all VGA planes");
     reset();
     state.vga_ram_size=0x100000;
     state.vbe_regs[VBE_DISPI_INDEX_XRES]=640;

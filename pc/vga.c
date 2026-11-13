@@ -3730,7 +3730,8 @@ int vga_vbe_on(VGAState *s)
  * boundary. The existing wide-planar fallback must consider the virtual
  * row as well as the visible width: Keen 4's intro has a 320-pixel viewport
  * into a 1984-pixel row (CR13=7Ch). Its game returns to a 336-pixel row.
- * Keep byte-oriented low-resolution EGA and all 256-colour modes native. */
+ * This predicate also disables direct single-plane RAM mappings where
+ * reads must load latches. Mode X uses RAM too, but may keep those mappings. */
 int vga_native_planar_needs_software(const VGAState *s)
 {
     return (s->gr[6] & 3) == 1 && !(s->sr[4] & 8) &&

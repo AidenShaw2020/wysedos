@@ -47,11 +47,15 @@ an independent physical xHCI host-controller driver.
 | 0 | Guest execution, PC devices, firmware calls, input/storage polling |
 | 1 | OPL synthesis, audio mixing and display-audio pumping |
 | 2 | VGA snapshots, rendering and framebuffer output |
-| 3 | General MIDI synthesis, analog FIFO feeding and hang monitoring |
+| 3 | Analog FIFO feeding and General MIDI synthesis, or the DOS Voodoo2 renderer with FIFO service between render batches; hang monitoring |
 
 `mp.c` discovers processor identities with firmware MP Services, then starts
 helpers through INIT/SIPI. Helpers must not call UEFI. Device state shared
 across cores needs explicit ownership; [SB DMA](sound-dma.md) illustrates why.
+With the Voodoo2 worker enabled, core 1 retains mixing and General MIDI work
+and also offers analog FIFO service. Core 3 services the FIFO even while the
+board is idle. A nonblocking guard serializes the two feeders, preserving
+stereo ordering without making either core wait for synthesis or rendering.
 
 ## Graphics
 

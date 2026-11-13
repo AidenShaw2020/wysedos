@@ -46,6 +46,7 @@ void lpe_test_tone(uint32_t ms, void (*delay_us)(uint32_t));
 bool audio_start(PC *pc);
 bool analog_init(void);
 void analog_start(void);
+void analog_feed(void);
 bool mp_start(int core, void (*fn)(void));
 volatile int g_wyse_vga_core;
 uint32_t g_vga_flips;       // page flips at the retrace (vga.c), per report
@@ -709,7 +710,9 @@ static void voodoo_core_run(void) {
     void mp_hang_watch(void);
     extern volatile uint64_t g_core_heartbeat[4];
     for (;;) {
+        analog_feed();
         bool work = voodoo2_worker_poll(voodoo_core_pc->voodoo2);
+        analog_feed();
         mp_hang_watch();
         g_core_heartbeat[3]++;
         if (!work) __asm__ volatile("pause");
@@ -1682,7 +1685,7 @@ void wyse_main(void) {
                 g_vga_core_idle = voodoo_helper_idle;
                 printf("Voodoo2: odd lines of each triangle on core 2 when it is free\n");
             }
-            printf("Voodoo2: renderer on core 3, headphones and General MIDI on core 1\n");
+            printf("Voodoo2: renderer and headphone service on core 3, mixer and General MIDI on core 1\n");
         }
     } else if (cores >= 4 && have_analog) analog_start();
 
