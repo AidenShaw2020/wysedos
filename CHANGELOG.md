@@ -3,6 +3,14 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.18 - 2026-11-13
+
+- Skip optional UDP diagnostic broadcasts while the Ethernet cable is
+  disconnected, avoiding repeated transmit-completion waits before the
+  startup logo. Refresh link status so logging resumes after reconnection.
+- Add an offline logging regression covering stale link state, cable
+  reconnection and network interfaces without media-status reporting.
+
 ## v1.1.17 - 2026-11-13
 
 - Service the analog FIFO from the Voodoo2 worker even while the board is

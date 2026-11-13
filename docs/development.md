@@ -93,6 +93,7 @@ tones, overflow and ring reuse.
 | VGA/blanking/page lifetime | `vga_planar.c`, `vga_page_flip.c` |
 | Audio clocks, DMA, mixer service and headphone routing | `lpe_clock.c`, `sb_dma_ownership.c`, `audio_mix.c`, `analog_feed.c`, `analog_volume.c` |
 | USB/bounds/media identity | `usb_storage.c`, `hostblk.c`, `native_bounds.c` |
+| Network/offline startup logging | `net_offline_log.c`, `netfs_pipeline.c` |
 | Image ownership and IDE lifecycle | `image_media.c`, `ide_media.c` |
 | HID/PS2/firmware events | `usbhid_recovery.c`, `ps2_reenable.c`, `firmware_events.c` |
 | PnP/ROM protection/EDID | `ne2000_pnp.c`, `pam.c`, `edid.c` |

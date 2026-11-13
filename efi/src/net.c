@@ -144,6 +144,16 @@ void net_broadcast(uint16_t port, const void *data, size_t len) {
     static const uint8_t bcast_mac[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     static const uint8_t bcast_ip[4] = {0xff, 0xff, 0xff, 0xff};
     if (!snp) return;
+    /* Startup diagnostics are optional. Without a cable, a firmware driver
+     * may accept a transmit but never return its buffer, making every log
+     * line run the completion polling budget before the splash can appear.
+     * GetStatus refreshes MediaPresent, so plugging the cable back in also
+     * restores logging without a reboot. Leave unsupported NICs unchanged. */
+    if (snp->Mode->MediaPresentSupported) {
+        uint32_t irq;
+        snp->GetStatus(snp, &irq, NULL);
+        if (!snp->Mode->MediaPresent) return;
+    }
     udp_frame(bcast_mac, bcast_ip, port, port, data, len);
 }
 
