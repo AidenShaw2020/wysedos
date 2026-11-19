@@ -3,6 +3,13 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.20 - 2026-11-19
+
+- Add separate Pentium II and Pentium III settings, period-based clock
+  presets and guest-visible family-6 CPU identities.
+- Give DOS/Windows 9x and Windows 2000/XP equal prominence in the setup
+  guide, and use native GitHub video players for the updated clips.
+
 ## v1.1.19 - 2026-11-19
 
 - Add a Windows 2000 and XP graphics preview for the Wyse 3040. The

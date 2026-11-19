@@ -4,6 +4,7 @@
 
 #include "config_save.h"
 #include "pc.h"
+#include "cpu_profile.h"
 #include "disk.h"
 #include "ff.h"
 #include "image_media.h"
@@ -261,17 +262,36 @@ static const int speed_486[] = { 25, 33, 50, 66, 75, 100, 120, 0 };
 /* Higher execution-rate profiles also serve NT guests. They do not select a
  * P6 model; VMX CPUID policy is separate. Rates remain approximate. */
 static const int speed_586[] = { 60, 75, 90, 100, 120, 133, 166, 200, 233, 266, 300, 333, 400, 0 };
+static const int speed_pentium_ii[] = { 233, 266, 300, 333, 350, 400, 450, 0 };
+static const int speed_pentium_iii[] = {
+    450, 500, 550, 600, 667, 733, 800, 866, 933, 1000, 1133, 1266, 1400, 0
+};
 
 const int *config_speed_options(int *count)
 {
     switch (cfg_cpu_gen) {
     case 3:  *count = (int)(sizeof speed_386 / sizeof *speed_386); return speed_386;
     case 4:  *count = (int)(sizeof speed_486 / sizeof *speed_486); return speed_486;
+    case PC_CPU_PENTIUM_II:
+        *count = (int)(sizeof speed_pentium_ii / sizeof *speed_pentium_ii);
+        return speed_pentium_ii;
+    case PC_CPU_PENTIUM_III:
+        *count = (int)(sizeof speed_pentium_iii / sizeof *speed_pentium_iii);
+        return speed_pentium_iii;
     default: *count = (int)(sizeof speed_586 / sizeof *speed_586); return speed_586;
     }
 }
 
-static int default_speed(void) { return cfg_cpu_gen == 3 ? 40 : cfg_cpu_gen == 4 ? 66 : 133; }
+static int default_speed(void)
+{
+    switch (cfg_cpu_gen) {
+    case PC_CPU_386:         return 40;
+    case PC_CPU_486:         return 66;
+    case PC_CPU_PENTIUM_II:  return 400;
+    case PC_CPU_PENTIUM_III: return 800;
+    default:                return 133;
+    }
+}
 
 int config_get_speed_mhz(void) { return cfg_speed < 0 ? default_speed() : cfg_speed; }
 void config_set_speed_mhz(int mhz)
@@ -290,7 +310,7 @@ void config_set_fpu(int enabled)
 int config_get_cpu_gen(void) { return cfg_cpu_gen; }
 void config_set_cpu_gen(int gen)
 {
-    if (cfg_cpu_gen == gen) return;
+    if (!pc_cpu_profile_valid(gen) || cfg_cpu_gen == gen) return;
     cfg_cpu_gen = gen; changed = true; restart_needed = true;
     /*
      * Every Pentium has a floating-point unit.  There is no part to

@@ -1,4 +1,5 @@
 #include "i386.h"
+#include "cpu_profile.h"
 #include "jit/jit.h"
 #include "audiodiag.h"
 #include <pico.h>
@@ -5248,7 +5249,13 @@ static bool verrw_helper(CPUI386 *cpu, int sel, int wr, int *zf)
 #endif
 
 #define CPUID() \
-	switch (REGi(0)) { \
+	if (pc_cpu_is_p6(cpu->gen)) { \
+		u32 a, b, c, d; \
+		u32 features = (1u << 4) | (1u << 8) | (1u << 15); \
+		if (cpu->fpu) features |= 1u | CPUID_SIMD_FEATURE; \
+		pc_cpu_p6_cpuid(cpu->gen, REGi(0), features, &a, &b, &c, &d); \
+		REGi(0) = a; REGi(3) = b; REGi(1) = c; REGi(2) = d; \
+	} else switch (REGi(0)) { \
 	case 0: \
 		REGi(0) = 1; \
 		REGi(3) = 0x594e4954; \
@@ -7626,13 +7633,7 @@ CPUI386 *cpui386_new(int gen, char *phys_mem, long phys_mem_size, CPU_CB **cb)
 	 * leaves them alone so a configured host hook survives a CPU reset. */
 	cpu->int2f_handler = NULL;
 	cpu->int2f_opaque = NULL;
-	switch (gen) {
-	case 3: cpu->flags_mask = EFLAGS_MASK_386; break;
-	case 4: cpu->flags_mask = EFLAGS_MASK_486; break;
-	case 5: case 6: cpu->flags_mask = EFLAGS_MASK_586; break;
-	default: assert(false);
-	}
-	cpu->gen = gen;
+	cpui386_set_gen(cpu, gen);
 
 	cpu->tlb.size = tlb_size;
 #ifdef BUILD_ESP32
@@ -7680,6 +7681,12 @@ void cpui386_enable_fpu(CPUI386 *cpu)
  */
 void cpui386_set_gen(CPUI386 *cpu, int gen)
 {
+	assert(pc_cpu_profile_valid(gen));
+	switch (gen) {
+	case PC_CPU_386: cpu->flags_mask = EFLAGS_MASK_386; break;
+	case PC_CPU_486: cpu->flags_mask = EFLAGS_MASK_486; break;
+	default:        cpu->flags_mask = EFLAGS_MASK_586; break;
+	}
 	cpu->gen = gen;
 }
 

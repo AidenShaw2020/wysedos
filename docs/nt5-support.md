@@ -41,11 +41,11 @@ NTLDR; it does not run on top of DOS. The monitor and its virtual devices remain
 present under either OS.
 
 Initial NT target profile is approximately 400 MHz and 64 MiB guest RAM.
-64 MiB is already available in the memory menu; higher Pentium rate choices
-extend through 400 MHz. This setting is an execution-rate target, not a
-cycle-accurate Pentium II model. Each alternative installation can save its own
-profile; automatic switching between OS families is not required. Do not resize
-guest RAM live after the BIOS has handed control to an OS.
+The CPU menu includes independent Pentium II and Pentium III profiles and an
+unrestricted speed option. The menu's explicit MHz presets limit execution
+rate. The guest sees a matching processor signature when one of the two P6
+profiles is selected. Each installation can save its own profile. Reboot the
+virtual machine when changing RAM or CPU identity. [CPU settings](configuration.md#cpu-and-memory)
 
 The VMX CPU backend virtualizes the guest's `IA32_SYSENTER_CS`,
 `IA32_SYSENTER_ESP` and `IA32_SYSENTER_EIP` MSRs through the VMCS, matching

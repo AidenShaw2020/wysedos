@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "pc.h"
+#include "cpu_profile.h"
 #include "fpu.h"
 #include "../src/vm.h"
 #include "../src/sysenter_msr.h"
@@ -823,6 +824,10 @@ static void do_cpuid(void) {
     uint32_t a, b, c, d;
     __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(leaf), "c"(sub));
     wyse_guest_cpuid_filter(leaf, &a, &b, &c, &d);
+    /* The interpreter object records the active machine, not the settings
+     * menu choice that is waiting for a monitor restart. */
+    if (pc_cpu_is_p6(icpu->gen))
+        pc_cpu_p6_cpuid(icpu->gen, leaf, d, &a, &b, &c, &d);
     vm.regs.rax = a; vm.regs.rbx = b; vm.regs.rcx = c; vm.regs.rdx = d;
 }
 
@@ -1248,7 +1253,7 @@ void wyse_cpu_set_speed(int mhz, int gen) {
     cycle_credit = 0;
     credit_at = rdtsc_();
     printf("vmx: speed %d MHz (%s), %llu instructions per ms of the Atom's %llu\n", mhz,
-           gen == 3 ? "386" : gen == 4 ? "486" : "Pentium", (unsigned long long)target_ipms,
+           pc_cpu_profile_name(gen), (unsigned long long)target_ipms,
            (unsigned long long)host_ipms);
 }
 

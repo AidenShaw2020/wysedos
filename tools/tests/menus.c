@@ -145,6 +145,32 @@ static void settings_tests(void)
     key(KEY_DOWN);
     assert(selected_row("Memory"));
 
+    key(KEY_DOWN);
+    assert(selected_row("Processor"));
+    key(KEY_RIGHT);
+    assert(config_get_cpu_gen() == 6 && config_needs_restart());
+    assert(row_has(find_row("Processor"), "Pentium II", NULL));
+    assert(config_get_speed_mhz() == 400);
+    key(KEY_DOWN); key(KEY_DOWN);
+    assert(selected_row("Speed"));
+    key(KEY_RIGHT);
+    assert(config_get_speed_mhz() == 450);
+    key(KEY_RIGHT);
+    assert(config_get_speed_mhz() == 0);
+    key(KEY_UP); key(KEY_UP);
+    key(KEY_RIGHT);
+    assert(config_get_cpu_gen() == 7 && config_get_speed_mhz() == 0);
+    assert(row_has(find_row("Processor"), "Pentium III", NULL));
+    key(KEY_DOWN); key(KEY_DOWN);
+    key(KEY_LEFT);
+    assert(config_get_speed_mhz() == 1400);
+    key(KEY_UP); key(KEY_UP);
+    key(KEY_LEFT); key(KEY_LEFT);
+    assert(config_get_cpu_gen() == 5 && config_get_speed_mhz() == 133);
+    key(KEY_RIGHT); key(KEY_RIGHT);
+    assert(config_get_cpu_gen() == 7 && config_get_speed_mhz() == 800);
+    config_set_speed_mhz(1400);
+
     key(KEY_TAB);
     assert(tab_current("GPU") && selected_row("Video memory"));
     assert(find_row("Voodoo2 3D card") >= 0 && find_row("Memory ") < 0);
@@ -210,7 +236,8 @@ static void settings_tests(void)
     assert(strstr(saved_config, "voodoo2_turbo=1") != NULL);
     assert(strstr(saved_config, "wgpu=64\n") != NULL);
     assert(strstr(saved_config, "wgpu_enabled=1\n") != NULL);
-    assert(strstr(saved_config, "speed=400\n") != NULL);
+    assert(strstr(saved_config, "cpu=7\n") != NULL);
+    assert(strstr(saved_config, "speed=1400\n") != NULL);
     key(KEY_N);
     key(KEY_ESC);
     assert(!settingsui_is_open());

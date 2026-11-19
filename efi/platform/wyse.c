@@ -15,6 +15,7 @@
 #include "ini.h"
 #include "config_save.h"
 #include "cpu_speed_policy.h"
+#include "cpu_profile.h"
 #include "vga.h"
 #include "ff.h"
 #include "blockdev.h"
@@ -390,7 +391,7 @@ static bool load_config(PCConfig *conf) {
     f_close(&f);
     text[got] = 0;
     memset(&c, 0, sizeof(c));
-    c.cpu = 5;
+    c.cpu = PC_CPU_PENTIUM;
     c.fpu = 1;
     if (ini_parse_string(text, cfg_handler, &c) != 0 || !c.bios[0]) return false;
     memset(conf, 0, sizeof(*conf));
@@ -403,8 +404,8 @@ static bool load_config(PCConfig *conf) {
     conf->ata[2] = c.ata2;
     conf->ata[3] = c.ata3;
     for (int i = 0; i < 4; i++) conf->iscd[i] = c.iscd[i];
-    conf->cpu_gen = c.cpu;
-    conf->fpu = c.fpu;
+    conf->cpu_gen = pc_cpu_profile_valid(c.cpu) ? c.cpu : PC_CPU_PENTIUM;
+    conf->fpu = pc_cpu_is_p6(conf->cpu_gen) || c.fpu;
     conf->usb_storage = usb_storage_enabled;
     conf->voodoo2 = voodoo2_enabled;
     conf->voodoo2_mem = voodoo2_mem;

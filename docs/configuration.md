@@ -23,16 +23,26 @@ settings under `[wyseDOS]` with the same values; no manual migration is needed.
 
 ## CPU and memory
 
-`[pc] cpu=3`, `4`, `5` selects 386, 486 or Pentium identity. This 3D image
-starts with 128 MB RAM and the Pentium/133 profile. `[wyseDOS] speed` selects approximate MHz; `0` means
-unrestricted and omission uses the generation default. Choose the menu's
-supported values. Identity, FPU and rate limiting are separate settings, not
-cycle-accurate CPU models. The Pentium speed menu includes 266, 300, 333 and
-400 MHz profiles for faster guests, followed by full speed. Selecting a higher
-rate does not select a Pentium II/III model. The VMX backend currently forwards
-masked host CPUID information; the menu generation is not a promise of an exact
-guest-visible processor identity. Wrong audio clocks can also accelerate game timers;
-see [audio-clock.md](audio-clock.md).
+Choose the processor separately from its speed in the CPU settings page.
+Save and restart to apply an identity or RAM change. The image defaults
+to the Pentium/133 profile and 128 MB RAM.
+
+| `[pc] cpu` | Menu profile | Clock limit presets | Default |
+|---|---|---|---|
+| 3 | 386 | 16–40 MHz | 40 MHz |
+| 4 | 486 | 25–120 MHz | 66 MHz |
+| 5 | Pentium | 60–400 MHz (includes existing compatibility profiles) | 133 MHz |
+| 6 | Pentium II | 233–450 MHz | 400 MHz |
+| 7 | Pentium III | 450–1400 MHz | 800 MHz |
+
+Each list ends in full speed (`[wyseDOS] speed=0`). The saved value is an
+approximate execution-rate limit. It does not model the original CPU bus
+or change the underlying hardware clock. Pentium II and III advertise
+different family-6 CPUID signatures. Pentium III advertises SSE when the
+backend supports it. These profiles expose one CPU and omit unsupported
+extensions. Existing 386, 486 and Pentium identities keep the previous
+backend CPUID behavior. [Intel Pentium II clock range](https://www.intel.com/pressroom/archive/releases/1998/dp082498.htm)
+[Intel Pentium III 1.40 GHz](https://www.intel.com/pressroom/archive/releases/2002/20020108comp.htm)
 
 ## Common settings
 
@@ -40,7 +50,7 @@ see [audio-clock.md](audio-clock.md).
 |---|---|
 | `[pc] mem=16M` | Guest RAM, not physical Wyse RAM |
 | `[pc] vga_mem=8192K` | VGA/VBE memory |
-| `[pc] cpu=5`, `fpu=1` | CPU identity and FPU |
+| `[pc] cpu=5`, `fpu=1` | Default Pentium profile and enabled FPU |
 | `[pc] bios`, `vga_bios` | Runtime ROM filenames |
 | `[pc] hda=host:emmc` | Native bounded system disk |
 | `[pc] fda`, `fdb` | Floppy sources; prefer Disk Manager |

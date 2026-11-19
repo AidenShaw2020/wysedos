@@ -3,23 +3,30 @@
 </p>
 
 <p align="center">
-  <b>Almost bare-metal x86 on the Dell Wyse 3040 - a 386/486/Pentium PC monitor and emulator that runs directly on UEFI</b>
+  <b>DOS, Windows 9x, Windows 2000 and Windows XP on the Dell Wyse 3040</b>
 </p>
 
 ---
 
-**wyseDOS** turns a Dell Wyse 3040 thin client into a dedicated DOS and Windows 9x
-machine. There is no Linux kernel or host operating system underneath: UEFI
-loads `BOOTX64.EFI`, which runs the guest PC using VT-x and emulated peripherals.
+**wyseDOS** runs DOS/Windows 9x or Windows NT directly on the Dell Wyse 3040.
+UEFI loads `BOOTX64.EFI`, which runs a virtual x86 PC using Intel VT-x and
+emulated peripherals. The monitor runs without a host operating system.
 The monitor keeps UEFI Boot Services active for firmware-backed USB, storage,
 networking and events, alongside direct Cherry Trail VGA and audio access.
 See [architecture](docs/architecture.md) for the hardware/firmware boundary.
 
-DOS Glide runs through an emulated **3dfx Voodoo2** with 8 or 12 MB of memory.
-Windows 98 uses the bundled [Velocity9x driver](drivers/windows9x/velocity9x/README.md)
-for the VGA/VBE desktop and **Direct3D, Glide and OpenGL** through the Intel
-Gen8 GPU. The GPU menu provides separate CPU Boost switches for DOS Glide
-and Windows 3D; no separate Windows booster program is required.
+| Guest installation | Graphics acceleration | Driver setup |
+|---|---|---|
+| **DOS and Windows 9x** | DOS Glide through emulated Voodoo2. Windows 98 Direct3D, Glide and OpenGL through Intel Gen8. | [DOS and Windows 9x setup](#dos-and-windows-9x) · [Velocity9x](drivers/windows9x/velocity9x/README.md) |
+| **Windows 2000 and Windows XP** | GPU-accelerated desktop and DirectDraw, legacy Direct3D and OpenGL 1.1 through Intel Gen8. | [Windows 2000 and XP setup](#windows-2000-and-windows-xp) · [NT5 graphics](docs/nt5-support.md) |
+
+Both installation choices use the same firmware, internal guest disk and
+shared driver CD. Choose an OS family at install time. Windows 2000 SP4
+and XP SP3 boot directly from their own system partition. DOS and Windows
+9x can share the same DOS-based installation.
+
+The GPU menu provides automatic CPU Boost for DOS Glide and Windows 3D.
+The Windows switch applies to accelerated work in Windows 98, 2000 and XP.
 
 The emulator core and peripheral set come from
 [X86Pi](https://github.com/AidenShaw2020/x86pi) (itself built on the PC
@@ -28,12 +35,70 @@ x86-64 bare metal on the Intel Atom x5-Z8350 with both hardware-assisted
 virtualisation (Intel VT-x unrestricted guest) and cycle-paced software
 emulation.
 
+## Installing on the Wyse 3040
+
+1. Download **`wysedos-installer.img`** from
+   [wyseDOS releases](https://github.com/AidenShaw2020/wysedos/releases) or
+   [build it from source](docs/development.md).
+2. Write `wysedos-installer.img` to a USB flash drive in raw / DD mode (using
+   Rufus in DD mode, balenaEtcher or `dd`).
+3. Plug the USB stick into the Wyse 3040, power it on, press **F12** at the Dell
+   splash screen and select the USB stick in the UEFI boot menu.
+4. Select **U — Upgrade** to update an existing supported installation while
+   keeping C: and settings (confirm with U again), or **I — New install** to
+   erase and prepare eMMC (separate Y confirmation). Esc cancels.
+   A new installation partitions the internal 8 GB eMMC as follows:
+   - **Firmware partition (`WYSEDOS`, 128 MiB FAT32 on GPT)** —
+     stores `\EFI\BOOT\BOOTX64.EFI` and `\386\` (`bios.bin`, `vgabios.bin`,
+     `config.ini`, `gm.sf2`, `logo.bin`, `drivers.iso`), and registers the `wyseDOS` UEFI boot
+     entry in NVRAM.
+   - **Guest disk** — exposes the remaining eMMC capacity as the primary
+     master IDE disk (`hda=host:emmc`). DOS or Windows Setup creates the
+     partition and filesystem inside that disk.
+5. Remove the USB stick when installation or upgrade completes and press
+   any key to reboot into **wyseDOS**.
+
+See [installation and upgrade details](docs/installation.md) for detection,
+retained settings and interrupted-update recovery. Upgrade does not replace
+guest drivers or operating system files.
+
+### DOS and Windows 9x
+
+1. Boot DOS from your own floppy, CD or image using Win+F12.
+2. Use DOS partitioning and formatting tools on the internal guest disk
+   and install DOS. Run Windows Setup from your own Windows 9x media
+   if you want a Windows desktop.
+3. Open Win+F12 and mount the firmware's `drivers.iso`. For Windows 98,
+   install the driver from `VELOCITY`. The `USBDOS` and `CTMOUSE`
+   directories contain the DOS USB and mouse drivers.
+   [DOS and Windows 9x setup](docs/installation.md#install-dos-and-windows-9x)
+
+### Windows 2000 and Windows XP
+
+1. For NT, select full CPU speed in Settings with Win+F11. Boot your own
+   32-bit Windows 2000 or XP CD or ISO using Win+F12.
+2. Let Windows Setup partition and format the guest disk. Continue from
+   the hard disk when Setup restarts.
+3. At the desktop, mount the firmware's `drivers.iso` with Win+F12.
+   From its `NT5` directory run `NTINST.EXE --install` and then
+   `NTINST.EXE --display` as Administrator. Restart when prompted.
+4. Use the installed XDDM driver for DirectDraw and legacy Direct3D, and the
+   bundled system ICD for OpenGL. [NT5 configuration and compatibility](docs/nt5-support.md)
+
+### Installation media and USB
+
+Disk Manager can mount bootable images from external FAT storage and
+attach physical USB floppy and CD-ROM drives. In DOS, load the usual
+ATAPI CD driver and MSCDEX. In Windows, stop an external disk before
+handing it to Disk Manager. It returns to guest USB after the last image
+on it is ejected. Windows USB mass storage requires a compatible driver
+for the installed Windows version. [Media mounting and ownership](docs/storage.md)
+
 ## Game showcase
 
-DOS and Windows 98 games running on a **Dell Wyse 3040**. The original four
-DOS clips use an eMMC boot and **16 MB guest RAM**; the four 3D clips use
-**128 MB guest RAM**. All clips are **720p60**, played at original speed,
-with captured digital audio. Tomb Raider's game sound is disabled.
+Games running on a **Dell Wyse 3040** under DOS, Windows 98, Windows 2000
+and Windows XP. All files are **720p60** and play at their original speed.
+The NT clips use direct HDMI capture with digital audio.
 
 | Game | Game resolution | Performance measurement |
 |---|---|---|
@@ -42,9 +107,11 @@ with captured digital audio. Tomb Raider's game sound is disabled.
 | **Duke Nukem 3D** | 320×200 | In-game **DNRATE** counter in the clip's final, separately marked scene |
 | **Tyrian 2000** | 320×200 | **31.2 FPS** — separate early-level debug sample, normal speed / low detail |
 | **Tomb Raider / DOS Glide** | 640x480 | **21.71 FPS** - 437 completed frames / 20.129 s at the stationary level start |
-| **NFS III / Windows DirectX (DX5)** | 640x480 | **29.59 FPS** - 621 handled Flips / 20.984 s of driving; zero declined Flips |
-| **NFS III / Windows Glide** | 640x480 | **16.47 swap calls/s** - 247 calls / 15.001 s race interval |
-| **Quake II / Windows OpenGL** | 640x480 | **35.09 FPS** - separate opening-scene rotation benchmark |
+| **NFS III / Windows 98, Direct3D 5** | 640x480 | **29.59 FPS** over 20.984 s of driving |
+| **NFS III / Windows 2000, Direct3D 5** | 640x480 | **27.65 FPS** over 30.02 s of driving |
+| **NFS III / Windows XP, Direct3D 5** | 640x480 | **27.94 FPS** over 30.03 s of driving |
+| **NFS III / Windows 98, Glide** | 640x480 | **16.47 swap calls/s** over 15.001 s of driving |
+| **Quake II / Windows 98, 2000 and XP, OpenGL** | 640x480 | **35.09 / 29.44 / 29.53 FPS**, separate opening-scene rotation |
 
 Game FPS and capture FPS are different measurements. The original four DOS clips have sound
 enabled; Doom and Quake benchmark results come from separate no-sound runs.
@@ -85,12 +152,10 @@ https://github.com/user-attachments/assets/5645a36b-19c8-43b2-8efc-84873c90fd31
 
 </details>
 
-The 3D clips use 12 MB Voodoo2 memory, a 64 MB Windows GPU workspace and
-a 133 MHz base CPU profile with automatic CPU Boost. NFS III retains medium
-graphics, mirror, VSync and sound. The results apply to the measured scenes;
-the NFS clips are not a controlled speed comparison between APIs. See the
-[3D recording notes](docs/video/README.md) for counter definitions and capture
-limits. The replacement Tomb Raider and DX5 clips use direct 60 fps capture.
+The DOS and Windows 98 3D clips use a 133 MHz base CPU profile with
+automatic CPU Boost and a 64 MB Windows GPU workspace. The Windows 2000
+and XP benchmarks use an unrestricted CPU. The figures apply to the
+scenes measured. [Recording conditions](docs/video/README.md)
 
 <details>
 <summary><strong>Tomb Raider</strong> · 30 seconds · DOS Glide and automatic CPU Boost</summary>
@@ -108,7 +173,7 @@ https://github.com/user-attachments/assets/ccedbfa9-1434-4aef-a04d-e2ba064c99da
 
 Hometown / Corvette, driving with the original DX5 renderer, VSync and sound.
 
-[![Windows 98 DirectX race](docs/video/06-nfs3-directx.jpg)](docs/video/06-nfs3-directx.mp4)
+https://github.com/user-attachments/assets/5b0644e6-2e52-42bc-a817-b1f0330182d2
 
 </details>
 
@@ -118,7 +183,7 @@ Hometown / Corvette, driving with the original DX5 renderer, VSync and sound.
 Velocity9x Glide3, Hometown / Corvette. The caption reports swap calls;
 it does not independently measure display completion.
 
-[![Windows 98 Glide race](docs/video/07-nfs3-glide.jpg)](docs/video/07-nfs3-glide.mp4)
+https://github.com/user-attachments/assets/d2db54b6-d459-40ef-a5dd-0abe269c8034
 
 </details>
 
@@ -133,18 +198,33 @@ https://github.com/user-attachments/assets/25071566-8de0-40da-a41e-ed08b81dc538
 </details>
 
 <details>
-<summary><strong>Windows 2000 and XP</strong> · NFS III Direct3D and Quake II OpenGL</summary>
+<summary><strong>Need for Speed III</strong> · Windows 2000 and XP · Direct3D 5</summary>
 
-| Game | Windows 2000 | Windows XP |
-|---|---|---|
-| Need for Speed III / Direct3D 5 | [27.65 FPS race](docs/video/09-nfs3-windows2000-directx.mp4) | [27.94 FPS race](docs/video/10-nfs3-windowsxp-directx.mp4) |
-| Quake II / OpenGL | [29.44 FPS opening rotation](docs/video/11-quake2-windows2000-opengl.mp4) | [29.53 FPS opening rotation](docs/video/12-quake2-windowsxp-opengl.mp4) |
+**Windows 2000**
 
-Direct HDMI capture at 60 fps shows the games at their original playback
-speed. Quake II footage shows selected passages from Comm Center with
+https://github.com/user-attachments/assets/19a39fce-11e7-4bfe-b5e9-51b5589da4b5
+
+**Windows XP**
+
+https://github.com/user-attachments/assets/5fc4b346-770e-4f02-9349-f1c86f9c88bd
+
+</details>
+
+<details>
+<summary><strong>Quake II</strong> · Windows 2000 and XP · OpenGL</summary>
+
+The footage shows selected passages from Comm Center with
 the game's lightmap intensity increased for visibility. Its footers report
 the separate 640x480 opening-scene benchmark with default intensity.
 [Recording conditions](docs/video/README.md)
+
+**Windows 2000**
+
+https://github.com/user-attachments/assets/91c403b7-9baf-426a-bde5-9562891d5ccc
+
+**Windows XP**
+
+https://github.com/user-attachments/assets/06a94201-6ad6-4418-8548-4897e0b06978
 
 </details>
 
@@ -168,10 +248,10 @@ Start with the [documentation index](docs/index.md):
 
 | Component | Emulated hardware |
 |---|---|
-| **Processor** | 386 / 486 / Pentium with optional x87 FPU; Intel VT-x execution with configurable instruction-rate limits or unrestricted speed. MHz profiles approximate each generation; they are not cycle-accurate CPU models. |
+| **Processor** | 386, 486, Pentium, Pentium II and Pentium III profiles. The P6 profiles identify as distinct processors and expose the features supported by the backend. Intel VT-x execution with approximate rate limits or unrestricted speed. |
 | **Memory** | Configurable conventional + extended RAM (installer default 128 MB, up to 256 MB), LIM EMS 4.0 at `0xD000` |
 | **Video** | IBM VGA (text, CGA, EGA, Mode X, 256-colour) and VESA VBE 2.0 LFB modes up to 1280x1024 in 8/15/16/24/32 bpp with 8 MB VRAM |
-| **3D graphics** | DOS Glide through Voodoo2 emulation (8/12 MB); Windows 98 Direct3D, Glide and OpenGL through Velocity9x and Intel Gen8. Windows GPU workspace: 32/64/128 MB, separate from VGA VRAM. |
+| **3D graphics** | DOS Glide through Voodoo2 emulation (8/12 MB). Intel Gen8 acceleration for Direct3D, Glide and OpenGL in Windows 98, and for Direct3D and OpenGL in Windows 2000/XP. Windows GPU workspace sizes 32/64/128 MB. |
 | **Sound** | AdLib / Dual OPL2 / OPL3 ([Nuked OPL3](https://github.com/nukeykt/Nuked-OPL3)), Sound Blaster 16 (DSP 4.05, 8-bit and 16-bit DMA, mixer, auto-init), MPU-401 General MIDI ([TinySoundFont](https://github.com/schellingb/TinySoundFont)), Tandy 3-voice (SN76489), Covox Speech Thing & Disney Sound Source on LPT1, PC speaker (PIT channel 2) |
 | **Disks** | Dual IDE/ATA channels (hard disks and ATAPI CD-ROMs, using the native eMMC guest disk, `.img`/`.iso` files or a physical USB CD-ROM drive as appropriate), two 3.5" floppy drives (`.img`/`.ima` or a physical USB floppy drive) |
 | **Network** | NE2000 ISA / ISA PnP Ethernet adapter bridged to the USB/on-board Ethernet |
@@ -200,73 +280,6 @@ driven by the RT5672/I2S backend on the qualified unit.
 | **Display** | UEFI GOP framebuffer with monitor-side rendering/scaling; native legacy VGA for suitable guest modes |
 | **Storage** | UEFI Block I/O with caching and a bounded native eMMC guest disk (`host:emmc`) |
 | **USB** | Firmware USB I/O for physical HID/storage; virtual UHCI/BOT for guest USB disks |
-
-## Installing on the Wyse 3040
-
-1. Download **`wysedos-installer.img`** from
-   [wyseDOS releases](https://github.com/AidenShaw2020/wysedos/releases) or
-   [build it from source](docs/development.md).
-2. Write `wysedos-installer.img` to a USB flash drive in raw / DD mode (using
-   Rufus in DD mode, balenaEtcher or `dd`).
-3. Plug the USB stick into the Wyse 3040, power it on, press **F12** at the Dell
-   splash screen and select the USB stick in the UEFI boot menu.
-4. Select **U — Upgrade** to update an existing supported installation while
-   keeping C: and settings (confirm with U again), or **I — New install** to
-   erase and prepare eMMC (separate Y confirmation). Esc cancels.
-   A new installation partitions the internal 8 GB eMMC as follows:
-   - **Firmware partition (`WYSEDOS`, 128 MiB FAT32 on GPT)** —
-     stores `\EFI\BOOT\BOOTX64.EFI` and `\386\` (`bios.bin`, `vgabios.bin`,
-     `config.ini`, `gm.sf2`, `logo.bin`, `drivers.iso`), and registers the `wyseDOS` UEFI boot
-     entry in NVRAM.
-   - **Guest disk** — exposes the remaining eMMC capacity as the primary
-     master IDE disk (`hda=host:emmc`). DOS or Windows Setup creates the
-     partition and filesystem inside that disk.
-5. Remove the USB stick when installation or upgrade completes and press
-   any key to reboot into **wyseDOS**.
-
-See [installation and upgrade details](docs/installation.md) for detection,
-retained settings and interrupted-update recovery. Upgrade does not replace
-guest drivers or operating system files.
-
-## Installing DOS or Windows 9x
-
-Because the guest `C:` drive lives on the internal eMMC (`hda=host:emmc`), you
-can install an operating system onto it just as on a real PC:
-
-- **Physical USB floppy and USB CD-ROM (tested)**: connect a USB floppy or
-  USB CD-ROM drive with real installation media. The physical CD drive is
-  presented as an ATAPI CD-ROM; no ISO conversion or guest USB flash driver
-  is required. In DOS, load the usual ATAPI CD driver and MSCDEX.
-- **Image files on USB storage**: connect a FAT32 USB stick holding `.img` /
-  `.iso` installation media. See [physical drives and image sources](docs/storage.md).
-- **Disk Manager (`Win + F12`)**: open the on-screen disk manager at any time to
-  mount floppy images (`.img` / `.ima`) in `A:` / `B:`, CD-ROM images (`.iso`)
-  on the secondary IDE channel, or pick a boot device and restart.
-- **USB flash drives and external hard disks**: with
-  `usb_storage=1` (the default), unassigned USB disks attach automatically to
-  the guest's virtual PIIX3 UHCI controller. Disk Manager shows their ownership
-  and lets you browse image files in arbitrary directories on FAT12/16/32
-  external media. Before taking a disk in Windows, close its files and use
-  the system's Stop/Eject dialog. Confirm the takeover in Disk Manager:
-  the entire source disk disappears from guest USB while any of its images
-  are mounted. After the last image is ejected, it is flushed and returned
-  automatically to USB. Image paths on external media are temporary and must
-  be selected again after a monitor restart. Guest C:/eMMC is not browsable.
-  A compatible, separately licensed guest USB mass-storage driver is still
-  required in Windows. Mount the driver CD from Win+F12 for the real-DOS
-  USB drivers.
-  Physical floppy and CD-ROM handling is unchanged.
-- **Windows 98 display and 3D driver**: the modified
-  [Velocity9x package](drivers/windows9x/velocity9x/README.md) provides the
-  VGA/VBE desktop and Direct3D, Glide and OpenGL through WGPU/Gen8.
-
-## Installing Windows 2000 or XP
-
-Boot your own Windows CD or ISO and let Setup partition the guest disk.
-After the first desktop boot, mount `drivers.iso` with Win+F12. Its `NT5`
-directory contains the x86 WGPU bridge, 2D/Direct3D driver, and OpenGL ICD.
-The firmware and driver CD also support DOS and Windows 9x installations.
-[NT5 setup and validation](docs/nt5-support.md)
 
 ## Hotkeys
 

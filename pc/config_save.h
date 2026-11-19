@@ -72,7 +72,7 @@ void config_set_fpu(int enabled);        /* a 387, fitted or not */
 const int *config_mem_options(int *count);
 
 int  config_get_cpu_gen(void);
-void config_set_cpu_gen(int gen);         /* 3 = 386, 4 = 486, 5 = 586 */
+void config_set_cpu_gen(int gen);         /* Persisted processor profile, see cpu_profile.h */
 
 int  config_get_pcspeaker(void);
 void config_set_pcspeaker(int enabled);

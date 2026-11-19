@@ -8,6 +8,7 @@
  */
 
 #include "settingsui.h"
+#include "cpu_profile.h"
 #include "uikeys.h"
 #include "config_save.h"
 #include "osd.h"
@@ -63,7 +64,9 @@ typedef struct {
     RowEffect effect;
 } Row;
 
-static const int cpu_options[] = { 3, 4, 5 };
+static const int cpu_options[] = {
+    PC_CPU_386, PC_CPU_486, PC_CPU_PENTIUM, PC_CPU_PENTIUM_II, PC_CPU_PENTIUM_III
+};
 static const int mouse_speed_options[] = { 25, 50, 75, 100, 125, 150, 200, 300, 400 };
 static const int power_restore_options[] = { POWER_RESTORE_OFF, POWER_RESTORE_ON, POWER_RESTORE_LAST };
 static const int power_button_options[] = { 0, 1 };
@@ -77,7 +80,7 @@ static const Row rows[] = {
     { ROW_CHOICE,  "Memory",               config_get_mem_size_mb, config_set_mem_size_mb,
                                            0, 0, EFFECT_RESTART },
     { ROW_CHOICE,  "Processor",            config_get_cpu_gen, config_set_cpu_gen,
-                                           cpu_options, 3, EFFECT_RESTART },
+                                           cpu_options, sizeof cpu_options / sizeof *cpu_options, EFFECT_RESTART },
     { ROW_TOGGLE,  0,                      config_get_fpu, config_set_fpu, 0, 0, EFFECT_RESTART },
     /* Null options: the clocks depend on the processor; see row_options(). */
     { ROW_CHOICE,  "Speed",                config_get_speed_mhz, config_set_speed_mhz, 0, 0, EFFECT_NOW },
@@ -227,16 +230,6 @@ static int fpu_is_fixed(const Row *r)
     return r->get == config_get_fpu && config_get_cpu_gen() >= 5;
 }
 
-static const char *cpu_name(int gen)
-{
-    switch (gen) {
-    case 3:  return "386";
-    case 4:  return "486";
-    case 5:  return "Pentium";
-    default: return "?";
-    }
-}
-
 static void format_value(const Row *r, char *out, size_t cap)
 {
     const int v = r->get ? r->get() : 0;
@@ -256,7 +249,7 @@ static void format_value(const Row *r, char *out, size_t cap)
     }
     case ROW_CHOICE:
         if (r->set == config_set_cpu_gen)
-            snprintf(out, cap, "%s", cpu_name(v));
+            snprintf(out, cap, "%s", pc_cpu_profile_name(v));
         else if (r->set == config_set_vga_mem_kb) {
             /* Kilobytes below a megabyte, because 256 KB is the size this
              * card is remembered by and "0 MB" would be nonsense. */
