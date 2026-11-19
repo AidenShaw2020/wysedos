@@ -4,6 +4,7 @@
  */
 #include <ddk/ntddk.h>
 #include "wgpu_nt.h"
+#include "wgpu_cpu_query.h"
 #include "wgpu_fill.h"
 #include "wgpu_draw.h"
 #ifdef WGPU_NT_ENABLE_MATERIAL
@@ -126,13 +127,6 @@ static void wgpu_unmap(WgpuNtDevice *device)
     }
 }
 
-static BOOLEAN wgpu_has_fences(void)
-{
-    ULONG a, b, c, d;
-    __asm__ __volatile__("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1));
-    return (d & (1ul << 26)) != 0;
-}
-
 static NTSTATUS wgpu_start(WgpuNtDevice *device, PCM_RESOURCE_LIST resources)
 {
     PCM_PARTIAL_RESOURCE_DESCRIPTOR descriptor;
@@ -192,7 +186,7 @@ static NTSTATUS wgpu_start(WgpuNtDevice *device, PCM_RESOURCE_LIST resources)
         wgpu_unmap(device);
         return STATUS_INSUFFICIENT_RESOURCES;
     }
-    device->cpu_fences = wgpu_has_fences();
+    device->cpu_fences = (wgpu_nt_cpu_caps() & WGPU_CPU_FENCE) != 0;
 #ifdef WGPU_NT_BATCH_TEMPLATES
     if (device->cpu_fences) {
         const SIZE_T bytes = wgpu_nt_template_cache_size();

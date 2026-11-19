@@ -3,6 +3,7 @@
  * This exercises the same display->miniport path future rendering uses.
  */
 #include "wgpu_display.h"
+#include "../wgpu_cpu_query.h"
 #define DrvEscape wgpu_base_escape
 #define DrvEnableDriver wgpu_base_enable
 #define DrvEnableDirectDraw wgpu_base_enable_dd
@@ -60,9 +61,7 @@ static WgpuCopyTrace copy_trace;
 /* Synchronous fills and disjoint surface copies share the cache handling. */
 static int wgpu_probe_flush_support(void)
 {
-    ULONG a,b,c,d;
-    __asm__ __volatile__("cpuid":"=a"(a),"=b"(b),"=c"(c),"=d"(d):"a"(1));
-    return (d & ((1ul<<19)|(1ul<<26)))==((1ul<<19)|(1ul<<26)) && ((b>>8)&255)==8;
+    return (wgpu_nt_cpu_caps() & WGPU_CPU_CAPS) == WGPU_CPU_CAPS;
 }
 #ifdef WGPU_NT_CACHE_CPU_FEATURES
 static int wgpu_cached_flush_support;

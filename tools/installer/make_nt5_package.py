@@ -39,6 +39,7 @@ def corresponding_sources(winvbe):
                          ROOT / "tools/installer/build_nt5_opengl.ps1",
                          ROOT / "tools/installer/make_nt5_package.py",
                          ROOT / "tools/installer/driver-docs/NT5.TXT",
+                         ROOT / "pc/wgpu_cpu.h",
                          ROOT / "efi/platform/gen8_asm.c",
                          ROOT / "efi/platform/gen8_asm.h"]
         project_files.extend(sorted((ROOT / "drivers/nt").rglob("*")))

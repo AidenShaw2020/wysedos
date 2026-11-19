@@ -47,6 +47,11 @@ rate. The guest sees a matching processor signature when one of the two P6
 profiles is selected. Each installation can save its own profile. Reboot the
 virtual machine when changing RAM or CPU identity. [CPU settings](configuration.md#cpu-and-memory)
 
+The NT graphics drivers query the VMX monitor for the cache-coherence
+instructions used by WGPU. This lets the standard CPUID leaves describe
+Pentium II or III while the graphics driver still uses the native backend's
+cache flush and fence instructions.
+
 The VMX CPU backend virtualizes the guest's `IA32_SYSENTER_CS`,
 `IA32_SYSENTER_ESP` and `IA32_SYSENTER_EIP` MSRs through the VMCS, matching
 the advertised CPUID SEP capability. Reads return guest values; writes respect

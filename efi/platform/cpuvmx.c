@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include "pc.h"
 #include "cpu_profile.h"
+#include "wgpu_cpu.h"
 #include "fpu.h"
 #include "../src/vm.h"
 #include "../src/sysenter_msr.h"
@@ -822,12 +823,19 @@ static void mtf_step(void) {
 static void do_cpuid(void) {
     uint32_t leaf = (uint32_t)vm.regs.rax, sub = (uint32_t)vm.regs.rcx;
     uint32_t a, b, c, d;
-    __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(leaf), "c"(sub));
-    wyse_guest_cpuid_filter(leaf, &a, &b, &c, &d);
-    /* The interpreter object records the active machine, not the settings
-     * menu choice that is waiting for a monitor restart. */
-    if (pc_cpu_is_p6(icpu->gen))
-        pc_cpu_p6_cpuid(icpu->gen, leaf, d, &a, &b, &c, &d);
+    if (leaf == WGPU_CPU_QUERY && !sub && g_pc && g_pc->wgpu) {
+        __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1), "c"(0));
+        d = wgpu_cpu_native_caps(b, d);
+        a = WGPU_CPU_SIGNATURE;
+        b = c = 0;
+    } else {
+        __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(leaf), "c"(sub));
+        wyse_guest_cpuid_filter(leaf, &a, &b, &c, &d);
+        /* The interpreter object records the active machine, not the settings
+         * menu choice that is waiting for a monitor restart. */
+        if (pc_cpu_is_p6(icpu->gen))
+            pc_cpu_p6_cpuid(icpu->gen, leaf, d, &a, &b, &c, &d);
+    }
     vm.regs.rax = a; vm.regs.rbx = b; vm.regs.rcx = c; vm.regs.rdx = d;
 }
 

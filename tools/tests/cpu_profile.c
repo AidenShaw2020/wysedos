@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../../pc/cpu_profile.h"
+#include "../../pc/wgpu_cpu.h"
 #include "../../efi/src/guest_cpu_features.h"
 
 struct Registers {
@@ -35,7 +36,7 @@ static void check_profile(int model, uint32_t signature, const char *brand)
     assert((r.d & sse) == (model == PC_CPU_PENTIUM_III ? sse : 0));
     assert((r.d & ((1u << 11) | (1u << 15) | (1u << 23))) ==
            ((1u << 11) | (1u << 15) | (1u << 23)));
-    assert(!(r.d & ((1u << 6) | (1u << 12) | (1u << 26) | (1u << 28))));
+    assert(!(r.d & ((1u << 6) | (1u << 12) | (1u << 19) | (1u << 26) | (1u << 28))));
     r = read_profile(model, 1, 1u << 25);
     assert(!r.d);
     r = read_profile(model, 7, UINT32_MAX);
@@ -53,6 +54,9 @@ int main(void)
     wyse_guest_cpuid_filter(1, &a, &b, &c, &d);
     assert((d & 0x03000000u) == 0x03000000u);
     assert(!(d & ((1u << 6) | (1u << 12))));
+    assert(wgpu_cpu_native_caps(8u << 8, (1u << 19) | (1u << 26)) == WGPU_CPU_CAPS);
+    assert(wgpu_cpu_native_caps(8u << 8, 1u << 19) == 0);
+    assert(wgpu_cpu_native_caps(4u << 8, (1u << 19) | (1u << 26)) == WGPU_CPU_FENCE);
     puts("PASS: Pentium II/III signatures, brand, SSE dependencies, unsupported leaves");
     return 0;
 }
