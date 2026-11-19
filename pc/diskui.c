@@ -451,9 +451,17 @@ static void scan_disk_images(int drive_idx) {
     }
 
 #ifdef WYSE_BUILD
-    /* Keep network transfer fixtures on the development rig, but never
-     * browse the installed eMMC's runtime partition for image files. */
-    if (fs_default_backend()!=FS_NETFS) goto external_sources;
+    if (fs_default_backend() != FS_NETFS) {
+        /* Expose the bundled driver CD without browsing the firmware partition. */
+        const char driver_cd[] = "drivers.iso";
+        if (fs_default_backend() == FS_FAT &&
+            ext_accepted_for_drive(".iso", drive_idx) &&
+            f_stat("386/drivers.iso", &fno) == FR_OK &&
+            !(fno.fattrib & AM_DIR) && fno.fsize) {
+            strcpy(file_list[file_count++], driver_cd);
+        }
+        goto external_sources;
+    }
 #endif
     res = f_opendir(&dir, "SD:/386");
     if (res != FR_OK) goto external_sources;

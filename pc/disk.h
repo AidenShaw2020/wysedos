@@ -34,6 +34,7 @@ void disk_set_cdrom_change_callback(void (*cb)(int drive, const char *filename, 
 
 struct VGAState;
 void disk_set_vga(struct VGAState *vga);
+void disk_set_cdrom(uint8_t drivenum, uint8_t iscdrom);
 uint8_t ata_is_cdrom(uint8_t drivenum);
 uint16_t fdd_get_cyls(uint8_t drivenum);
 uint16_t fdd_get_heads(uint8_t drivenum);

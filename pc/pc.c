@@ -1821,8 +1821,10 @@ PC *pc_new(SimpleFBDrawFunc *redraw, void (*poll)(void *), void *redraw_data,
 
 	/* CD-ROM E: always present on ide2/drive0 (secondary master).
 	 * Only attach if cdc= didn't already claim that slot (ata[2]). */
-	if (!ide_has_drive(pc->ide2, 0))
+	if (!ide_has_drive(pc->ide2, 0)) {
 		ide_attach_cd(pc->ide2, 0);
+		disk_set_cdrom(2, 1);
+	}
 
 
 

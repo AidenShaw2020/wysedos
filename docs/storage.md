@@ -5,18 +5,24 @@
 ## Native internal C:
 
 `hda=host:emmc` exposes a bounded region of internal eMMC as the primary IDE
-disk. C: is FAT32 using the available guest capacity, not a fixed 2 GB image.
+disk. A fresh installation presents the full available guest capacity as
+unallocated space. The selected operating system creates its own partitions
+and filesystems, for example FAT for DOS/Windows 9x or NTFS for Windows NT.
 The firmware partition and physical partition table are outside the guest's
 address range. The guest has its own disk layout within this region, so a
 guest MBR write cannot reach the firmware partition through this backend.
 This protects monitor boot files, not C: from guest FORMAT/FDISK or deletion.
 
-`386/config.ini` configures the monitor. `C:\CONFIG.SYS`, `AUTOEXEC.BAT` and
-`MSDOS.SYS` configure the guest. BootGUI is a guest setting.
+`386/config.ini` configures the monitor. DOS/Windows 9x startup files and the
+Windows NT boot loader live on their respective guest installations.
 
 The installer offers a firmware-only Upgrade for an existing supported layout.
 It preserves this guest region, its operating system and files, plus the current
 monitor configuration. See [upgrade instructions](installation.md#upgrade-an-existing-installation).
+
+From an eMMC boot, the Win+F12 Disk Manager offers the bundled `drivers.iso`
+on an available IDE slot. The guest reads it as a virtual CD-ROM. See
+[mounting the driver CD](installation.md#mount-the-driver-cd).
 
 ## External disk ownership
 

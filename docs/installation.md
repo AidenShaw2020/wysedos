@@ -82,11 +82,15 @@ restart if requested. See [NT5 validation and limits](nt5-support.md).
 
 ## Mount the driver CD
 
-After the operating system starts, open Win+F12, choose an available IDE drive
-and select `drivers.iso` from the monitor's local files. DOS requires a CD-ROM
-driver and MSCDEX or equivalent to assign the CD a drive letter. Start with
-`README.TXT` on the CD. In Windows 2000/XP, `NT5` contains the NT Plug and
-Play packages. In DOS, copy any persistent tools you use to the DOS volume.
+When booted from eMMC, open Win+F12, choose the CD-ROM slot ATA1-0, and select
+`drivers.iso`. Disk Manager offers the bundled CD directly from the firmware
+partition and can change the disc in that slot while the guest is running.
+This works offline.
+
+DOS requires a CD-ROM driver and MSCDEX or equivalent to assign a drive letter.
+Start with `README.TXT` on the CD. In Windows 2000/XP, `NT5` contains the NT
+Plug and Play packages. In DOS, copy any persistent tools you use to the DOS
+volume.
 
 ## Upgrade an existing installation
 
