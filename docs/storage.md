@@ -46,7 +46,8 @@ and must be made again after a monitor restart.
 
 ## DOS and physical drives
 
-- `C:\DRIVERS\USBDOS\USBON.BAT` loads USBUHCIL and USBDRIVE with the supplied
+- `USBON.BAT` from the bundled driver CD loads USBUHCIL and USBDRIVE from
+  `C:\DRIVERS\USBDOS` after those files have been copied there. It uses the supplied
   low-memory options. Read their bundled documentation for prerequisites.
 - Use USBOFF before starting Windows USB drivers, avoiding competing stacks.
 - Public releases do not supply Windows USB storage driver packages.

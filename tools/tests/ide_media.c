@@ -1,12 +1,17 @@
 /* Exercise the real IDE controller lifecycle with in-memory media only.
  * clang -O1 -Wno-incompatible-pointer-types -Iefi/platform -Ipc
  *   tools/tests/ide_media.c -o work/ide-media-test.exe */
-#include "../../pc/ide.c"
+#ifndef IDE_MEDIA_SOURCE
+#define IDE_MEDIA_SOURCE "../../pc/ide.c"
+#endif
+#include IDE_MEDIA_SOURCE
 #define CHECK(x) do { if (!(x)) { printf("FAIL %d: %s\n", __LINE__, #x); exit(1); } } while (0)
 static uint8_t old_data[4096], new_data[4096];
 static int fail_sync, writes, syncs;
+#ifndef IDE_MEDIA_EXTERNAL_CLOCK
 uint64_t time_us_64(void) { return 1; }
 uint32_t time_us_32(void) { return 1; }
+#endif
 FRESULT f_open(FIL *f, const TCHAR *p, BYTE m) { (void)f; (void)p; (void)m; abort(); }
 FRESULT f_close(FIL *f) { (void)f; abort(); }
 FRESULT f_read(FIL *f, void *p, UINT n, UINT *got) { (void)f; (void)p; (void)n; (void)got; abort(); }

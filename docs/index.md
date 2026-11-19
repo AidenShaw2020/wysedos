@@ -1,6 +1,6 @@
 # wyseDOS documentation
 
-These guides describe the v1.1.18 implementation on the Dell Wyse 3040.
+These guides describe the v1.1.19 preview on the Dell Wyse 3040.
 They distinguish supported mechanisms from configurations actually tested on
 hardware. Detailed engineering reports retain their original test conditions.
 
@@ -11,6 +11,7 @@ hardware. Detailed engineering reports retain their original test conditions.
 | [Installation](installation.md) | Release files, New installation, data-preserving upgrade, DOS and Windows setup |
 | [Configuration](configuration.md) | Controls, persistent settings, CPU Boost, GPU memory, RAM and sound |
 | [Windows 98 graphics](../drivers/windows9x/velocity9x/INSTALL.TXT) | Velocity9x installation, Direct3D, Glide and OpenGL |
+| [Windows 2000 and XP](nt5-support.md) | Installation, graphics preview, hardware checks and limits |
 | [DOS Glide](voodoo2.md) | Voodoo2 emulation, memory and renderer |
 | [Storage](storage.md) | Native C:, USB disks, images and exclusive ownership |
 | [Compatibility](compatibility.md) | Tested systems/games, performance and limits |
@@ -25,6 +26,7 @@ hardware. Detailed engineering reports retain their original test conditions.
 | [Release history](../CHANGELOG.md) | Selected verified release changes |
 | [Third-party notices](../README.md#acknowledgements-and-licence) | Bundled components and excluded packages |
 | [SeaBIOS provenance](../LICENSES/seabios.md) | Licence texts, ROM hashes and remaining source gap |
+| [NT graphics notices](../LICENSES/winvbe.md) | WINVBE and Velocity9x source and licence information |
 
 ## Engineering reports
 

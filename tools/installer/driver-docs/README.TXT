@@ -1,8 +1,7 @@
 wyseDOS driver bundle
 ====================
-The device installer copies this entire unpacked folder to C:\DRIVERS on
-the newly prepared guest FAT32 partition. Drivers are not installed into
-Windows automatically. Install an operating system first.
+Mount drivers.iso from the wyseDOS firmware partition in Win+F12.
+Install the operating system first. Copy drivers to its disk only as needed.
 
 VELOCITY Modified Velocity9x Windows 98 3D driver for wyseDOS WGPU/Gen8.
          Select VELOCITY9X.INF. Read WYSE.TXT and RECOVER.TXT first.
@@ -11,13 +10,18 @@ VELOCITY Modified Velocity9x Windows 98 3D driver for wyseDOS WGPU/Gen8.
          source (SRC.ZIP) are included. This is an independent fork build.
 
 USBDOS   Bret Johnson's DOS USB drivers, including their documentation.
-         In real DOS run C:\DRIVERS\USBON.BAT. USB flash disks receive a
+         Copy USBDOS and the batch files to C:\DRIVERS, then run USBON.BAT
+         from real DOS. USB flash disks receive a
          free drive letter automatically, without choosing them in OSD.
          LowMemory:Yes is required by wyseDOS's bounded guest DMA.
          These drivers use the virtual UHCI controller, not physical HID.
-CTMOUSE  CuteMouse 2.1 beta 4. Run C:\DRIVERS\CTMOUSE\CTMOUSE.EXE /P.
+CTMOUSE  CuteMouse 2.1 beta 4. Run CTMOUSE\CTMOUSE.EXE /P.
          The binary matches the version tested on this Wyse. GPL sources
          and the upstream documentation are included.
+
+NT5      Windows 2000/XP x86 WGPU bridge and display driver packages.
+         Read NT5\README.TXT for installation and qualification status.
+
 Windows USB packages not included
 ---------------------------------
 NUSB FE, NUSB SE and the SanDisk-based Win95 package are not supplied.

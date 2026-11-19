@@ -1216,6 +1216,8 @@ void pc_step(PC *pc)
 #endif
 	}
 	i8254_update_irq(pc->pit);
+	ide_poll(pc->ide);
+	ide_poll(pc->ide2);
 	cmos_update_irq(pc->cmos);
 	if (pc->enable_serial)
 		u8250_update(pc->serial);
@@ -2008,6 +2010,7 @@ PC *pc_new(SimpleFBDrawFunc *redraw, void (*poll)(void *), void *redraw_data,
 	pc->port92 = 0x2;
 	pc->shutdown_state = 0;
 	pc->reset_request = 0;
+	pci_bus_save_reset_state(pc->pcibus);
 #if defined(CIRCLE_BUILD)
 	__atomic_store_n(&g_vga_pc, pc, __ATOMIC_RELEASE);
 #endif
@@ -2115,6 +2118,7 @@ void load_bios_and_reset(PC *pc)
     acpi_reset(pc);
 #endif
 	voodoo2_reset(pc->voodoo2);
+	pci_bus_reset(pc->pcibus);
 	vga_reset_display(pc->vga);
 	uhci_reset(pc->uhci);
 	int bios_size = 0;

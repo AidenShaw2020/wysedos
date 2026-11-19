@@ -2,7 +2,7 @@
 
 [Documentation index](index.md)
 
-Observations through v1.1.14 on the Wyse 3040 are not complete certification.
+Observations on the Wyse 3040 cover the specific configurations below.
 Many tests used 16 MB guest RAM and native eMMC. CPU profile, guest drivers
 and physical output matter.
 
@@ -14,6 +14,7 @@ and physical output matter.
 | Windows 98 FE | Installation, historical VBE desktop tests, USB read/write and orderly Stop/Eject with a separately supplied driver |
 | Windows 98 SE | Installed system, historical 800x600/32-bit VBE desktop and input timing; current driver package is Velocity9x |
 | Windows 95 / Me | Model/driver support does not establish equivalent full OS qualification |
+| Windows 2000 SP4 / XP SP3 x86 | Installation and verified disk I/O, hardware DirectDraw and legacy Direct3D, OpenGL mipmaps/depth and game samples. [NT5 preview](nt5-support.md) |
 | Power | Normal Windows shutdown reached physical power-off; DPMS blanks guest pixels/cursor, retaining the host signal |
 | HID | Physical keyboard/mouse with PicoHID; KVM reconnect and long-idle PS/2 correction; possible enumeration pauses remain |
 | USB floppy | Physical 1.44 MB boot/read/write; separate from flash and image ownership paths |

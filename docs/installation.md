@@ -14,7 +14,8 @@ enabled, and the boot policy must permit the unsigned EFI application.
 |---|---|
 | `wysedos-installer.img` | Raw bootable USB image; new installation or firmware upgrade |
 | `BOOTX64.EFI` | Monitor executable; needs matching runtime assets |
-| `wysedos-drivers.zip` | Guest drivers and their documentation |
+| `wysedos-drivers.zip` | The same DOS, Windows 9x and NT5 driver files as the shared CD |
+| `wysedos-nt5-driver-package.iso` | Manifest-checked NT5 input for rebuilding the USB installer |
 | `wysedos-licenses.zip` | Licence texts and recorded notices |
 | `SHA256SUMS.txt` | Checksums of release assets |
 
@@ -28,21 +29,22 @@ They are not part of the public distribution.
 2. Write it to a USB stick in raw/DD mode. This replaces the stick's contents;
    copying the image file onto a formatted stick is insufficient.
 3. At the Dell logo press F12 and choose the stick's UEFI boot entry.
-4. Choose **U — Upgrade** if a supported existing installation is detected,
-   or **I — New install**. Upgrade asks for a second U confirmation and keeps
-   guest data and settings. **New install repartitions eMMC and destroys its
-   existing guest data**; it also requires a separate Y erase confirmation.
-   Esc cancels. The graphical progress display identifies the current step.
+4. Choose **U — Upgrade** if available or **I — New install**. Upgrade asks
+   for a second U confirmation and keeps guest data and settings. A new
+   installation requires Y. **It repartitions eMMC and destroys its existing
+   data.** Esc cancels.
 5. Remove the stick when instructed and follow the reboot prompt.
 
-A new installation creates a 128 MB firmware partition and a guest disk container
-using the remaining space. It prepares FAT32 C: and copies `C:\DRIVERS`.
-It does not supply DOS system files or install Windows.
+A new installation creates a 128 MiB firmware partition and reserves the
+remaining space for the guest. The same unpartitioned disk is presented to
+DOS, Windows 9x, Windows 2000, and Windows XP. Each operating system creates
+its own partition and file system. Supply your own installation media.
 
-The firmware partition holds `EFI/BOOT/BOOTX64.EFI` and `386/` runtime assets.
-It is outside the disk presented to the guest. See [storage](storage.md).
+The firmware partition holds `EFI/BOOT/BOOTX64.EFI`, the `386/` runtime assets,
+and `386/drivers.iso`. It is outside the disk presented to the guest. See
+[storage](storage.md).
 
-## Install your operating system
+## Install DOS and Windows 9x
 
 1. Connect a physical USB floppy or USB CD-ROM drive with your installation
    media, or put floppy images (`.img`/`.ima`) and CD images (`.iso`) on
@@ -50,12 +52,12 @@ It is outside the disk presented to the guest. See [storage](storage.md).
    image is an alternative, not a requirement.
 2. Open Win+F12 and select the media and boot device. Stop/eject a disk in
    Windows before granting it to Disk Manager as an image source.
-3. Boot your DOS media. Transfer the system using that DOS version's procedure,
-   for example its own `SYS C:`. Confirm that the DOS version supports FAT32.
-   Formatting C: removes DRIVERS as well as other files; save it first if needed.
+3. Boot your DOS media. Use its partitioning and formatting tools to create
+   the DOS volume, then transfer the system using that DOS version's procedure.
+   Choose a file system supported by your DOS version.
 4. Install Windows normally from your media. Begin with standard VGA, then
    follow [Velocity9x for Windows 98](../drivers/windows9x/velocity9x/README.md).
-   The latter is supplied in `C:\DRIVERS\VELOCITY`, with its GPL license,
+   The driver CD supplies `VELOCITY`, with its GPL license,
    third-party notices and corresponding modified source in `SRC.ZIP`.
 5. DOS mouse applications normally need CuteMouse or another PS/2 mouse driver.
    DOS USB storage needs the supplied USB drivers; Windows USB storage needs
@@ -63,6 +65,28 @@ It is outside the disk presented to the guest. See [storage](storage.md).
 
 Windows 98 FE and SE have been exercised. Other Windows variants do not have
 equivalent complete qualification merely because the device model supports them.
+
+## Install Windows 2000 or Windows XP
+
+Insert your Windows CD or select its ISO in Win+F12. Boot the CD for the
+first stage of Windows Setup. Select the
+unpartitioned guest disk and let Setup create and format its system partition.
+When Setup restarts, let it boot from the hard disk and continue with the
+normal Setup prompts. Windows sees the full guest capacity. The 128 MiB
+firmware partition remains outside the guest.
+
+Use 32-bit Windows 2000 SP4 or XP SP3 for the graphics preview. Once the
+desktop is ready, mount the shared driver CD. Run `NTINST.EXE --install`
+then `NTINST.EXE --display` from its `NT5` directory as Administrator and
+restart if requested. See [NT5 validation and limits](nt5-support.md).
+
+## Mount the driver CD
+
+After the operating system starts, open Win+F12, choose an available IDE drive
+and select `drivers.iso` from the monitor's local files. DOS requires a CD-ROM
+driver and MSCDEX or equivalent to assign the CD a drive letter. Start with
+`README.TXT` on the CD. In Windows 2000/XP, `NT5` contains the NT Plug and
+Play packages. In DOS, copy any persistent tools you use to the DOS volume.
 
 ## Upgrade an existing installation
 
@@ -73,7 +97,7 @@ configuration and firmware files. An older image-based layout or damaged
 installation is not automatically migrated. If Upgrade is unavailable, cancel
 and investigate; New install erases data.
 
-Upgrade replaces the monitor EFI executable, BIOS/VGA ROMs, soundfont, logo and
+Upgrade replaces the monitor EFI executable, BIOS/VGA ROMs, soundfont, logo, driver CD and
 accompanying runtime licence/notice files. It keeps `386/config.ini`, the native
 layout marker, partition tables, boot entry and the entire guest C: unchanged.
 Games, Windows, AUTOEXEC.BAT, CONFIG.SYS and `C:\DRIVERS` are not overwritten.

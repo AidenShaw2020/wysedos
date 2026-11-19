@@ -3,6 +3,20 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.19 - 2026-11-19
+
+- Add a Windows 2000 and XP graphics preview for the Wyse 3040. The
+  matching x86 WDM, XDDM and OpenGL drivers provide GPU-backed 2D,
+  legacy Direct3D, and OpenGL 1.1 with mipmapping and depth.
+- Use one driver CD in the firmware partition for DOS, Windows 9x and NT.
+  A fresh installation presents the same blank guest disk to each OS
+  family. DOS and Windows Setup create their own partitions and filesystems.
+- Correct ATA PIO data-out timing and guest CPU feature handling. Expose the
+  emulated Sound Blaster 16 to XP through ACPI using its inbox driver.
+- Add NT graphics installation instructions, corresponding driver sources
+  and notices. Add direct capture footage from both NT versions and crop
+  the lower edge of the four published NFS III clips and their thumbnails.
+
 ## v1.1.18 - 2026-11-13
 
 - Skip optional UDP diagnostic broadcasts while the Ethernet cable is

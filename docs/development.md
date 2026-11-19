@@ -14,17 +14,16 @@ From the repository root in Git Bash:
 
 ```sh
 ./efi/build.sh
-./tools/installer/build.sh
+./tools/installer/build.sh out/wysedos-installer.img /absolute/path/to/wysedos-nt5-driver-package.iso
 ```
 
 Outputs: `efi/build/bootx64.efi` and
 `tools/installer/out/wysedos-installer.img`. The EFI build also stages a copy
 under `tools/pxe/netboot/`; this does not create a working PXE server. The
-installer rebuilds its runtime tree and prepares DRIVERS. For a distinct image:
-
-```sh
-./tools/installer/build.sh out/wysedos-installer-test.img
-```
+installer rebuilds its runtime tree and the shared driver CD. Install
+`pycdlib` for the CD step. The NT5 package ISO is a release asset.
+Its manifest must match the NT binaries, INFs and corresponding-source
+archive. Set `NT_DRIVER_ISO` to its absolute path to omit the second argument.
 
 The 3D installer uses checked-in `tools/installer/runtime.ini`, not the local
 development machine's mounted-media configuration. Runtime assets use an
@@ -38,6 +37,20 @@ archive under `drivers/windows9x/velocity9x`. Maintainers generate them with
 and native checks. Open Watcom and the Microsoft DDK are separate build
 dependencies and are not redistributed. Installer package hashes are pinned
 in `prepare_drivers.py`; regenerate manifests whenever a bundled file changes.
+
+To rebuild the x86 NT5 package, extract the pinned Velocity9x source ZIP and
+check out the WINVBE revision in the licence notice. Use Windows LLVM,
+the MinGW-w64 headers (including `ddk`), Open Watcom, Python 3, `pefile`
+and `pycdlib`. From PowerShell run the following with local paths.
+
+```powershell
+python tools/installer/build_nt5_drivers.py --winvbe path/to/WINVBE --velocity path/to/velocity9x --headers path/to/mingw/include --output work/nt5-drivers
+./tools/installer/build_nt5_opengl.ps1 -Watcom path/to/watcom -OutputDir work/nt5-opengl
+python tools/installer/make_nt5_package.py work/nt5-drivers work/nt5-opengl/WGGLNT.DLL path/to/WINVBE work/wysedos-nt5-driver-package.iso
+```
+
+Use `--w2k-system32` to check imports against a locally supplied Windows
+2000 SP4 system directory. [NT graphics licence and sources](../LICENSES/winvbe.md)
 
 Outputs, captures, OS images and rig state are ignored by Git. Incremental
 builds use source timestamps and a shared-header stamp. After restoring old
@@ -102,7 +115,7 @@ tones, overflow and ring reuse.
 ## Hardware and releases
 
 Preserve guest data/configuration, test the candidate on hardware, and check
-the installer independently: extract EFI/runtime/DRIVERS, compare hashes and
+the installer independently: extract EFI, runtime and `386/drivers.iso`, compare hashes and
 check excluded packages. Hash the exact release files and verify uploaded
 assets. Successful compilation alone is insufficient. ROM source provenance
 has a [recorded remaining gap](../LICENSES/seabios.md).

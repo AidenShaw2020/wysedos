@@ -1,17 +1,20 @@
 #!/bin/sh
 # Build the wyseDOS installation USB image.
-#   build.sh [image]     default: tools/installer/out/wysedos-installer.img
+#   build.sh [image] [NT driver ISO]
+# If omitted, the NT driver ISO comes from NT_DRIVER_ISO.
 #
 # The image holds the monitor (EFI/BOOT/BOOTX64.EFI), install.ini, which makes
 # it start as the installer, and disks/386/ - the BIOS, VGA BIOS, config.ini
-# and the runtime assets. A native FAT32 guest disk is created on eMMC; no
-# HDD images are installed. Write the installer image to a USB stick
+# and the runtime assets, including drivers.iso. The installer reserves an
+# unpartitioned guest disk on eMMC. Write the installer image to a USB stick
 # with Rufus (DD image mode), balenaEtcher or dd; everything on the stick is
 # replaced.
 set -e
 cd "$(dirname "$0")"
 LLVM="${LLVM:-/c/Program Files/LLVM/bin}"
 OUT="${1:-out/wysedos-installer.img}"
+NT_MEDIA="${2:-${NT_DRIVER_ISO:-}}"
+[ -n "$NT_MEDIA" ] || { printf '%s\n' 'Supply an NT5 driver ISO with the verified package manifest.' >&2; exit 2; }
 mkdir -p out/obj "$(dirname "$OUT")"
 "${PYTHON:-python}" prepare_drivers.py
 
@@ -29,9 +32,10 @@ cp runtime.ini out/config.ini
 
 rm -rf out/runtime
 mkdir -p out/runtime
-for name in bios.bin vgabios.bin guest_mbr.bin logo.bin gm.sf2 gm.sf2.LICENSE.txt \
+for name in bios.bin vgabios.bin logo.bin gm.sf2 gm.sf2.LICENSE.txt \
             SeaBIOS-COPYING.txt SeaBIOS-COPYING.LESSER.txt SeaBIOS-NOTICE.txt; do
     cp "../../disks/386/$name" out/runtime/
 done
-out/mkusb.exe "$OUT" ../../efi/build/bootx64.efi=EFI/BOOT/BOOTX64.EFI out/install.ini=install.ini out/runtime=386 out/config.ini=386/config.ini out/DRIVERS=DRIVERS
+"${PYTHON:-python}" make_driver_cd.py out/DRIVERS "$NT_MEDIA" out/runtime/drivers.iso
+out/mkusb.exe "$OUT" ../../efi/build/bootx64.efi=EFI/BOOT/BOOTX64.EFI out/install.ini=install.ini out/runtime=386 out/config.ini=386/config.ini
 ls -l "$OUT"

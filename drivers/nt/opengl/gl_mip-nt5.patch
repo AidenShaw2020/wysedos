@@ -1,0 +1,48 @@
+--- a/src/opengl/gl_surface.c
++++ b/src/opengl/gl_surface.c
+@@ -622,7 +622,8 @@
+ {
+     LPDIRECTDRAWSURFACE7 level = (LPDIRECTDRAWSURFACE7)surface;
+     LPDIRECTDRAWSURFACE7 next;
+-    DDSCAPS2 caps;
++    DDSCAPS2 caps = {0};
++    HRESULT attached;
+     v9x_u32 index;
+     int ok = 1;
+ 
+@@ -634,8 +635,10 @@
+         next = 0;
+         if (ok && index + 1ul < levels) {
+             caps.dwCaps = DDSCAPS_TEXTURE | DDSCAPS_MIPMAP;
+-            if (IDirectDrawSurface7_GetAttachedSurface(level, &caps, &next) !=
+-                    DD_OK) {
++            attached = IDirectDrawSurface7_GetAttachedSurface(level, &caps, &next);
++            if (attached != DD_OK) {
++                v9x_gl_log3("hwtex attach level=%lu hr=%08lX", index + 1ul,
++                            (DWORD)attached, 0ul);
+                 next = 0;
+                 ok = 0;
+             }
+@@ -706,7 +709,8 @@
+ {
+     LPDIRECTDRAWSURFACE7 level = (LPDIRECTDRAWSURFACE7)surface;
+     LPDIRECTDRAWSURFACE7 next;
+-    DDSCAPS2 caps;
++    DDSCAPS2 caps = {0};
++    HRESULT attached;
+     v9x_u32 index;
+     int ok = 1;
+ 
+@@ -722,8 +726,10 @@
+         next = 0;
+         if (ok && index + 1ul < levels) {
+             caps.dwCaps = DDSCAPS_TEXTURE | DDSCAPS_MIPMAP;
+-            if (IDirectDrawSurface7_GetAttachedSurface(level, &caps, &next) !=
+-                    DD_OK) {
++            attached = IDirectDrawSurface7_GetAttachedSurface(level, &caps, &next);
++            if (attached != DD_OK) {
++                v9x_gl_log3("hwtex attach level=%lu hr=%08lX", index + 1ul,
++                            (DWORD)attached, 0ul);
+                 next = 0;
+                 ok = 0;
+             }

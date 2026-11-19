@@ -23,6 +23,7 @@
 #include "diskui.h"
 #include "storage.h"
 #include "installer.h"
+#include "emmc_snapshot.h"
 #include "delltoken.h"
 #include "blkcache.h"
 #include "hostblk.h"
@@ -961,6 +962,16 @@ static void poll_control(PC *pc) {
         pc->reset_request = 1;
     } else if (!strncmp(cmd, "stats", 5)) {
         report(pc, 10000000);
+    } else if (!strcmp(cmd, "ide")) {
+        printf("ide: lost writes %u short reads %u taskfile cross-select %u command errors %u; PIC master %08x slave mask %02x\n",
+               g_ide_write_lost, g_ide_read_short, g_ide_tf_unselected, g_ide_cmd_errors,
+               i8259_debug_master(pc->pic), (unsigned)i8259_ioport_read(pc->pic, 0xa1));
+        printf("ide: asynchronous PIO data-out, blocks %u, remaining wire time %llu us\n",
+               g_ide_pio_write_blocks, (unsigned long long)g_ide_pio_write_wait_us);
+        for (unsigned command = 0; command < 256; ++command)
+            if (g_ide_cmd_hist[command]) printf("ide: command %02x count %u\n", command, g_ide_cmd_hist[command]);
+        char line[256];
+        for (int i = 0; ide_trace_line(i, line, sizeof(line)); ++i) printf("ide: %s\n", line);
     } else if (!strncmp(cmd, "fastmmio ", 9)) {
         extern int g_fast_mmio;
         g_fast_mmio = atoi(cmd + 9) != 0;
@@ -1593,6 +1604,11 @@ void wyse_main(void) {
     storage_list();
     hostblk_list();
     if (!storage_init()) wyse_fatal("no 386/config.ini on the boot disk");
+    if (emmc_snapshot_requested()) {
+        bool ok = emmc_snapshot_run();
+        gBS->SetWatchdogTimer(0, 0, 0, NULL);
+        wyse_fatal(ok ? "eMMC backup verified; guest not started" : "eMMC backup failed; guest not started");
+    }
     if (installer_wanted()) installer_run();
     if (!load_config(&conf)) wyse_fatal("cannot read 386/config.ini");
     printf("config: bios %s, vga bios %s, hda %s, %ld MB, cpu %d, fpu %d\n", conf.bios, conf.vga_bios,
@@ -1608,6 +1624,7 @@ void wyse_main(void) {
     bool have_analog = analog_init();
     PC *pc = pc_new(redraw, NULL, NULL, (uint8_t *)surface, &conf);
     if (!pc) wyse_fatal("pc_new failed");
+    printf("ide: asynchronous PIO data-out processing, negotiated ATA bus timing\n");
     /* GETCAPS describes the allocated surface capacity, not today's DOS or
      * Windows mode. Otherwise the VGA BIOS hides every mode above 640x480. */
     pc->vga->fb_dev->max_width = SURF_MAX_W;

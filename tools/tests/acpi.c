@@ -18,6 +18,12 @@ int main(void) {
     acpi_io_write(0x510,2,0x22);
     for (unsigned i=0;i<sizeof(acpi_loader);i++) CHECK(readp(0x511,1)==acpi_loader[i]);
     CHECK(readp(0x511,1)==0);
+    CHECK(readp(0x60c,1)==0);
+    pc.sb16_enabled=1;
+    CHECK(readp(0x60c,1)==1 && readp(0x60c,4)==1);
+    CHECK(acpi_io_write(0x60c,1,0) && readp(0x60c,1)==1);
+    pc.sb16_enabled=0;
+    CHECK(readp(0x60c,1)==0);
     CHECK(readp(0x604,2)==0);acpi_io_write(0xb2,1,0xf1);CHECK(readp(0x604,2)==1);
     acpi_io_write(0x602,2,1);now=2400000;acpi_step();CHECK(readp(0x600,2)&1);CHECK(irq_level);
     acpi_io_write(0x600,1,1);CHECK(!(readp(0x600,2)&1) && !irq_level);

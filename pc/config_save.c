@@ -258,7 +258,9 @@ void config_set_vga_mem_kb(int kb)
 static int cfg_speed = -1;
 static const int speed_386[] = { 16, 20, 25, 33, 40, 0 };
 static const int speed_486[] = { 25, 33, 50, 66, 75, 100, 120, 0 };
-static const int speed_586[] = { 60, 75, 90, 100, 120, 133, 166, 200, 233, 0 };
+/* Higher execution-rate profiles also serve NT guests. They do not select a
+ * P6 model; VMX CPUID policy is separate. Rates remain approximate. */
+static const int speed_586[] = { 60, 75, 90, 100, 120, 133, 166, 200, 233, 266, 300, 333, 400, 0 };
 
 const int *config_speed_options(int *count)
 {
@@ -300,7 +302,7 @@ void config_set_cpu_gen(int gen)
      */
     if (gen >= 5) cfg_fpu = 1;
     clamp_mem_to_generation();
-    /* a speed the new generation never ran at goes back to its default */
+    /* A rate outside the new generation's profiles returns to its default. */
     int n = 0;
     const int *opt = config_speed_options(&n);
     bool known = false;

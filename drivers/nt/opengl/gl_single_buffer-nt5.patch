@@ -1,0 +1,208 @@
+--- a/src/opengl/gl_surface.c
++++ b/src/opengl/gl_surface.c
+@@ -38,6 +38,7 @@
+     /* The depth cell the window's pixel format asked for: 32 for the
+      * deeper format, 16 (or 0, unset) for the first. */
+     DWORD depth_cell;
++    int single_buffer;
+ };
+ 
+ /* DirectDraw 7 interface identifier from the DirectX SDK. */
+@@ -315,6 +316,21 @@
+         drawable->depth_cell = depth_cell;
+     }
+     return 1;
++}
++
++int ntgl_set_pixel_format(void *window, v9x_u32 depth_cell, int single)
++{
++    struct v9x_gl_drawable *drawable;
++
++    if (!v9x_gl_drawable_set_depth(window, depth_cell)) return 0;
++    drawable = v9x_gl_drawable_find(window);
++    drawable->single_buffer = single;
++    return 1;
++}
++
++int ntgl_drawable_single_buffer(const V9X_GL_DRAWABLE *drawable)
++{
++    return drawable != 0 && drawable->single_buffer;
+ }
+ 
+ /* The cell a drawable's depth surface is made at: 32 only while the
+@@ -812,6 +812,13 @@
+     if (drawable->front != 0) {
+         return drawable->front;
+     }
++    if (drawable->single_buffer) {
++        /* Reuse the drawable allocation as the application's sole colour
++         * buffer. A second full-screen allocation can exhaust video memory. */
++        IDirectDrawSurface7_AddRef(drawable->back);
++        drawable->front = drawable->back;
++        return drawable->front;
++    }
+     /* A target as the back buffer is, so as wide as its surfaces. */
+     drawable->front = v9x_gl_make_surface(DDSCAPS_OFFSCREENPLAIN |
+                                           DDSCAPS_VIDEOMEMORY |
+--- a/src/opengl/gl_surface.h
++++ b/src/opengl/gl_surface.h
+@@ -36,6 +36,8 @@
+  * when the format is set and used when its surfaces are next made. Zero
+  * when no drawable can be had for the window. */
+ int v9x_gl_drawable_set_depth(void *window, v9x_u32 depth_cell);
++int ntgl_set_pixel_format(void *window, v9x_u32 depth_cell, int single);
++int ntgl_drawable_single_buffer(const V9X_GL_DRAWABLE *drawable);
+ /* The bits of depth a drawable's depth buffer holds: 16, or the describe's
+  * depth32_bits for a 32-bit cell. */
+ v9x_u32 v9x_gl_drawable_depth_bits(const V9X_GL_DRAWABLE *drawable);
+--- a/src/opengl/gl_icd.c
++++ b/src/opengl/gl_icd.c
+@@ -4856,16 +4856,21 @@
+ 
+     EnterCriticalSection(&v9x_gl_lock);
+     if (v9x_gl_device_open() && v9x_gl_device_format() != 0ul) {
+-        count = v9x_gl_device_description()->depth32_bits != 0ul ? 2 : 1;
++        count = v9x_gl_device_description()->depth32_bits != 0ul ? 3 : 2;
+     }
+     LeaveCriticalSection(&v9x_gl_lock);
+     return count;
+ }
+ 
+-/* The depth cell of a format index: 32 for format 2, 16 otherwise. */
++/* Keep the original double-buffered formats first. The last format
++ * exposes the same 16-bit depth buffer with only a front colour buffer. */
++static int ntgl_format_single(LONG index)
++{
++    return index == (v9x_gl_device_description()->depth32_bits ? 3 : 2);
++}
+ static v9x_u32 v9x_gl_format_cell(LONG index)
+ {
+-    return index == 2 ? 32ul : 16ul;
++    return index == 2 && !ntgl_format_single(index) ? 32ul : 16ul;
+ }
+ 
+ static void v9x_gl_describe(PIXELFORMATDESCRIPTOR *pfd, LONG index)
+@@ -4881,8 +4886,10 @@
+     pfd->nVersion = 1;
+     /* Neither PFD_GENERIC_ flag: that is what marks the format as the
+      * ICD's. */
+-    pfd->dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER |
+-                   PFD_SWAP_COPY;
++    pfd->dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL;
++    if (!ntgl_format_single(index)) {
++        pfd->dwFlags |= PFD_DOUBLEBUFFER | PFD_SWAP_COPY;
++    }
+     pfd->iPixelType = PFD_TYPE_RGBA;
+     pfd->cDepthBits = (BYTE)(v9x_gl_format_cell(index) == 32ul
+                                  ? v9x_gl_device_description()->depth32_bits
+@@ -4944,6 +4951,11 @@
+                 context->drawable = 0;
+                 context->bound_once = 0;
+                 v9x_gl_state_init(&context->state);
++                if (ntgl_drawable_single_buffer(v9x_gl_drawable_find(WindowFromDC(hdc)))) {
++                    context->state.single_buffer = 1;
++                    context->state.draw_buffer = V9X_GL_FRONT_BUFFER;
++                    context->state.read_buffer = V9X_GL_FRONT_BUFFER;
++                }
+                 v9x_gl_pipeline_init(&context->pipeline);
+                 v9x_gl_arrays_init(&context->arrays);
+                 context->attribs = 0;
+@@ -5011,8 +5023,8 @@
+         return FALSE;
+     }
+     EnterCriticalSection(&v9x_gl_lock);
+-    recorded = v9x_gl_drawable_set_depth(WindowFromDC(hdc),
+-                                         v9x_gl_format_cell(index));
++    recorded = ntgl_set_pixel_format(WindowFromDC(hdc),
++                                     v9x_gl_format_cell(index), ntgl_format_single(index));
+     LeaveCriticalSection(&v9x_gl_lock);
+     v9x_gl_log3("DrvSetPixelFormat hdc=%08lX index=%ld recorded=%ld",
+                 (DWORD)hdc, (DWORD)index, (DWORD)recorded);
+@@ -5207,7 +5219,8 @@
+ 
+         DWORD swap_started = v9x_gl_tsc_begin();
+ 
+-        ok = v9x_gl_drawable_present(drawable) ? TRUE : FALSE;
++        ok = ntgl_drawable_single_buffer(drawable) ||
++             v9x_gl_drawable_present(drawable) ? TRUE : FALSE;
+         v9x_gl_present_ticks += v9x_gl_ticks() - present_start;
+         v9x_gl_tsc_end(V9X_GL_TSC_SWAP, swap_started);
+         v9x_gl_tsc_wall();
+--- a/src/opengl/gl_state.h
++++ b/src/opengl/gl_state.h
+@@ -99,6 +99,7 @@
+     GLenum polygon_mode[2];
+     GLenum draw_buffer;
+     GLenum read_buffer;
++    int single_buffer;
+     GLfloat line_width;
+     GLfloat point_size;
+     /* glIndexMask and glClearIndex (4.2.2, 4.2.3), held for queries:
+--- a/src/opengl/gl_state.c
++++ b/src/opengl/gl_state.c
+@@ -183,6 +183,7 @@
+      * (4.2.1, 4.3.2). */
+     state->draw_buffer = V9X_GL_BACK_BUFFER;
+     state->read_buffer = V9X_GL_BACK_BUFFER;
++    state->single_buffer = 0;
+     state->line_width = 1.0f;
+     state->point_size = 1.0f;
+     state->index_mask = 0xFFFFFFFFul;
+@@ -226,11 +226,13 @@
+     }
+ }
+ 
+-/* The colour buffers of a double-buffered, left-only format, or zero
+- * for a name no format has (INVALID_ENUM) and one for a real buffer this
+- * format lacks (INVALID_OPERATION). */
+-static int v9x_gl_buffer_class(GLenum buffer, int draw)
+-{
++/* Return zero for an unknown enum, one for an unavailable buffer and
++ * two for a valid buffer of this left-only format. */
++static int v9x_gl_buffer_class(const V9X_GL_STATE *state, GLenum buffer, int draw)
++{
++    if (state->single_buffer && (buffer == V9X_GL_BACK_BUFFER || buffer == V9X_GL_BACK_LEFT)) {
++        return 1;
++    }
+     if (buffer == 0x0404u || buffer == 0x0405u || buffer == 0x0406u ||
+         buffer == 0x0400u || buffer == 0x0402u) {
+         return 2;               /* FRONT, BACK, LEFT, FRONT_LEFT, BACK_LEFT */
+@@ -253,7 +255,7 @@
+     if (!v9x_gl_outside_begin(state)) {
+         return;
+     }
+-    kind = v9x_gl_buffer_class(buffer, 1);
++    kind = v9x_gl_buffer_class(state, buffer, 1);
+     if (kind != 2) {
+         v9x_gl_state_error(state, kind == 0 ? V9X_GL_INVALID_ENUM
+                                             : V9X_GL_INVALID_OPERATION);
+@@ -269,7 +271,7 @@
+     if (!v9x_gl_outside_begin(state)) {
+         return;
+     }
+-    kind = v9x_gl_buffer_class(buffer, 0);
++    kind = v9x_gl_buffer_class(state, buffer, 0);
+     if (kind != 2) {
+         v9x_gl_state_error(state, kind == 0 ? V9X_GL_INVALID_ENUM
+                                             : V9X_GL_INVALID_OPERATION);
+@@ -613,7 +615,8 @@
+         return V9X_GL_DRAW_BACK;
+     }
+     if (buffer == 0x0406u || buffer == 0x0408u) {       /* LEFT, FRONT_AND_BACK */
+-        return V9X_GL_DRAW_FRONT | V9X_GL_DRAW_BACK;
++        return state->single_buffer ? V9X_GL_DRAW_FRONT :
++               V9X_GL_DRAW_FRONT | V9X_GL_DRAW_BACK;
+     }
+     return 0u;                                          /* NONE */
+ }
+--- a/src/opengl/gl_get.c
++++ b/src/opengl/gl_get.c
+@@ -304,7 +304,7 @@
+     case 0x0D5Au:
+     case 0x0D5Bu:
+     case 0x0C00u: v9x_gl_one(out, V9X_GL_CLASS_INTEGER, 0.0); return 1;
+-    case 0x0C32u:
++    case 0x0C32u: v9x_gl_one(out, V9X_GL_CLASS_BOOLEAN, !state->single_buffer); return 1;
+     case 0x0C31u: v9x_gl_one(out, V9X_GL_CLASS_BOOLEAN, 1.0); return 1;
+     case 0x0C33u:
+     case 0x0C30u: v9x_gl_one(out, V9X_GL_CLASS_BOOLEAN, 0.0); return 1;

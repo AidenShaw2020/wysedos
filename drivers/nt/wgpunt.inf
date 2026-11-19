@@ -1,0 +1,53 @@
+; SPDX-License-Identifier: GPL-3.0-or-later
+; Experimental NT5 co-processor bridge. Not an Intel display driver.
+[Version]
+Signature="$Windows NT$"
+Class=System
+ClassGuid={4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider=%Provider%
+DriverVer=11/22/2026,0.0.6.46
+
+[Manufacturer]
+%Provider%=Devices
+
+[Devices]
+%Device%=Wgpu.Install,PCI\VEN_8086&DEV_22B0&SUBSYS_57471234
+
+[Wgpu.Install]
+CopyFiles=Wgpu.Files
+
+[Wgpu.Install.HW]
+AddReg=Wgpu.Properties
+
+[Wgpu.Properties]
+HKR,,DeviceType,0x00010001,34
+HKR,,DeviceCharacteristics,0x00010001,0x100
+HKR,,Exclusive,0x00010001,1
+HKR,,Security,,"D:P(A;;GA;;;SY)(A;;GA;;;BA)"
+
+[Wgpu.Install.Services]
+AddService=wgpunt,0x00000002,Wgpu.Service
+
+[Wgpu.Service]
+DisplayName=%Device%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\wgpunt.sys
+
+[DestinationDirs]
+Wgpu.Files=12
+
+[Wgpu.Files]
+wgpunt.sys,,,0x00000004
+
+[SourceDisksNames]
+1=%Disk%,,
+
+[SourceDisksFiles]
+wgpunt.sys=1
+
+[Strings]
+Provider="wyseDOS project"
+Device="wyseDOS WGPU co-processor (experimental NT bridge)"
+Disk="wyseDOS NT WGPU test package"

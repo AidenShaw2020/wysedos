@@ -1,0 +1,66 @@
+--- a/src/opengl/gl_surface.c
++++ b/src/opengl/gl_surface.c
+@@ -21,6 +21,7 @@
+ typedef HRESULT (WINAPI *V9X_GL_DDRAW_CREATE)(GUID *, void **, REFIID, IUnknown *);
+ const V9X_R3D_INTERFACE *ntgl_bind(IDirectDraw7 *ddraw);
+ void ntgl_forget_surface(void *surface);
++int ntgl_close_scene(void);
+ int ntgl_mode_changed(IDirectDraw7 *ddraw);
+ 
+ struct v9x_gl_drawable {
+@@ -627,6 +628,7 @@
+     v9x_u32 index;
+     int ok = 1;
+ 
++    if (!ntgl_close_scene()) return 0;
+     /* The top level, then each attached level in turn. GetAttachedSurface
+      * adds a reference to what it returns; every one but the top is
+      * released once filled. */
+@@ -714,6 +716,7 @@
+     v9x_u32 index;
+     int ok = 1;
+ 
++    if (!ntgl_close_scene()) return 0;
+     /* The chain walked as v9x_gl_hwtex_upload walks it; a level with
+      * nothing to refill is not locked, which is the point - every Lock
+      * waits for the GPU. */
+@@ -745,6 +748,7 @@
+ void v9x_gl_hwtex_release(void *surface)
+ {
+     if (surface != 0) {
++        (void)ntgl_close_scene();
+         IDirectDrawSurface7_Release((LPDIRECTDRAWSURFACE7)surface);
+     }
+ }
+@@ -763,6 +767,7 @@
+     LPDIRECTDRAWSURFACE7 surface;
+     HRESULT hr;
+ 
++    if (!ntgl_close_scene()) return 0;
+     if (drawable == 0) {
+         return 0;
+     }
+@@ -832,6 +837,7 @@
+     if (drawable->front != 0) {
+         return drawable->front;
+     }
++    if (!ntgl_close_scene()) return 0;
+     /* A target as the back buffer is, so as wide as its surfaces. */
+     drawable->front = v9x_gl_make_surface(DDSCAPS_OFFSCREENPLAIN |
+                                           DDSCAPS_VIDEOMEMORY |
+@@ -865,6 +871,7 @@
+     RECT image;
+     HRESULT hr;
+ 
++    if (!ntgl_close_scene()) return 0;
+     if (drawable == 0 || drawable->front == 0 || v9x_gl_primary == 0) {
+         return 0;
+     }
+@@ -887,6 +894,7 @@
+     POINT origin;
+     HRESULT hr;
+ 
++    if (!ntgl_close_scene()) return 0;
+     if (drawable == 0 || drawable->back == 0 || v9x_gl_primary == 0) {
+         return 0;
+     }

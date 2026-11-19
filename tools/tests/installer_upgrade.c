@@ -152,6 +152,13 @@ int main(void) {
     fixture(); corrupt_stage=1;
     CHECK(!installer_upgrade_files(flush,disk,NULL,&error)); unchanged();
     CHECK(installer_upgrade_files(flush,disk,NULL,&error)); updated();
+    fixture();
+    /* Complete a pre-driver-CD journal, then install the new asset normally. */
+    disk[lookup("2:386/drivers.iso")].exists=0;
+    Journal old={OLD_MAGIC,(1u<<OLD_FILES)-1,1,0};
+    put_fixture("2:386/gm.sf2.LICENSE.txt",132,0x65);
+    CHECK(save_journal(&old,COMMITTED));
+    CHECK(installer_upgrade_files(flush,disk,NULL,&error)); updated();
     printf("PASS: upgrade preserves settings/layout/guest files, stages and verifies all assets, activates EFI last; %u I/O failure points and %u process interruptions recover; source/space/conflict/readback checks\n",all_calls,all_mutations);
     return 0;
 }

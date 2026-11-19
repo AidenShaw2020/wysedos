@@ -73,6 +73,9 @@ void pci_device_set_fixed_irq(PCIDevice *d, uint8_t irq);
 typedef void PCIConfigHook(void *opaque, uint8_t addr);
 void pci_device_set_config_hook(PCIDevice *d, PCIConfigHook *hook, void *opaque);
 void pci_device_set_config16(PCIDevice *d, uint8_t addr, uint16_t val);
+/* Save once after board initialization; restore on a whole guest reset. */
+void pci_bus_save_reset_state(PCIBus *bus);
+void pci_bus_reset(PCIBus *bus);
 int pci_device_get_devfn(PCIDevice *d);
 uint64_t pci_device_get_config_reads(PCIDevice *d);
 int pci_add_capability(PCIDevice *d, const uint8_t *buf, int size);

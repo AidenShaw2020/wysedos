@@ -12,6 +12,9 @@
 #include "pc.h"
 #include "fpu.h"
 #include "../src/vm.h"
+#include "../src/sysenter_msr.h"
+#include "../src/pat_msr.h"
+#include "../src/guest_cpu_features.h"
 #include "hwvga_access.h"
 
 uint64_t wyse_tsc_khz(void);
@@ -819,22 +822,7 @@ static void do_cpuid(void) {
     uint32_t leaf = (uint32_t)vm.regs.rax, sub = (uint32_t)vm.regs.rcx;
     uint32_t a, b, c, d;
     __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(leaf), "c"(sub));
-    if (leaf == 0) {
-        if (a > 0xd) a = 0xd;
-    } else if (leaf == 1) {
-        b &= 0x0000ffff;        // one logical CPU, APIC ID 0
-        c &= ~((1u << 3) | (1u << 5) | (1u << 6) | (1u << 7) | (1u << 8) | (1u << 14) | (1u << 15) |
-               (1u << 21) | (1u << 24) | (1u << 26) | (1u << 27) | (1u << 28) | (1u << 31));
-        d &= ~((1u << 3) | (1u << 6) | (1u << 9) | (1u << 17) | (1u << 21) | (1u << 22) |
-               (1u << 27) | (1u << 28) | (1u << 29) | (1u << 31));
-    } else if (leaf == 0x80000001) {
-        d &= ~((1u << 11) | (1u << 20) | (1u << 27) | (1u << 29));     // no syscall, NX, rdtscp, long mode
-        c &= ~(1u << 0);
-    } else if (leaf >= 0x40000000 && leaf < 0x50000000) {
-        a = b = c = d = 0;
-    } else if (leaf == 0xb || leaf == 0x1f || leaf == 4) {
-        a = b = c = d = 0;
-    }
+    wyse_guest_cpuid_filter(leaf, &a, &b, &c, &d);
     vm.regs.rax = a; vm.regs.rbx = b; vm.regs.rcx = c; vm.regs.rdx = d;
 }
 
@@ -1504,8 +1492,21 @@ void wyse_cpu_step(PC *pc) {
             do_cpuid();
             vm_skip_instr(&vm);
             break;
-        case EXIT_RDMSR:
-            if ((uint32_t)vm.regs.rcx == 0x10) {
+        case EXIT_RDMSR: {
+            uint64_t value;
+            unsigned cpl = wyse_guest_cpl(guest_cr0(), vm_read(VMCS_GUEST_RFLAGS),
+                                           vm_read(VMCS_GUEST_CS_SEL));
+            int result = wyse_pat_msr_read((uint32_t)vm.regs.rcx, cpl, &value);
+            if (result == WYSE_SYSENTER_NOT_HANDLED)
+                result = wyse_sysenter_msr_read((uint32_t)vm.regs.rcx, cpl, &value);
+            if (result == WYSE_SYSENTER_GP) {
+                inject(13, 3, true, 0);
+                break;
+            }
+            if (result == WYSE_SYSENTER_OK) {
+                vm.regs.rax = (uint32_t)value;
+                vm.regs.rdx = value >> 32;
+            } else if ((uint32_t)vm.regs.rcx == 0x10) {
                 uint64_t t = rdtsc_();
                 vm.regs.rax = (uint32_t)t;
                 vm.regs.rdx = t >> 32;
@@ -1514,7 +1515,30 @@ void wyse_cpu_step(PC *pc) {
             }
             vm_skip_instr(&vm);
             break;
-        case EXIT_WRMSR:
+        }
+        case EXIT_WRMSR: {
+            uint32_t msr = (uint32_t)vm.regs.rcx;
+            uint64_t value = ((uint64_t)(uint32_t)vm.regs.rdx << 32) | (uint32_t)vm.regs.rax;
+            unsigned cpl = wyse_guest_cpl(guest_cr0(), vm_read(VMCS_GUEST_RFLAGS),
+                                           vm_read(VMCS_GUEST_CS_SEL));
+            int result = wyse_pat_msr_write(msr, cpl, value);
+            if (result == WYSE_SYSENTER_NOT_HANDLED)
+                result = wyse_sysenter_msr_write(msr, cpl, value);
+            if (result == WYSE_SYSENTER_GP) {
+                inject(13, 3, true, 0);
+                break;
+            }
+            if (result == WYSE_SYSENTER_OK && msr >= 0x174 && msr <= 0x176) {
+                static unsigned configured;
+                unsigned bit = 1u << (msr - 0x174);
+                if (!(configured & bit)) {
+                    configured |= bit;
+                    printf("vmx: guest SYSENTER MSR %03x configured\n", msr);
+                }
+            }
+            vm_skip_instr(&vm);
+            break;
+        }
         case EXIT_INVD:
         case EXIT_WBINVD:
             vm_skip_instr(&vm);

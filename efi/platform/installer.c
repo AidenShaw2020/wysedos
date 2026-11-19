@@ -6,8 +6,8 @@
 // qualified existing native installation, or a new install. New install after
 // explicit I selection and Y erase confirmation:
 //   - writes a GPT with a 128 MiB firmware partition and a private guest container,
-//   - creates a guest MBR and full-capacity FAT32 inside that container,
-//   - copies only runtime assets onto the firmware partition (no disk images),
+//   - leaves the guest disk unpartitioned for the operating system installer,
+//   - copies runtime assets and the driver CD onto the firmware partition,
 //   - adds a "wyseDOS" boot entry first in the boot order.
 // Progress is drawn over the startup logo and sent to the UDP log.
 
@@ -635,47 +635,17 @@ bool write_native_config(void) {
     return ok;
 }
 
-static bool prepare_guest(EFI_BLOCK_IO_PROTOCOL *bio,const part_t *guest) {
-    if (guest->count<=2048 || guest->count>0xffffffffull) return false;
-    static uint8_t mbr[512] __attribute__((aligned(4096)));
-    FIL f; UINT got;
-    if (f_open(&f,"386/guest_mbr.bin",FA_READ)!=FR_OK) return false;
-    bool ok=f_read(&f,mbr,512,&got)==FR_OK && got==512; f_close(&f);
-    if (!ok) return false;
-    memset(mbr+446,0,64);
-    uint8_t *e=mbr+446; e[0]=0x80; e[4]=0x0c;
-    uint32_t start=2048, count=(uint32_t)guest->count-start;
-    uint32_t values[2]={start,start+count-1};
-    for (int k=0;k<2;k++) {
-        uint32_t lba=values[k], c=lba/(255*63), h=(lba/63)%255, sec=lba%63+1;
-        if (c>1023) { c=1023; h=254; sec=63; }
-        uint8_t *p=e+(k?5:1); p[0]=(uint8_t)h; p[1]=(uint8_t)(sec|((c>>2)&0xc0)); p[2]=(uint8_t)c;
-    }
-    memcpy(e+8,&start,4); memcpy(e+12,&count,4); mbr[510]=0x55; mbr[511]=0xaa;
-    if (EFI_ERROR(bio_write(bio,guest->first,1,mbr))) return false;
-    /* Clear the rest of the guest's reserved first MiB, including stale boot metadata. */
-    static uint8_t zero[65536] __attribute__((aligned(4096)));
-    for (uint64_t off=1;off<2048;) {
-        uint64_t n=2048-off<128?2048-off:128;
-        if (EFI_ERROR(bio_write(bio,guest->first+off,n,zero))) return false;
-        off+=n;
-    }
-    int r=fatvol_attach(3,bio,guest->first+start,count);
-    if (r!=FR_OK && r!=FR_NO_FILESYSTEM) return false;
-    if (fatvol_mkfs_dos(3)!=FR_OK) return false;
-    fatvol_detach(3);
+static bool clear_guest_partition_table(EFI_BLOCK_IO_PROTOCOL *bio,uint64_t first) {
+    static const uint8_t blank[512] __attribute__((aligned(4096))) = {0};
+    static uint8_t readback[512] __attribute__((aligned(4096)));
     if (EFI_ERROR(blkcache_flush(bio))) return false;
-    /* FatFs formats a range as a superfloppy. DOS's BPB must use GUEST offsets. */
-    for (unsigned k=0;k<2;k++) {
-        uint64_t lba=guest->first+start+(k?6:0);
-        if (EFI_ERROR(bio_read(bio,lba,1,mbr))) return false;
-        uint16_t sectors=63,heads=255;
-        memcpy(mbr+24,&sectors,2); memcpy(mbr+26,&heads,2); memcpy(mbr+28,&start,4); mbr[64]=0x80;
-        if (memcmp(mbr+82,"FAT32   ",8) || mbr[510]!=0x55 || mbr[511]!=0xaa) return false;
-        if (EFI_ERROR(bio_write(bio,lba,1,mbr))) return false;
-    }
     blkcache_forget(bio);
-    return !EFI_ERROR(bio_flush(bio));
+    /* The only direct write is guest LBA 0. Each guest installer creates its
+     * own boot code and partition table. */
+    return !EFI_ERROR(bio_write(bio,first,1,blank)) &&
+           !EFI_ERROR(bio_flush(bio)) &&
+           !EFI_ERROR(bio_read(bio,first,1,readback)) &&
+           !memcmp(blank,readback,sizeof(blank));
 }
 
 bool installer_wanted(void) {
@@ -773,7 +743,7 @@ void installer_run(void) {
     WyseInstallLayout installed;
     bool can_upgrade=existing_install(emmc,&installed);
     step("Choose installation mode",can_upgrade?
-         "U: Upgrade (keep data)   I: New install (erase)   Esc: Cancel":
+         "U: Upgrade   I: New install   Esc: Cancel":
          "No supported installation found. I: New install   Esc: Cancel",0);
     int mode=wait_key(); last_step_us=0;
     if ((mode=='u' || mode=='U') && can_upgrade) {
@@ -785,25 +755,13 @@ void installer_run(void) {
     }
     if (mode!='i' && mode!='I') stop("Cancelled - eMMC unchanged");
     if (f_stat("EFI/BOOT/BOOTX64.EFI",NULL)!=FR_OK || f_stat("386/config.ini",NULL)!=FR_OK ||
-        f_stat("386/guest_mbr.bin",NULL)!=FR_OK || f_stat("386/bios.bin",NULL)!=FR_OK ||
+        f_stat("386/bios.bin",NULL)!=FR_OK ||
         f_stat("386/vgabios.bin",NULL)!=FR_OK) stop("Installation files missing");
-    FILINFO driver_dir;
-    if (f_stat("DRIVERS",&driver_dir)!=FR_OK || !(driver_dir.fattrib&AM_DIR))
-        stop("Unpacked DRIVERS bundle missing");
-    static const char *driver_files[]={"DRIVERS/README.TXT","DRIVERS/SHA256.TXT",
-        "DRIVERS/USBDOS/USBUHCIL.COM",
-        "DRIVERS/USBDOS/USBDRIVE.COM","DRIVERS/CTMOUSE/CTMOUSE.EXE",
-        "DRIVERS/VELOCITY/VELOCITY9X.INF","DRIVERS/VELOCITY/V9XHAL.DLL",
-        "DRIVERS/VELOCITY/LICENSE.TXT","DRIVERS/VELOCITY/NOTICES.TXT",
-        "DRIVERS/VELOCITY/SRC.ZIP"};
-    for (unsigned i=0;i<sizeof(driver_files)/sizeof(driver_files[0]);i++) {
-        FILINFO file;
-        if (f_stat(driver_files[i],&file)!=FR_OK || !file.fsize || (file.fattrib&AM_DIR))
-            stop("Driver bundle incomplete - eMMC unchanged");
-    }
+    FILINFO driver_cd;
+    if (f_stat("386/drivers.iso",&driver_cd)!=FR_OK || !driver_cd.fsize || (driver_cd.fattrib&AM_DIR))
+        stop("Driver CD missing - eMMC unchanged");
     total_bytes=tree_size("386",true); copied_bytes=0; last_percent=-1;
     if (total_bytes+4*1024*1024>ESP_BLOCKS*512) stop("Monitor files do not fit firmware partition");
-    total_bytes+=tree_size("DRIVERS",false);
     step_wait(3000000);
     snprintf(detail,sizeof(detail),"eMMC %llu MiB. ERASE eMMC? Y = install, any other key = cancel",
         (unsigned long long)(blocks/2048));
@@ -820,22 +778,16 @@ void installer_run(void) {
     int r=fatvol_attach(2,emmc,esp.first,esp.count);
     if (r!=FR_OK && r!=FR_NO_FILESYSTEM) stop("Cannot open firmware partition");
     if (fatvol_mkfs(2,"WYSEDOS EFI")!=FR_OK) stop("Firmware format failed");
-    snprintf(detail,sizeof(detail),"FAT32 C: %llu MiB - remaining eMMC capacity",(unsigned long long)((guest.count-2048)/2048));
+    snprintf(detail,sizeof(detail),"Unallocated %llu MiB - remaining eMMC capacity",
+             (unsigned long long)(guest.count/2048));
     step("3 / 6 - Preparing guest hard disk",detail,18);
-    if (!prepare_guest(emmc,&guest)) stop("Guest FAT32 format failed");
-    step("4 / 6 - Installing wyseDOS","Copying monitor, ROMs, logo and soundfont",30);
+    if (!clear_guest_partition_table(emmc,guest.first)) stop("Guest boot sector initialization failed");
+    step("4 / 6 - Installing wyseDOS","Copying monitor files and driver CD to firmware partition",30);
     copy_start_us=wyse_ticks_us();
     f_mkdir("2:EFI"); f_mkdir("2:EFI/BOOT");
     if (!copy_file("EFI/BOOT/BOOTX64.EFI","2:EFI/BOOT/BOOTX64.EFI") ||
         !copy_tree("386","2:386",true) || !write_native_config()) stop("Copying monitor files failed");
-    /* Mount only the freshly formatted guest FAT32 partition. The guest MBR
-     * reserves 2048 sectors inside its protected container. */
-    if (fatvol_attach(FATVOL_TARGET_DATA,emmc,guest.first+2048,guest.count-2048)!=FR_OK)
-        stop("Cannot mount guest partition for drivers");
-    if (graphical) installer_ui_status(copy_step,"Drivers: Velocity9x (GPLv3), USB and mouse",last_percent<0?30:30+(unsigned)last_percent*60/100);
-    if (!copy_tree("DRIVERS","3:DRIVERS",false)) stop("Copying guest drivers failed");
-    fatvol_detach(FATVOL_TARGET_DATA);
-    step("5 / 6 - Setting boot entry","UEFI starts wyseDOS; DOS sees only the guest disk",92);
+    step("5 / 6 - Setting boot entry","UEFI starts wyseDOS and exposes the guest disk",92);
     if (!add_boot_entry(&esp)) stop("Cannot write UEFI boot entry");
     step("6 / 6 - Finishing","Flushing files and configuring firmware",97);
     dell_token_activate(DELL_TOKEN_FASTBOOT_MINIMAL);
@@ -851,7 +803,7 @@ void installer_run(void) {
     if (EFI_ERROR(blkcache_flush(emmc)) || EFI_ERROR(bio_flush(emmc))) stop("Final storage flush failed");
     gBS->SetWatchdogTimer(0,0,0,NULL);
     step("wyseDOS installation complete","Ready for operating system installation. Remove USB, press any key.",100);
-    printf("installer: native FAT32 ready, guest LBA %llu + %llu, firmware protected\n",
+    printf("installer: unpartitioned guest LBA %llu + %llu, driver CD on firmware partition\n",
         (unsigned long long)guest.first,(unsigned long long)guest.count);
     wait_key();
     gST->RuntimeServices->ResetSystem(EfiResetCold,0,0,NULL);

@@ -1,4 +1,4 @@
-"""Build the unpacked C:\\DRIVERS payload from pinned upstream packages.
+"""Build the DOS/9x portion of the driver CD from pinned upstream packages.
 
 Only reads local archives and writes tools/installer/out/DRIVERS. It never
 opens physical disks or runs any executable from a driver package.

@@ -29,6 +29,10 @@
 typedef struct IDEIFState IDEIFState;
 
 IDEIFState *ide_allocate(int irq, void *pic, void (*set_irq)(void *pic, int irq, int level));
+/* Complete asynchronous ATA data-out processing between CPU slices. */
+void ide_poll(IDEIFState *s);
+extern uint32_t g_ide_pio_write_blocks;
+extern uint64_t g_ide_pio_write_wait_us;
 
 /* Attach HDD: opens file internally */
 int ide_attach(IDEIFState *s, int drive, const char *filename);

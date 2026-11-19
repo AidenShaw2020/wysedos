@@ -1,0 +1,509 @@
+--- a/src/opengl/gl_surface.c
++++ b/src/opengl/gl_surface.c
+@@ -18,16 +18,18 @@
+ 
+ #define V9X_GL_DRAWABLES_MAX 16u
+ 
+-typedef HRESULT (WINAPI *V9X_GL_DDRAW_CREATE)(GUID *, LPDIRECTDRAW *,
+-                                              IUnknown *);
++typedef HRESULT (WINAPI *V9X_GL_DDRAW_CREATE)(GUID *, void **, REFIID, IUnknown *);
++const V9X_R3D_INTERFACE *ntgl_bind(IDirectDraw7 *ddraw);
++void ntgl_forget_surface(void *surface);
++int ntgl_mode_changed(IDirectDraw7 *ddraw);
+ 
+ struct v9x_gl_drawable {
+     HWND window;
+     LPDIRECTDRAWCLIPPER clipper;
+-    LPDIRECTDRAWSURFACE back;
+-    LPDIRECTDRAWSURFACE depth;
++    LPDIRECTDRAWSURFACE7 back;
++    LPDIRECTDRAWSURFACE7 depth;
+     /* Made on the first GL_FRONT draw, clear or read (v9x_gl_drawable_front). */
+-    LPDIRECTDRAWSURFACE front;
++    LPDIRECTDRAWSURFACE7 front;
+     DWORD width;
+     DWORD height;
+     /* The width the surfaces were made at: the window's, or wider once
+@@ -39,10 +41,13 @@
+     DWORD depth_cell;
+ };
+ 
++/* DirectDraw 7 interface identifier from the DirectX SDK. */
++static const GUID ntgl_ddraw7 = {
++    0x15e65ec0, 0x3b9c, 0x11d2, {0xb9, 0x2f, 0x00, 0x60, 0x97, 0x97, 0xea, 0x5b}
++};
+ static HMODULE v9x_gl_ddraw_module;
+-static LPDIRECTDRAW v9x_gl_ddraw;
+-static LPDIRECTDRAWSURFACE v9x_gl_primary;
+-static HMODULE v9x_gl_hal_module;
++static LPDIRECTDRAW7 v9x_gl_ddraw;
++static LPDIRECTDRAWSURFACE7 v9x_gl_primary;
+ static const V9X_R3D_INTERFACE *v9x_gl_interface;
+ static V9X_R3D_ABI_DESCRIBE v9x_gl_description;
+ static int v9x_gl_device_state;     /* 0 untried, 1 open, -1 failed */
+@@ -73,24 +78,28 @@
+ int v9x_gl_device_open(void)
+ {
+     V9X_GL_DDRAW_CREATE create;
+-    V9X_R3D_ENTRY_FN entry;
+-    DDSURFACEDESC desc;
++    DDSURFACEDESC2 desc;
+     HRESULT hr;
+ 
+     if (v9x_gl_device_state != 0) {
++        if (v9x_gl_device_state > 0 &&
++            (!v9x_gl_primary || ntgl_mode_changed(v9x_gl_ddraw) ||
++             IDirectDrawSurface7_IsLost(v9x_gl_primary) == DDERR_SURFACELOST)) {
++            return v9x_gl_device_redescribe();
++        }
+         return v9x_gl_device_state > 0;
+     }
+     v9x_gl_device_state = -1;
+     v9x_gl_ddraw_module = LoadLibraryA("DDRAW.DLL");
+     create = v9x_gl_ddraw_module != 0
+         ? (V9X_GL_DDRAW_CREATE)GetProcAddress(v9x_gl_ddraw_module,
+-                                              "DirectDrawCreate")
++                                              "DirectDrawCreateEx")
+         : 0;
+-    if (create == 0 || create(0, &v9x_gl_ddraw, 0) != DD_OK) {
++    if (create == 0 || create(0, (void **)&v9x_gl_ddraw, &ntgl_ddraw7, 0) != DD_OK) {
+         v9x_gl_log("device: DirectDrawCreate failed");
+         return 0;
+     }
+-    hr = IDirectDraw_SetCooperativeLevel(v9x_gl_ddraw, 0, DDSCL_NORMAL);
++    hr = IDirectDraw7_SetCooperativeLevel(v9x_gl_ddraw, 0, DDSCL_NORMAL);
+     if (hr != DD_OK) {
+         v9x_gl_log3("device: SetCooperativeLevel hr=%08lX", (DWORD)hr, 0ul,
+                     0ul);
+@@ -100,22 +109,12 @@
+     desc.dwSize = sizeof(desc);
+     desc.dwFlags = DDSD_CAPS;
+     desc.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE;
+-    hr = IDirectDraw_CreateSurface(v9x_gl_ddraw, &desc, &v9x_gl_primary, 0);
++    hr = IDirectDraw7_CreateSurface(v9x_gl_ddraw, &desc, &v9x_gl_primary, 0);
+     if (hr != DD_OK) {
+         v9x_gl_log3("device: primary hr=%08lX", (DWORD)hr, 0ul, 0ul);
+         return 0;
+     }
+-    /* After DirectDrawCreate: DirectDraw's helper process is what loads the
+-     * HAL, and this process's own load returns the same shared instance
+-     * (docs\decisions\2026-09-26-phase3-render-interface-v1-draws-from-
+-     * another-process.md). Never freed while the ICD is loaded. */
+-    v9x_gl_hal_module = LoadLibraryA("V9XHAL.DLL");
+-    entry = v9x_gl_hal_module != 0
+-        ? (V9X_R3D_ENTRY_FN)GetProcAddress(v9x_gl_hal_module,
+-                                           "V9xRenderInterface")
+-        : 0;
+-    v9x_gl_interface = entry != 0
+-        ? entry(V9X_R3D_ABI_VERSION, sizeof(V9X_R3D_INTERFACE)) : 0;
++    v9x_gl_interface = ntgl_bind(v9x_gl_ddraw);
+     if (v9x_gl_interface == 0) {
+         v9x_gl_log("device: no render interface");
+         return 0;
+@@ -162,15 +161,17 @@
+ static void v9x_gl_drawable_release_surfaces(struct v9x_gl_drawable *drawable)
+ {
+     if (drawable->front != 0) {
+-        IDirectDrawSurface_Release(drawable->front);
++        ntgl_forget_surface(drawable->front);
++        IDirectDrawSurface7_Release(drawable->front);
+         drawable->front = 0;
+     }
+     if (drawable->depth != 0) {
+-        IDirectDrawSurface_Release(drawable->depth);
++        IDirectDrawSurface7_Release(drawable->depth);
+         drawable->depth = 0;
+     }
+     if (drawable->back != 0) {
+-        IDirectDrawSurface_Release(drawable->back);
++        ntgl_forget_surface(drawable->back);
++        IDirectDrawSurface7_Release(drawable->back);
+         drawable->back = 0;
+     }
+     drawable->width = 0ul;
+@@ -188,27 +189,26 @@
+  */
+ static int v9x_gl_primary_recover(void)
+ {
+-    DDSURFACEDESC desc;
++    DDSURFACEDESC2 desc;
+     HRESULT hr;
+ 
+-    if (v9x_gl_primary == 0) {
+-        return 0;
+-    }
+-    if (IDirectDrawSurface_IsLost(v9x_gl_primary) != DDERR_SURFACELOST) {
+-        return 1;
+-    }
+-    hr = IDirectDrawSurface_Restore(v9x_gl_primary);
+-    if (hr == DD_OK) {
+-        return 1;
+-    }
+-    v9x_gl_log3("primary restore hr=%08lX, made again", (DWORD)hr, 0ul, 0ul);
+-    IDirectDrawSurface_Release(v9x_gl_primary);
+-    v9x_gl_primary = 0;
++    if (v9x_gl_primary != 0) {
++        if (IDirectDrawSurface7_IsLost(v9x_gl_primary) != DDERR_SURFACELOST) {
++            return 1;
++        }
++        hr = IDirectDrawSurface7_Restore(v9x_gl_primary);
++        if (hr == DD_OK) {
++            return 1;
++        }
++        v9x_gl_log3("primary restore hr=%08lX, made again", (DWORD)hr, 0ul, 0ul);
++        IDirectDrawSurface7_Release(v9x_gl_primary);
++        v9x_gl_primary = 0;
++    }
+     v9x_gl_surface_zero(&desc, sizeof(desc));
+     desc.dwSize = sizeof(desc);
+     desc.dwFlags = DDSD_CAPS;
+     desc.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE;
+-    hr = IDirectDraw_CreateSurface(v9x_gl_ddraw, &desc, &v9x_gl_primary, 0);
++    hr = IDirectDraw7_CreateSurface(v9x_gl_ddraw, &desc, &v9x_gl_primary, 0);
+     if (hr != DD_OK) {
+         v9x_gl_log3("primary again hr=%08lX", (DWORD)hr, 0ul, 0ul);
+         v9x_gl_primary = 0;
+@@ -220,6 +220,7 @@
+ int v9x_gl_device_redescribe(void)
+ {
+     unsigned int index;
++    const V9X_R3D_INTERFACE *candidate;
+ 
+     if (v9x_gl_device_state <= 0) {
+         return 0;
+@@ -227,15 +228,18 @@
+     for (index = 0u; index < V9X_GL_DRAWABLES_MAX; ++index) {
+         v9x_gl_drawable_release_surfaces(&v9x_gl_drawables[index]);
+     }
+-    (void)v9x_gl_primary_recover();
++    if (!v9x_gl_primary_recover()) return 0;
++    candidate = ntgl_bind(v9x_gl_ddraw);
++    if (!candidate) return 0;
++    v9x_gl_interface = candidate;
+     return v9x_gl_describe_now();
+ }
+ 
+-static LPDIRECTDRAWSURFACE v9x_gl_make_surface(DWORD caps, DWORD width,
++static LPDIRECTDRAWSURFACE7 v9x_gl_make_surface(DWORD caps, DWORD width,
+                                                DWORD height, DWORD depth_bits)
+ {
+-    DDSURFACEDESC desc;
+-    LPDIRECTDRAWSURFACE surface = 0;
++    DDSURFACEDESC2 desc;
++    LPDIRECTDRAWSURFACE7 surface = 0;
+     HRESULT hr;
+ 
+     v9x_gl_surface_zero(&desc, sizeof(desc));
+@@ -245,10 +249,13 @@
+     desc.dwHeight = height;
+     desc.ddsCaps.dwCaps = caps;
+     if (depth_bits != 0ul) {
+-        desc.dwFlags |= DDSD_ZBUFFERBITDEPTH;
+-        desc.dwZBufferBitDepth = depth_bits;
+-    }
+-    hr = IDirectDraw_CreateSurface(v9x_gl_ddraw, &desc, &surface, 0);
++        desc.dwFlags |= DDSD_PIXELFORMAT;
++        desc.ddpfPixelFormat.dwSize = sizeof desc.ddpfPixelFormat;
++        desc.ddpfPixelFormat.dwFlags = DDPF_ZBUFFER;
++        desc.ddpfPixelFormat.dwZBufferBitDepth = depth_bits;
++        desc.ddpfPixelFormat.dwZBitMask = 0xfffful;
++    }
++    hr = IDirectDraw7_CreateSurface(v9x_gl_ddraw, &desc, &surface, 0);
+     if (hr != DD_OK) {
+         v9x_gl_log3("surface caps=%08lX %lux%lu failed", caps, width, height);
+         v9x_gl_log3("  hr=%08lX", (DWORD)hr, 0ul, 0ul);
+@@ -291,7 +298,7 @@
+     }
+     v9x_gl_surface_zero(drawable, sizeof(*drawable));
+     drawable->window = window;
+-    if (IDirectDraw_CreateClipper(v9x_gl_ddraw, 0ul, &drawable->clipper,
++    if (IDirectDraw7_CreateClipper(v9x_gl_ddraw, 0ul, &drawable->clipper,
+                                   0) != DD_OK ||
+         IDirectDrawClipper_SetHWnd(drawable->clipper, 0ul, window) != DD_OK) {
+         v9x_gl_log("drawable: clipper failed");
+@@ -425,6 +432,11 @@
+         !GetClientRect((HWND)window, &client)) {
+         return 0;
+     }
++    if ((!v9x_gl_primary ||
++         IDirectDrawSurface7_IsLost(v9x_gl_primary) == DDERR_SURFACELOST) &&
++        !v9x_gl_device_redescribe()) {
++        return 0;
++    }
+     width = client.right > client.left ? (DWORD)(client.right - client.left)
+                                        : 1ul;
+     height = client.bottom > client.top ? (DWORD)(client.bottom - client.top)
+@@ -446,7 +458,7 @@
+     }
+     if (drawable->back != 0 && drawable->width == width &&
+         drawable->height == height &&
+-        IDirectDrawSurface_IsLost(drawable->back) != DDERR_SURFACELOST) {
++        IDirectDrawSurface7_IsLost(drawable->back) != DDERR_SURFACELOST) {
+         return drawable;
+     }
+     if (!v9x_gl_drawable_make(drawable, width, height, width)) {
+@@ -510,8 +522,8 @@
+ void *v9x_gl_hwtex_create(v9x_u32 width, v9x_u32 height, v9x_u32 levels,
+                           v9x_u32 format)
+ {
+-    DDSURFACEDESC desc;
+-    LPDIRECTDRAWSURFACE surface = 0;
++    DDSURFACEDESC2 desc;
++    LPDIRECTDRAWSURFACE7 surface = 0;
+     HRESULT hr;
+ 
+     if (v9x_gl_ddraw == 0 || levels == 0ul) {
+@@ -534,7 +546,7 @@
+         desc.dwMipMapCount = levels;
+         desc.ddsCaps.dwCaps |= DDSCAPS_MIPMAP | DDSCAPS_COMPLEX;
+     }
+-    hr = IDirectDraw_CreateSurface(v9x_gl_ddraw, &desc, &surface, 0);
++    hr = IDirectDraw7_CreateSurface(v9x_gl_ddraw, &desc, &surface, 0);
+     if (hr != DD_OK) {
+         v9x_gl_log3("hwtex create %08lX levels=%lu hr=%08lX",
+                     (width << 16) | height, levels, (DWORD)hr);
+@@ -554,10 +566,10 @@
+ }
+ 
+ /* One level's rows into a locked surface. */
+-static int v9x_gl_hwtex_fill(LPDIRECTDRAWSURFACE surface,
++static int v9x_gl_hwtex_fill(LPDIRECTDRAWSURFACE7 surface,
+                              const V9X_R3D_ABI_LEVEL *level, int to_1555)
+ {
+-    DDSURFACEDESC desc;
++    DDSURFACEDESC2 desc;
+     const BYTE *source;
+     BYTE *target;
+     DWORD row;
+@@ -566,13 +578,13 @@
+ 
+     v9x_gl_surface_zero(&desc, sizeof(desc));
+     desc.dwSize = sizeof(desc);
+-    hr = IDirectDrawSurface_Lock(surface, 0, &desc,
++    hr = IDirectDrawSurface7_Lock(surface, 0, &desc,
+                                  DDLOCK_WAIT | DDLOCK_WRITEONLY, 0);
+     if (hr == DDERR_SURFACELOST) {
+         /* Video memory given back after another application's mode or
+          * exclusive use: memory again, and this upload refills it. */
+-        IDirectDrawSurface_Restore(surface);
+-        hr = IDirectDrawSurface_Lock(surface, 0, &desc,
++        IDirectDrawSurface7_Restore(surface);
++        hr = IDirectDrawSurface7_Lock(surface, 0, &desc,
+                                      DDLOCK_WAIT | DDLOCK_WRITEONLY, 0);
+     }
+     if (hr != DD_OK) {
+@@ -580,7 +592,7 @@
+         return 0;
+     }
+     if (desc.dwWidth != level->width || desc.dwHeight != level->height) {
+-        IDirectDrawSurface_Unlock(surface, 0);
++        IDirectDrawSurface7_Unlock(surface, 0);
+         v9x_gl_log3("hwtex level %lux%lu expected width %lu", desc.dwWidth,
+                     desc.dwHeight, level->width);
+         return 0;
+@@ -601,16 +613,16 @@
+         source += level->pitch;
+         target += desc.lPitch;
+     }
+-    IDirectDrawSurface_Unlock(surface, 0);
++    IDirectDrawSurface7_Unlock(surface, 0);
+     return 1;
+ }
+ 
+ int v9x_gl_hwtex_upload(void *surface, v9x_u32 levels,
+                         const V9X_R3D_ABI_LEVEL *source, int to_1555)
+ {
+-    LPDIRECTDRAWSURFACE level = (LPDIRECTDRAWSURFACE)surface;
+-    LPDIRECTDRAWSURFACE next;
+-    DDSCAPS caps;
++    LPDIRECTDRAWSURFACE7 level = (LPDIRECTDRAWSURFACE7)surface;
++    LPDIRECTDRAWSURFACE7 next;
++    DDSCAPS2 caps;
+     v9x_u32 index;
+     int ok = 1;
+ 
+@@ -622,14 +634,14 @@
+         next = 0;
+         if (ok && index + 1ul < levels) {
+             caps.dwCaps = DDSCAPS_TEXTURE | DDSCAPS_MIPMAP;
+-            if (IDirectDrawSurface_GetAttachedSurface(level, &caps, &next) !=
++            if (IDirectDrawSurface7_GetAttachedSurface(level, &caps, &next) !=
+                     DD_OK) {
+                 next = 0;
+                 ok = 0;
+             }
+         }
+         if (index != 0ul) {
+-            IDirectDrawSurface_Release(level);
++            IDirectDrawSurface7_Release(level);
+         }
+         level = next;
+     }
+@@ -638,11 +650,11 @@
+ 
+ /* One level's rectangle into a locked surface: the rows and columns it
+  * covers, nothing else. */
+-static int v9x_gl_hwtex_fill_rect(LPDIRECTDRAWSURFACE surface,
++static int v9x_gl_hwtex_fill_rect(LPDIRECTDRAWSURFACE7 surface,
+                                   const V9X_R3D_ABI_LEVEL *level,
+                                   const V9X_GL_TEXRECT *rect, int to_1555)
+ {
+-    DDSURFACEDESC desc;
++    DDSURFACEDESC2 desc;
+     const BYTE *source;
+     BYTE *target;
+     DWORD row;
+@@ -654,7 +666,7 @@
+     }
+     v9x_gl_surface_zero(&desc, sizeof(desc));
+     desc.dwSize = sizeof(desc);
+-    hr = IDirectDrawSurface_Lock(surface, 0, &desc,
++    hr = IDirectDrawSurface7_Lock(surface, 0, &desc,
+                                  DDLOCK_WAIT | DDLOCK_WRITEONLY, 0);
+     if (hr != DD_OK) {
+         /* A lost surface lost its texels too: refused, so the caller
+@@ -663,7 +675,7 @@
+         return 0;
+     }
+     if (desc.dwWidth != level->width || desc.dwHeight != level->height) {
+-        IDirectDrawSurface_Unlock(surface, 0);
++        IDirectDrawSurface7_Unlock(surface, 0);
+         return 0;
+     }
+     source = (const BYTE *)level->pixels + rect->top * level->pitch +
+@@ -684,7 +696,7 @@
+         source += level->pitch;
+         target += desc.lPitch;
+     }
+-    IDirectDrawSurface_Unlock(surface, 0);
++    IDirectDrawSurface7_Unlock(surface, 0);
+     return 1;
+ }
+ 
+@@ -692,9 +704,9 @@
+                               const V9X_R3D_ABI_LEVEL *source,
+                               const V9X_GL_TEXRECT *rects, int to_1555)
+ {
+-    LPDIRECTDRAWSURFACE level = (LPDIRECTDRAWSURFACE)surface;
+-    LPDIRECTDRAWSURFACE next;
+-    DDSCAPS caps;
++    LPDIRECTDRAWSURFACE7 level = (LPDIRECTDRAWSURFACE7)surface;
++    LPDIRECTDRAWSURFACE7 next;
++    DDSCAPS2 caps;
+     v9x_u32 index;
+     int ok = 1;
+ 
+@@ -710,14 +722,14 @@
+         next = 0;
+         if (ok && index + 1ul < levels) {
+             caps.dwCaps = DDSCAPS_TEXTURE | DDSCAPS_MIPMAP;
+-            if (IDirectDrawSurface_GetAttachedSurface(level, &caps, &next) !=
++            if (IDirectDrawSurface7_GetAttachedSurface(level, &caps, &next) !=
+                     DD_OK) {
+                 next = 0;
+                 ok = 0;
+             }
+         }
+         if (index != 0ul) {
+-            IDirectDrawSurface_Release(level);
++            IDirectDrawSurface7_Release(level);
+         }
+         level = next;
+     }
+@@ -727,22 +739,22 @@
+ void v9x_gl_hwtex_release(void *surface)
+ {
+     if (surface != 0) {
+-        IDirectDrawSurface_Release((LPDIRECTDRAWSURFACE)surface);
++        IDirectDrawSurface7_Release((LPDIRECTDRAWSURFACE7)surface);
+     }
+ }
+ 
+ int v9x_gl_hwtex_lost(void *surface)
+ {
+     return surface != 0 &&
+-           IDirectDrawSurface_IsLost((LPDIRECTDRAWSURFACE)surface) ==
++           IDirectDrawSurface7_IsLost((LPDIRECTDRAWSURFACE7)surface) ==
+                DDERR_SURFACELOST;
+ }
+ 
+ int v9x_gl_drawable_lock(V9X_GL_DRAWABLE *drawable, int front,
+                          const void **pixels, v9x_u32 *pitch)
+ {
+-    DDSURFACEDESC description;
+-    LPDIRECTDRAWSURFACE surface;
++    DDSURFACEDESC2 description;
++    LPDIRECTDRAWSURFACE7 surface;
+     HRESULT hr;
+ 
+     if (drawable == 0) {
+@@ -758,7 +770,7 @@
+     /* A lost back buffer has no contents to read: Restore gives it memory
+      * again but not its pixels, so the read fails rather than returning
+      * whatever the restored memory holds. */
+-    hr = IDirectDrawSurface_Lock(surface, 0, &description,
++    hr = IDirectDrawSurface7_Lock(surface, 0, &description,
+                                  DDLOCK_WAIT | DDLOCK_READONLY, 0);
+     if (hr != DD_OK) {
+         v9x_gl_log3("read lock hr=%08lX", (DWORD)hr, 0ul, 0ul);
+@@ -771,7 +783,7 @@
+ 
+ void v9x_gl_drawable_unlock(V9X_GL_DRAWABLE *drawable, int front)
+ {
+-    IDirectDrawSurface_Unlock(front ? drawable->front : drawable->back, 0);
++    IDirectDrawSurface7_Unlock(front ? drawable->front : drawable->back, 0);
+ }
+ 
+ /* The window's client rectangle in screen coordinates, as the primary
+@@ -829,7 +841,7 @@
+      * values GL leaves undefined). */
+     v9x_gl_drawable_screen_rect(drawable, &screen);
+     v9x_gl_drawable_image_rect(drawable, &image);
+-    hr = IDirectDrawSurface_Blt(drawable->front, &image, v9x_gl_primary,
++    hr = IDirectDrawSurface7_Blt(drawable->front, &image, v9x_gl_primary,
+                                 &screen, DDBLT_WAIT, 0);
+     v9x_gl_log3("front: made %lux%lu, copy from screen hr=%08lX",
+                 drawable->width, drawable->height, (DWORD)hr);
+@@ -852,8 +864,8 @@
+     }
+     v9x_gl_drawable_screen_rect(drawable, &target);
+     v9x_gl_drawable_image_rect(drawable, &image);
+-    IDirectDrawSurface_SetClipper(v9x_gl_primary, drawable->clipper);
+-    hr = IDirectDrawSurface_Blt(v9x_gl_primary, &target, drawable->front,
++    IDirectDrawSurface7_SetClipper(v9x_gl_primary, drawable->clipper);
++    hr = IDirectDrawSurface7_Blt(v9x_gl_primary, &target, drawable->front,
+                                 &image, DDBLT_WAIT, 0);
+     if (hr != DD_OK) {
+         v9x_gl_log3("show front hr=%08lX", (DWORD)hr, 0ul, 0ul);
+@@ -882,16 +894,16 @@
+     v9x_gl_drawable_image_rect(drawable, &image);
+     /* One primary, one clipper per window: attach this window's before the
+      * Blt so DirectDraw cuts to its visible region. */
+-    IDirectDrawSurface_SetClipper(v9x_gl_primary, drawable->clipper);
+-    hr = IDirectDrawSurface_Blt(v9x_gl_primary, &target, drawable->back,
++    IDirectDrawSurface7_SetClipper(v9x_gl_primary, drawable->clipper);
++    hr = IDirectDrawSurface7_Blt(v9x_gl_primary, &target, drawable->back,
+                                 &image, DDBLT_WAIT, 0);
+     if (hr == DDERR_SURFACELOST) {
+-        if (IDirectDrawSurface_IsLost(drawable->back) == DDERR_SURFACELOST) {
+-            IDirectDrawSurface_Restore(drawable->back);
++        if (IDirectDrawSurface7_IsLost(drawable->back) == DDERR_SURFACELOST) {
++            IDirectDrawSurface7_Restore(drawable->back);
+         }
+         if (v9x_gl_primary_recover()) {
+-            IDirectDrawSurface_SetClipper(v9x_gl_primary, drawable->clipper);
+-            hr = IDirectDrawSurface_Blt(v9x_gl_primary, &target, drawable->back,
++            IDirectDrawSurface7_SetClipper(v9x_gl_primary, drawable->clipper);
++            hr = IDirectDrawSurface7_Blt(v9x_gl_primary, &target, drawable->back,
+                                         &image, DDBLT_WAIT, 0);
+         }
+     }
+@@ -902,7 +914,7 @@
+     /* SwapBuffers makes the back buffer's image the front's (4.2.1). The
+      * copy exists only once something has used the front buffer. */
+     if (drawable->front != 0) {
+-        IDirectDrawSurface_Blt(drawable->front, 0, drawable->back, 0,
++        IDirectDrawSurface7_Blt(drawable->front, 0, drawable->back, 0,
+                                DDBLT_WAIT, 0);
+     }
+     return 1;

@@ -1,0 +1,64 @@
+; SPDX-License-Identifier: GPL-3.0-or-later
+; NT5 x86 XDDM framebuffer/2D baseline. WGPU co-processor has a separate INF.
+[Version]
+Signature="$Windows NT$"
+Class=Display
+ClassGUID={4D36E968-E325-11CE-BFC1-08002BE10318}
+Provider=%Provider%
+DriverVer=11/22/2026,0.0.11.70
+
+[Manufacturer]
+%Provider%=Models
+[Models]
+%Description%=Display,PCI\VEN_1234&DEV_1111
+
+[Display]
+CopyFiles=MiniportFiles,DisplayFiles
+[Display.Services]
+AddService=wgpuvbe,0x00000002,Service
+[Service]
+DisplayName=%Description%
+ServiceType=1
+StartType=1
+ErrorControl=1
+LoadOrderGroup=Video
+ServiceBinary=%12%\wgpuvbe.sys
+
+[Display.SoftwareSettings]
+AddReg=Settings
+[Settings]
+HKR,,OpenGLDriverName,0,WGGLNT.DLL
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\WGGLNT",Dll,0,WGGLNT.DLL
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\WGGLNT",Version,0x00010001,2
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\WGGLNT",DriverVersion,0x00010001,1
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers\WGGLNT",Flags,0x00010001,1
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\OpenGLDrivers",WGGLNT,0,WGGLNT.DLL
+HKR,,InstalledDisplayDrivers,0x00010000,wgpuvbe
+HKR,,VgaCompatible,0x00010001,0
+HKR,,DefaultSettings.BitsPerPel,0x00010001,32
+HKR,,DefaultSettings.XResolution,0x00010001,800
+HKR,,DefaultSettings.YResolution,0x00010001,600
+HKR,,DefaultSettings.VRefresh,0x00010001,60
+[Display.GeneralConfigData]
+MaximumDeviceMemoryConfiguration=8
+
+[DestinationDirs]
+MiniportFiles=12
+DisplayFiles=11
+[MiniportFiles]
+; These versionless project modules must be updated together.
+; COPYFLG_NOVERSIONCHECK affects only our two private destination names.
+wgpuvbe.sys,,,0x00000004
+[DisplayFiles]
+wgpuvbe.dll,,,0x00000004
+wgglnt.dll,,,0x00000004
+[SourceDisksNames]
+1=%Disk%,,,
+[SourceDisksFiles]
+wgpuvbe.sys=1
+wgpuvbe.dll=1
+wgglnt.dll=1
+[Strings]
+Provider="wyseDOS project (WINVBE source baseline)"
+Description="wyseDOS NT framebuffer and 2D display"
+Disk="wyseDOS NT display test package"

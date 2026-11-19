@@ -419,7 +419,8 @@ struct IDEState {
     struct IDEIFState *ide_if;
     enum { IDE_HD, IDE_CD } drive_kind;
 
-    /* geometry (HDD only) */
+    /* BIOS geometry (HDD only); translated heads may exceed ATA's 4-bit
+     * device/head register. Keep that translation out of IDENTIFY CHS. */
     int cylinders, heads, sectors;
     int mult_sectors;
     /*
@@ -485,6 +486,12 @@ struct IDEState {
     int      xfer_is_write;     /* 1 = CPU is writing (HDD write / ATAPI packet) */
     int      readonly;          /* Circle PC profile: backing image is FA_READ */
     EndTransferFunc *xfer_done; /* called when xfer_left reaches 0 */
+    /* ATA PIO data-out processing is separate from the CPU's data-port
+     * instruction. REP OUTS must not collapse the advertised bus cycles. */
+    uint8_t pio_mode;
+    uint8_t pio_write_started;
+    uint8_t pio_write_pending;
+    uint64_t pio_write_due;
 
     /* CD-ROM streaming state (set by ide_atapi_cmd_read_pio) */
     int32_t  cd_lba;            /* next LBA to read */
@@ -516,6 +523,7 @@ struct IDEIFState {
 static void ide_atapi_cmd(IDEState *s);
 static void ide_sector_read(IDEState *s);
 static void ide_sector_write_flush(IDEState *s);
+static void ide_sector_write_complete(IDEState *s);
 static void ide_sector_read_next(IDEState *s);
 
 /* -------------------------------------------------------------------------
@@ -537,6 +545,18 @@ static void padstr8(uint8_t *buf, int buf_size, const char *src)
 }
 
 static void stw(uint16_t *buf, int v) { *buf = v; }
+
+static int ide_physical_heads(const IDEState *s)
+{
+    return s->heads > 16 ? 16 : s->heads;
+}
+
+static int ide_physical_cylinders(const IDEState *s)
+{
+    if (s->heads <= 16) return s->cylinders;
+    int64_t cylinders = s->nb_sectors / (ide_physical_heads(s) * s->sectors);
+    return cylinders > 16383 ? 16383 : cylinders < 2 ? 2 : (int)cylinders;
+}
 
 static int ide_bus_idx(const IDEState *s)   { return s->ide_if->irq == 15; }
 static int ide_drive_idx(const IDEState *s) { return s->ide_if->drives[1] == s; }
@@ -602,6 +622,21 @@ static void ide_set_irq(IDEState *s)
     } else {
         atapi_tlog("[%d]  irq SUPPRESSED (nIEN): st=%02x ns=%02x\r\n",
             time_us_32(), s->status, s->nsector);
+    }
+}
+
+uint32_t g_ide_pio_write_blocks;
+uint64_t g_ide_pio_write_wait_us;
+
+void ide_poll(IDEIFState *bus)
+{
+    if (!bus) return;
+    for (int i = 0; i < 2; ++i) {
+        IDEState *drive = bus->drives[i];
+        if (drive && drive->pio_write_pending && time_us_64() >= drive->pio_write_due) {
+            drive->pio_write_pending = 0;
+            ide_sector_write_complete(drive);
+        }
     }
 }
 
@@ -891,8 +926,8 @@ static void ide_identify(IDEState *s)
     uint16_t *tab = (uint16_t *)s->atapi_buf;
     memset(tab, 0, 512);
     stw(tab+0,  0x0040);
-    stw(tab+1,  s->cylinders);
-    stw(tab+3,  s->heads);
+    stw(tab+1,  ide_physical_cylinders(s));
+    stw(tab+3,  ide_physical_heads(s));
     stw(tab+4,  512 * s->sectors);
     stw(tab+5,  512);
     stw(tab+6,  s->sectors);
@@ -1156,9 +1191,33 @@ static void ide_wcache_put(IDEState *s, const uint8_t *buf, int len)
     s->wcache_len += len;
 }
 
-/* Called when CPU finishes writing a batch of sectors; continue or done */
+static void ide_pio_write_begin(IDEState *s)
+{
+    static const unsigned cycle_ns[3] = {600, 383, 240};
+    if (s->pio_write_started) return;
+    s->pio_write_started = 1;
+    /* ATA-3 table22: a PIO cycle transfers one 16-bit word. Use the
+     * negotiated mode, including for the CPU's accelerated string path. */
+    s->pio_write_due = time_us_64() +
+        ((uint64_t)s->xfer_sectors * 256 * cycle_ns[s->pio_mode] + 999) / 1000;
+}
+
+/* Last CPU data-port write: DRQ is gone, and processing happens outside
+ * that instruction. ATA-3 section8.4 requires BSY while processing a block;
+ * only completion may publish the next DRQ or command-complete interrupt. */
 static void ide_sector_write_flush(IDEState *s)
 {
+    ide_pio_write_begin(s);
+    s->status = READY_STAT | SEEK_STAT | BUSY_STAT;
+    s->pio_write_pending = 1;
+    ++g_ide_pio_write_blocks;
+    uint64_t now = time_us_64();
+    if (s->pio_write_due > now) g_ide_pio_write_wait_us += s->pio_write_due - now;
+}
+
+static void ide_sector_write_complete(IDEState *s)
+{
+    s->pio_write_started = 0;
     /* advance position by the batch we just received */
     int n = s->xfer_sectors;
     ide_mark_dirty(s->dev);
@@ -1211,6 +1270,7 @@ static void ide_sector_write(IDEState *s)
     s->xfer_left     = n * SECTOR_SIZE;
     s->xfer_is_write = 1;
     s->xfer_done     = ide_sector_write_flush;
+    s->pio_write_started = 0;
     s->status        = READY_STAT | SEEK_STAT | DRQ_STAT;
 }
 
@@ -1677,6 +1737,18 @@ static void ide_exec_cmd(IDEState *s, int val)
         ide_set_irq(s);
         break;
     case WIN_SETFEATURES:
+        if (s->feature == 0x03) {
+            if (s->nsector == 0 || s->nsector == 1) {
+                s->pio_mode = 2; /* Vendor default: highest original PIO mode. */
+            } else if (s->nsector >= 0x08 && s->nsector <= 0x0a) {
+                s->pio_mode = s->nsector & 7;
+            } else {
+                /* IDENTIFY advertises neither DMA nor IORDY PIO3/4. */
+                ide_abort_command(s);
+                ide_set_irq(s);
+                break;
+            }
+        }
         s->status = READY_STAT | SEEK_STAT;
         ide_set_irq(s);
         break;
@@ -1746,6 +1818,9 @@ void ide_ioport_write(void *opaque, uint32_t addr, uint32_t val)
     for (int i = 0; i < 2; i++) {
         IDEState *d = s1->drives[i];
         if (!d) continue;
+        /* A busy device must not latch a new task file, including while
+         * the other device on the cable is selected. */
+        if (d->status & BUSY_STAT) continue;
         switch (addr) {
         case 1: d->feature = val; break;
         case 2: d->nsector = val; break;
@@ -1762,6 +1837,7 @@ void ide_ioport_write(void *opaque, uint32_t addr, uint32_t val)
         break;
     case 7: /* command */
         if (!s) break;
+        if (s->status & BUSY_STAT) break;
         if (s->drive_kind == IDE_CD) {
             idecd_exec_cmd(s, val);
         } else {
@@ -1825,7 +1901,13 @@ void ide_cmd_write(void *opaque, uint32_t val)
         for (int i = 0; i < 2; i++) {
             IDEState *s = s1->drives[i];
             if (s) {
+                s->pio_write_pending = 0;
+                s->pio_write_started = 0;
+                s->pio_mode = 2;
                 if (s->wcache_len) ide_wcache_flush(s);
+                s->xfer_left = 0;
+                s->xfer_is_write = 0;
+                s->xfer_done = ide_transfer_stop;
                 s->status = BUSY_STAT | SEEK_STAT; s->error = 0x01;
             }
         }
@@ -2002,6 +2084,7 @@ void ide_data_writew(void *opaque, uint32_t val)
     if (!s || s->xfer_left < 2 || !s->xfer_is_write) return;
 
     if (s->drive_kind == IDE_HD) {
+        ide_pio_write_begin(s);
         uint8_t buf[2] = { val & 0xff, (val >> 8) & 0xff };
         ide_wcache_put(s, buf, 2);
     } else {
@@ -2029,6 +2112,7 @@ void ide_data_writel(void *opaque, uint32_t val)
     if (!s || s->xfer_left < 4 || !s->xfer_is_write) return;
 
     if (s->drive_kind == IDE_HD) {
+        ide_pio_write_begin(s);
         uint8_t buf[4] = { val, val>>8, val>>16, val>>24 };
         ide_wcache_put(s, buf, 4);
     } else {
@@ -2059,6 +2143,7 @@ int ide_data_write_string(void *opaque, uint8_t *buf, int size, int count)
     if (len > s->xfer_left) len = s->xfer_left;
     len -= len % size;
     if (s->drive_kind == IDE_HD) {
+        if (len > 0) ide_pio_write_begin(s);
         ide_wcache_put(s, buf, len);
     } else {
         memcpy(s->atapi_buf + s->atapi_buf_pos, buf, len);
@@ -2108,6 +2193,7 @@ static IDEState *ide_hddrive_init(IDEIFState *ide_if, BlockDev *dev, int attache
 
     s->ide_if     = ide_if;
     s->drive_kind = IDE_HD;
+    s->pio_mode   = 2;
 #if defined(CIRCLE_BUILD) && !defined(CIRCLE_DISK_WRITE)
     s->readonly   = 1;
 #endif
@@ -2129,7 +2215,7 @@ static IDEState *ide_hddrive_init(IDEIFState *ide_if, BlockDev *dev, int attache
         s->sectors   = 63;
     }
 
-    s->cur_heads    = s->heads;
+    s->cur_heads    = ide_physical_heads(s);
     s->cur_sectors  = s->sectors;
     s->mult_sectors = MAX_MULT_SECTORS;
     s->xfer_block   = 1;
@@ -2223,6 +2309,7 @@ void ide_sync_ata(IDEIFState *s, int drive, BlockDev *dev,
 {
     if (!s || drive < 0 || drive >= 2) return;
     IDEState *d = s->drives[drive];
+    if (d) { d->pio_write_pending = 0; d->pio_write_started = 0; d->pio_mode = 2; }
     int selected=d && s->cur_drive==d;
     if (dev && blk_present(dev)) {
         if (d && d->drive_kind == IDE_CD) {
@@ -2245,7 +2332,7 @@ void ide_sync_ata(IDEIFState *s, int drive, BlockDev *dev,
             d->heads     = heads;
             d->sectors   = sectors;
         }
-        d->cur_heads    = d->heads;
+        d->cur_heads    = ide_physical_heads(d);
         d->cur_sectors  = d->sectors;
         d->rcache_active = 0;
         d->wcache_len    = 0;
@@ -2268,9 +2355,11 @@ int ide_prepare_media(IDEIFState *s,int drive,int discard) {
     if (!s || drive<0 || drive>=2 || !s->drives[drive]) return 0;
     IDEState *d=s->drives[drive];
     if (!discard) {
+        if (d->pio_write_pending) return -1;
         if (d->xfer_left || (d->wcache_len && ide_wcache_flush(d)<0)) return -1;
         if (blk_present(d->dev) && blk_size(d->dev) && blk_sync(d->dev)<0) return -1;
     }
+    d->pio_write_pending=0; d->pio_write_started=0;
     for (int i=0;i<IDE_DIRTY_MAX;i++) if (d->dev && ide_dirty[i]==d->dev) {
         for (int k=i;k+1<IDE_DIRTY_MAX;k++) ide_dirty[k]=ide_dirty[k+1];
         ide_dirty[IDE_DIRTY_MAX-1]=NULL; i--;
@@ -2282,6 +2371,7 @@ int ide_prepare_media(IDEIFState *s,int drive,int discard) {
 void ide_sync_cd(IDEIFState *s,int drive,BlockDev *dev) {
     if (!s || drive<0 || drive>=2) return;
     IDEState *d=s->drives[drive];
+    if (d) { d->pio_write_pending=0; d->pio_write_started=0; }
     int selected=d && s->cur_drive==d;
     if (d && d->drive_kind!=IDE_CD) {
         free(d->rcache); free(d->wcache); free(d); s->drives[drive]=NULL;

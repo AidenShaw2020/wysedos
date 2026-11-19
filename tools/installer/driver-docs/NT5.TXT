@@ -1,0 +1,27 @@
+wyseDOS NT5 graphics preview
+===========================
+
+For 32-bit Windows 2000 SP4 and Windows XP SP3 on the Dell Wyse 3040
+running wyseDOS. Install Windows from your own media first. Keep the
+WGPU workspace enabled in the firmware. Mount drivers.iso and open NT5.
+
+From an Administrator command prompt in this directory run:
+
+  NTINST.EXE --install
+  NTINST.EXE --display
+
+If the WGPU bridge is already current, continue with --display. Confirm
+the unsigned-driver prompt if your Windows driver policy presents it
+and reboot Windows when requested. The driver also supports Device
+Manager's Have Disk path using WGPUNT.INF for the WGPU bridge and
+WGPUDSP.INF for the display adapter. Keep this set of binaries together.
+For recovery, use VGA Mode and roll back the display adapter.
+
+The display driver supplies 2D acceleration and legacy Direct3D.
+WGGLNT.DLL is the hardware OpenGL 1.1 ICD. Both NT versions passed
+rendering, depth, blending, mipmap and window-resize tests on hardware.
+This is a preview with limited API and game coverage. NT Glide is
+outside this package.
+
+DISPSRC.ZIP contains corresponding sources and licence notices, including
+WINVBE and Velocity9x. Windows and game files are not included.

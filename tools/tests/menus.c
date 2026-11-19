@@ -132,6 +132,16 @@ static void settings_tests(void)
     /* up and down stay on the page */
     key(KEY_UP);
     assert(selected_row("Speed") && tab_current("CPU"));
+    /* NT rate profile is reachable through the actual menu and survives Save.
+     * Keep unrestricted at the end of the same choice list. */
+    config_set_speed_mhz(233);
+    key(KEY_RIGHT); key(KEY_RIGHT); key(KEY_RIGHT); key(KEY_RIGHT);
+    assert(config_get_speed_mhz() == 400 && g_cpu_speed_mhz == 400);
+    assert(row_has(find_row("Speed"), "400 MHz", NULL));
+    key(KEY_RIGHT);
+    assert(config_get_speed_mhz() == 0);
+    key(KEY_LEFT);
+    assert(config_get_speed_mhz() == 400);
     key(KEY_DOWN);
     assert(selected_row("Memory"));
 
@@ -200,6 +210,7 @@ static void settings_tests(void)
     assert(strstr(saved_config, "voodoo2_turbo=1") != NULL);
     assert(strstr(saved_config, "wgpu=64\n") != NULL);
     assert(strstr(saved_config, "wgpu_enabled=1\n") != NULL);
+    assert(strstr(saved_config, "speed=400\n") != NULL);
     key(KEY_N);
     key(KEY_ESC);
     assert(!settingsui_is_open());

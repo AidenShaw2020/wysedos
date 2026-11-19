@@ -9,9 +9,12 @@
 static const char *const files[]={
     "EFI/BOOT/BOOTX64.EFI", "386/bios.bin", "386/vgabios.bin", "386/gm.sf2",
     "386/gm.sf2.LICENSE.txt", "386/logo.bin", "386/SeaBIOS-COPYING.txt",
-    "386/SeaBIOS-COPYING.LESSER.txt", "386/SeaBIOS-NOTICE.txt"
+    "386/SeaBIOS-COPYING.LESSER.txt", "386/SeaBIOS-NOTICE.txt", "386/drivers.iso"
 };
 #define FILES (sizeof(files)/sizeof(files[0]))
+#define OLD_MAGIC 0x31505557u
+#define UPGRADE_MAGIC 0x32505557u
+#define OLD_FILES 9u
 #define JOURNAL "2:386/upgrade.wup"
 #define COMMITTED "2:386/upgrade.done"
 typedef struct { uint32_t magic, old_mask, committed, check; } Journal;
@@ -19,6 +22,10 @@ static uint8_t buffer[65536], verify[65536];
 
 static uint32_t checksum(const Journal *j) {
     return 0x9e3779b9u ^ j->magic ^ (j->old_mask*0x85ebca6bu) ^ (j->committed*0xc2b2ae35u);
+}
+static unsigned journal_files(const Journal *j) {
+    if (j->magic==OLD_MAGIC) return OLD_FILES;
+    return j->magic==UPGRADE_MAGIC?FILES:0;
 }
 static void paths(unsigned i,char *dest,char *stage,char *backup) {
     snprintf(dest,96,"2:%s",files[i]);
@@ -40,8 +47,9 @@ static bool load_journal(const char *path,Journal *j) {
     if (f_open(&f,path,FA_READ)!=FR_OK) return false;
     bool ok=f_size(&f)==sizeof(*j) && f_read(&f,j,sizeof(*j),&got)==FR_OK && got==sizeof(*j);
     if (f_close(&f)!=FR_OK) ok=false;
-    return ok && j->magic==0x31505557u && j->committed<=1 &&
-           !(j->old_mask&~((1u<<FILES)-1)) && j->check==checksum(j);
+    unsigned count=ok?journal_files(j):0;
+    return count && j->committed<=1 &&
+           !(j->old_mask&~((1u<<count)-1)) && j->check==checksum(j);
 }
 static bool save_journal(Journal *j,const char *path) {
     j->check=checksum(j);
@@ -56,7 +64,7 @@ bool installer_upgrade_pending(void) { return present(JOURNAL)==1 || present(COM
 
 static bool recover(const Journal *j,UpgradeFlush flush,void *context) {
     char dest[96],stage[96],backup[96];
-    for (unsigned i=0;i<FILES;i++) {
+    for (unsigned i=0;i<journal_files(j);i++) {
         paths(i,dest,stage,backup);
         int b=present(backup),d=present(dest);
         if (b<0 || d<0) return false;
@@ -111,7 +119,7 @@ static bool stage_file(unsigned i) {
 }
 
 bool installer_upgrade_files(UpgradeFlush flush,void *context,UpgradeProgress progress,const char **error) {
-    Journal j={0x31505557u,0,0,0};
+    Journal j={UPGRADE_MAGIC,0,0,0};
     char dest[96],stage[96],backup[96];
     *error="Cannot inspect firmware files";
     int pending=present(JOURNAL),done=present(COMMITTED);
@@ -134,7 +142,7 @@ bool installer_upgrade_files(UpgradeFlush flush,void *context,UpgradeProgress pr
         *error="Cannot recover interrupted update - keep USB available";
         if (!recover(&j,flush,context)) return false;
         }
-        j=(Journal){0x31505557u,0,0,0};
+        j=(Journal){UPGRADE_MAGIC,0,0,0};
     }
     uint64_t bytes=0;
     for (unsigned i=0;i<FILES;i++) {

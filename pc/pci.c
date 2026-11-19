@@ -75,6 +75,8 @@ struct PCIDevice {
     uint8_t devfn;
 //    IRQSignal irq[4];
     uint8_t config[256];
+    uint8_t reset_config[256];
+    bool reset_config_valid;
     uint8_t next_cap_offset; /* offset of the next capability */
     char *name; /* for debug only */
     PCIIORegion io_regions[PCI_NUM_REGIONS];
@@ -294,6 +296,36 @@ static void pci_update_mappings(PCIDevice *d)
             r->enabled = false;
         }
     }
+}
+
+/* Seal board-supplied defaults after every device has been configured.
+ * Guest reset must not retain the previous OS's BAR decodes while the
+ * BIOS sizes BARs again. Device identities/capabilities belong to the board. */
+void pci_bus_save_reset_state(PCIBus *bus)
+{
+    if (!bus) return;
+    for (unsigned n = 0; n < 256; ++n) {
+        PCIDevice *d = bus->device[n];
+        if (!d) continue;
+        assert(!d->reset_config_valid);
+        memcpy(d->reset_config, d->config, sizeof(d->config));
+        d->reset_config_valid = true;
+    }
+}
+
+void pci_bus_reset(PCIBus *bus)
+{
+    if (!bus) return;
+    for (unsigned n = 0; n < 256; ++n) {
+        PCIDevice *d = bus->device[n];
+        if (!d || !d->reset_config_valid) continue;
+        /* Tear down live mappings before replacing their addresses. */
+        put_le16(d->config + PCI_COMMAND, 0);
+        pci_update_mappings(d);
+        memcpy(d->config, d->reset_config, sizeof(d->config));
+        pci_update_mappings(d);
+    }
+    memset(bus->irq_state, 0, sizeof(bus->irq_state));
 }
 
 /* return != 0 if write is not handled */

@@ -4,3 +4,6 @@
 
 # Preserve the exact upstream licence text bytes.
 disks/386/SeaBIOS-COPYING*.txt -text whitespace=-trailing-space
+drivers/nt/*.inf -text
+drivers/nt/display/*.inf -text
+drivers/nt/opengl/*.patch text eol=lf whitespace=-blank-at-eol

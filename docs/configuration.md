@@ -27,7 +27,11 @@ settings under `[wyseDOS]` with the same values; no manual migration is needed.
 starts with 128 MB RAM and the Pentium/133 profile. `[wyseDOS] speed` selects approximate MHz; `0` means
 unrestricted and omission uses the generation default. Choose the menu's
 supported values. Identity, FPU and rate limiting are separate settings, not
-cycle-accurate CPU models. Wrong audio clocks can also accelerate game timers;
+cycle-accurate CPU models. The Pentium speed menu includes 266, 300, 333 and
+400 MHz profiles for faster guests, followed by full speed. Selecting a higher
+rate does not select a Pentium II/III model. The VMX backend currently forwards
+masked host CPUID information; the menu generation is not a promise of an exact
+guest-visible processor identity. Wrong audio clocks can also accelerate game timers;
 see [audio-clock.md](audio-clock.md).
 
 ## Common settings
@@ -71,6 +75,13 @@ activate it. Three seconds without further marked work restore base speed;
 a paused game that keeps drawing remains boosted. Text-mode transitions and
 guest reset revoke activity. An older driver without marking leaves Windows
 at base speed. Existing DOS Voodoo2 boost remains independent.
+
+The NT5 WGPU driver uses the same Windows boost for accelerated Direct3D.
+DirectDraw copies, fills and the bridge's fixed test patterns leave the
+processor at its configured base speed when no application 3D is active.
+The NT5 OpenGL development build routes hardware draws through that same
+Direct3D HAL and inherits its boost behavior.
+[NT5 OpenGL build](../drivers/nt/README.md#opengl-development-build)
 
 Voodoo2 memory offers **8 or 12 MB**. **Windows 3D memory** independently
 selects the WGPU workspace: **32, 64 or 128 MB**. The separate **Windows 3D

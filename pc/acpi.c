@@ -61,6 +61,8 @@ bool acpi_io_read(uint16_t port,unsigned size,uint32_t *value) {
     acpi_step();uint32_t v=0;
     for (unsigned i=0;i<size;i++) {
         unsigned p=port-0x600+i;uint8_t b=0;
+        /* DSDT SBAU._STA reads the fixed Sound Blaster presence bit. */
+        if (p==0x0c && machine && machine->sb16_enabled) b=1;
         if (p<2) b=pm_status>>(8*p);
         else if (p<4) b=pm_enable>>(8*(p-2));
         else if (p<6) b=pm_control>>(8*(p-4));

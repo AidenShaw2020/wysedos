@@ -1,6 +1,7 @@
 # 3D preview recordings
 
-Recorded on 2026-11-12 with 128 MB guest RAM, 8 MB VGA memory, 12 MB
+The original DOS and Windows 98 clips were recorded on 2026-11-12 with
+128 MB guest RAM, 8 MB VGA memory, 12 MB
 Voodoo2 and a 64 MB WGPU workspace. The base CPU setting is 133 MHz;
 selected CPU Boost activates automatically for DOS Glide and Windows 3D.
 No separate Windows booster program is installed.
@@ -18,12 +19,20 @@ configuration has game sound disabled. Game data is not distributed.
 | [Windows NFS III / DirectX](06-nfs3-directx.mp4) | 640x480, native **DX5**, Hometown / Corvette | 621 handled Flips / 20.984 s = **29.59 FPS**, driving; zero declined Flips throughout the run |
 | [Windows NFS III / Glide](07-nfs3-glide.mp4) | 640x480, Velocity9x Glide3, Hometown / Corvette | 247 swap calls / 15.001 s = **16.47 swaps/s**, complete periodic interval inside the marked race sample |
 | [Windows Quake II test / OpenGL](08-quake2-opengl.mp4) | 640x480, Velocity9x Intel Gen8 ICD | Separate opening-scene rotation: 128 views / 3.647994 s = **35.087779 FPS** |
+| [Windows 2000 NFS III / DirectX](09-nfs3-windows2000-directx.mp4) | 640x480x16, Direct3D 5, Hometown / Corvette | **27.65 FPS** over 30.02 s of a race with the Windows 98 detail preset |
+| [Windows XP NFS III / DirectX](10-nfs3-windowsxp-directx.mp4) | 640x480x16, Direct3D 5, Hometown / Corvette | **27.94 FPS** over 30.03 s with the same detail preset |
+| [Windows 2000 Quake II / OpenGL](11-quake2-windows2000-opengl.mp4) | 640x480, RGB565/Z16, WGPU OpenGL ICD | **29.44 FPS** in the separate 128-view opening-scene rotation |
+| [Windows XP Quake II / OpenGL](12-quake2-windowsxp-opengl.mp4) | 640x480, RGB565/Z16, same ICD | **29.53 FPS** in the separate 128-view opening-scene rotation |
 
 NFS retains medium graphics, mirror, VSync and sound. Its clips contain
 different geometry and do not establish an API speed comparison. Quake II's
 number applies to its opening rotation, not the subsequent moving footage.
 Its bundled demo has a malformed ending, so a loaded map and normal exit
-were used instead of claiming a completed demo benchmark.
+were used for the opening rotation. The NT footage shows selected earlier
+passages from that demo with `gl_modulate 2` for visibility. The benchmark
+uses the normal `gl_modulate 1`. The NT clips use direct 60 fps HDMI
+capture and normal playback speed with sound. The cropped NFS footage
+retains the measurement footer and removes the lowest leaderboard row.
 
 Earlier runs reached 22.2 FPS at the same Tomb Raider level start and
 29.92 FPS driving NFS III on DX5. The replacement tests restore comparable

@@ -537,6 +537,8 @@ static uint64_t typematic_period_us(void) {
 // Returns a host hotkey (HID usage pressed with the Windows key) or 0.
 int usbhid_poll(PC *pc) {
     int hotkey = 0;
+    static uint8_t guest_mods, win_used;
+    static uint8_t hotkey_keys[256];
     while (ring_tail != ring_head) {
         hid_event_t e = ring[ring_tail];
         __atomic_thread_fence(__ATOMIC_ACQUIRE);
@@ -575,11 +577,46 @@ int usbhid_poll(PC *pc) {
         static uint8_t mods;
         if (e.code >= 0xe0 && e.code <= 0xe7) {
             uint8_t bit = (uint8_t)(1 << (e.code - 0xe0));
+            bool was_down = (mods & bit) != 0;
             mods = e.down ? mods | bit : mods & ~bit;
+            if (bit & 0x88) {
+                /* Win chords belong to the monitor. Do not expose their
+                 * modifier make to Windows: the menu may consume its break,
+                 * and even a balanced make/break would open Start on return.
+                 * A Win key used alone still reaches the guest as a tap. */
+                if (e.down) {
+                    if (settingsui_is_open() || diskui_is_open()) win_used |= bit;
+                    else win_used &= ~bit;
+                } else {
+                    if (was_down && !(win_used & bit) &&
+                        !settingsui_is_open() && !diskui_is_open()) {
+                        unsigned char k = hid_to_linux_keycode(e.code);
+                        ps2_put_keycode(pc->kbd, 1, k);
+                        ps2_put_keycode(pc->kbd, 0, k);
+                    }
+                    win_used &= ~bit;
+                }
+                continue;
+            }
+            if (!e.down) {
+                /* A modifier pressed before a menu still needs its guest
+                 * release while that menu owns ordinary keyboard input.
+                 * Conversely, do not release a modifier only pressed in UI. */
+                if (guest_mods & bit)
+                    ps2_put_keycode(pc->kbd, 0, hid_to_linux_keycode(e.code));
+                guest_mods &= ~bit;
+                continue;
+            }
         }
         // Win + key belongs to the monitor (menus), like X86Pi's Win+F11/F12
-        if ((mods & 0x88) && e.code < 0xe0) {
-            if (e.down) hotkey = e.code;
+        if (!e.down && hotkey_keys[e.code]) {
+            hotkey_keys[e.code] = 0;
+            continue;
+        }
+        if ((mods & 0x88) && e.code < 0xe0 && e.down) {
+            hotkey = e.code;
+            win_used |= mods & 0x88;
+            hotkey_keys[e.code] = 1;
             continue;
         }
         unsigned char k = hid_to_linux_keycode(e.code);
@@ -596,7 +633,11 @@ int usbhid_poll(PC *pc) {
         // an open menu takes the keyboard
         if (settingsui_is_open()) { if (k) settingsui_handle_key(k, e.down); continue; }
         if (diskui_is_open()) { if (k) diskui_handle_key(k, e.down); continue; }
-        if (k) ps2_put_keycode(pc->kbd, e.down, k);
+        if (k) {
+            if (e.code >= 0xe0 && e.code <= 0xe7)
+                guest_mods |= (uint8_t)(1 << (e.code - 0xe0));
+            ps2_put_keycode(pc->kbd, e.down, k);
+        }
     }
     // Typematic repeat. A USB keyboard reports a held key once and leaves the
     // repeating to the computer; a PS/2 keyboard sends its make code again at

@@ -108,7 +108,7 @@ https://github.com/user-attachments/assets/ccedbfa9-1434-4aef-a04d-e2ba064c99da
 
 Hometown / Corvette, driving with the original DX5 renderer, VSync and sound.
 
-https://github.com/user-attachments/assets/84a64f80-00bb-4efa-81c9-812f942ede15
+[![Windows 98 DirectX race](docs/video/06-nfs3-directx.jpg)](docs/video/06-nfs3-directx.mp4)
 
 </details>
 
@@ -118,7 +118,7 @@ https://github.com/user-attachments/assets/84a64f80-00bb-4efa-81c9-812f942ede15
 Velocity9x Glide3, Hometown / Corvette. The caption reports swap calls;
 it does not independently measure display completion.
 
-https://github.com/user-attachments/assets/a029aa05-ff47-4114-88f9-09dfd7e0ad3d
+[![Windows 98 Glide race](docs/video/07-nfs3-glide.jpg)](docs/video/07-nfs3-glide.mp4)
 
 </details>
 
@@ -132,6 +132,22 @@ https://github.com/user-attachments/assets/25071566-8de0-40da-a41e-ed08b81dc538
 
 </details>
 
+<details>
+<summary><strong>Windows 2000 and XP</strong> · NFS III Direct3D and Quake II OpenGL</summary>
+
+| Game | Windows 2000 | Windows XP |
+|---|---|---|
+| Need for Speed III / Direct3D 5 | [27.65 FPS race](docs/video/09-nfs3-windows2000-directx.mp4) | [27.94 FPS race](docs/video/10-nfs3-windowsxp-directx.mp4) |
+| Quake II / OpenGL | [29.44 FPS opening rotation](docs/video/11-quake2-windows2000-opengl.mp4) | [29.53 FPS opening rotation](docs/video/12-quake2-windowsxp-opengl.mp4) |
+
+Direct HDMI capture at 60 fps shows the games at their original playback
+speed. Quake II footage shows selected passages from Comm Center with
+the game's lightmap intensity increased for visibility. Its footers report
+the separate 640x480 opening-scene benchmark with default intensity.
+[Recording conditions](docs/video/README.md)
+
+</details>
+
 ## Documentation
 
 Start with the [documentation index](docs/index.md):
@@ -139,6 +155,7 @@ Start with the [documentation index](docs/index.md):
 - [Installation and guest OS setup](docs/installation.md)
 - [Configuration and controls](docs/configuration.md)
 - [Windows 98 display and 3D driver](drivers/windows9x/velocity9x/INSTALL.TXT)
+- [Windows 2000 and XP graphics preview](docs/nt5-support.md)
 - [DOS Glide and Voodoo2](docs/voodoo2.md)
 - [Storage, USB and image mounting](docs/storage.md)
 - [Architecture and source map](docs/architecture.md)
@@ -187,8 +204,8 @@ driven by the RT5672/I2S backend on the qualified unit.
 ## Installing on the Wyse 3040
 
 1. Download **`wysedos-installer.img`** from
-   [wyseDOS v1.1.18](https://github.com/AidenShaw2020/wysedos/releases/tag/v1.1.18) (or build it
-   from source with `./tools/installer/build.sh`).
+   [wyseDOS releases](https://github.com/AidenShaw2020/wysedos/releases) or
+   [build it from source](docs/development.md).
 2. Write `wysedos-installer.img` to a USB flash drive in raw / DD mode (using
    Rufus in DD mode, balenaEtcher or `dd`).
 3. Plug the USB stick into the Wyse 3040, power it on, press **F12** at the Dell
@@ -197,14 +214,13 @@ driven by the RT5672/I2S backend on the qualified unit.
    keeping C: and settings (confirm with U again), or **I — New install** to
    erase and prepare eMMC (separate Y confirmation). Esc cancels.
    A new installation partitions the internal 8 GB eMMC as follows:
-   - **System partition (`WYSEDOS`, 128 MB FAT32, hidden `0x1C` in MBR)** —
+   - **Firmware partition (`WYSEDOS`, 128 MiB FAT32 on GPT)** —
      stores `\EFI\BOOT\BOOTX64.EFI` and `\386\` (`bios.bin`, `vgabios.bin`,
-     `config.ini`, `gm.sf2`, `logo.bin`), and registers the `wyseDOS` UEFI boot
+     `config.ini`, `gm.sf2`, `logo.bin`, `drivers.iso`), and registers the `wyseDOS` UEFI boot
      entry in NVRAM.
-   - **Guest disk (`C:`, ~7.1 GB FAT32 LBA `0x0C` in MBR)** — exposed directly
-     to the guest PC as the primary master IDE hard disk (`hda=host:emmc`), with
-     the system partition hidden outside the guest disk bounds so DOS `FDISK`,
-     `FORMAT` and Windows 98 Setup see a clean single-disk PC.
+   - **Guest disk** — exposes the remaining eMMC capacity as the primary
+     master IDE disk (`hda=host:emmc`). DOS or Windows Setup creates the
+     partition and filesystem inside that disk.
 5. Remove the USB stick when installation or upgrade completes and press
    any key to reboot into **wyseDOS**.
 
@@ -237,12 +253,20 @@ can install an operating system onto it just as on a real PC:
   automatically to USB. Image paths on external media are temporary and must
   be selected again after a monitor restart. Guest C:/eMMC is not browsable.
   A compatible, separately licensed guest USB mass-storage driver is still
-  required in Windows. The installer supplies the real-DOS USB drivers in
-  `C:\DRIVERS`; it does not supply Windows USB storage packages.
+  required in Windows. Mount the driver CD from Win+F12 for the real-DOS
+  USB drivers.
   Physical floppy and CD-ROM handling is unchanged.
 - **Windows 98 display and 3D driver**: the modified
   [Velocity9x package](drivers/windows9x/velocity9x/README.md) provides the
   VGA/VBE desktop and Direct3D, Glide and OpenGL through WGPU/Gen8.
+
+## Installing Windows 2000 or XP
+
+Boot your own Windows CD or ISO and let Setup partition the guest disk.
+After the first desktop boot, mount `drivers.iso` with Win+F12. Its `NT5`
+directory contains the x86 WGPU bridge, 2D/Direct3D driver, and OpenGL ICD.
+The firmware and driver CD also support DOS and Windows 9x installations.
+[NT5 setup and validation](docs/nt5-support.md)
 
 ## Hotkeys
 
@@ -333,18 +357,16 @@ Nuked OPL3 and the PC emulator into `efi/build/bootx64.efi`.
 ### Build the bootable USB installer (`wysedos-installer.img`)
 
 ```sh
-./tools/installer/build.sh
+./tools/installer/build.sh out/wysedos-installer.img /absolute/path/to/wysedos-nt5-driver-package.iso
 ```
 
 This builds `efi/build/bootx64.efi` and packs it together with `disks/386/` into
 a bootable FAT32 USB image at `tools/installer/out/wysedos-installer.img`.
 
-The installer builder also requires Python 3. It checks pinned upstream
-archive hashes and adds an unpacked `DRIVERS/` payload. After creating the
-guest FAT32 partition, the installer copies the modified Velocity9x 3D driver,
-Bret Johnson's DOS USB drivers and CuteMouse 2.1b4 (including
-sources) to `C:\DRIVERS`. These drivers
-retain their own licences; see the bundled instructions.
+Install `pycdlib` for the CD builder and use the NT5 package ISO from the
+release assets. The installer checks the pinned driver archives and packages
+the DOS, Windows 9x and NT5 drivers together in `386/drivers.iso`. Windows
+and DOS installation media are supplied separately.
 
 NUSB FE, NUSB SE and the SanDisk-based Win95 package are excluded because
 redistribution permissions for their proprietary components have not been
@@ -357,8 +379,9 @@ them. Windows USB storage requires a separately supplied compatible driver.
 |---|---|
 | `efi/` | UEFI bootstrap, page tables, SMP core bring-up, Intel VT-x hypervisor (`cpuvmx.c`), GOP display (`wyse.c`), LPE/RT5672 audio (`audio.c`, `lpe.c`, `analog.c`), firmware-backed storage (`bio.c`, `hostblk.c`), USB HID (`usbhid.c`), installer (`installer.c`) |
 | `pc/` | Shared PC emulator and peripherals: i386/486/Pentium core and FPU, VGA/VBE, IDE/ATAPI, floppy, i8254 PIT, i8259 PIC, i8257 DMA, i8042 PS/2 keyboard & mouse, SB16, AdLib/Nuked OPL3, MPU-401/TinySoundFont, SN76489, Covox/DSS, NE2000, PCI, ACPI, OSD menus |
-| `disks/386/` | Runtime assets installed to `\386\`: SeaBIOS (`bios.bin`), SeaVGABios (`vgabios.bin`), General MIDI soundfont (`gm.sf2`), boot logo (`logo.bin`), guest MBR template (`guest_mbr.bin`) and default `config.ini` |
+| `disks/386/` | SeaBIOS, SeaVGABIOS, General MIDI soundfont, boot logo and runtime assets |
 | `drivers/windows9x/` | Modified Velocity9x Windows 98 WGPU/Gen8 3D package, with licenses and corresponding source |
+| `drivers/nt/` | Windows 2000/XP WDM transport, WINVBE-derived XDDM driver, and OpenGL adapter |
 | `tools/` | USB installer builder (`tools/installer/`), ACPI table compiler (`tools/acpi/`), VGA BIOS EDID patcher (`tools/vgabios/`), boot logo converter (`tools/logo/`) and unit tests (`tools/tests/`) |
 
 ## Acknowledgements and licence
@@ -379,6 +402,9 @@ them. Windows USB storage requires a separately supplied compatible driver.
   The [fork package](drivers/windows9x/velocity9x/README.md) includes complete
   corresponding modified source and preserves upstream third-party notices.
   See the [license](LICENSES/velocity9x.txt).
+- **WINVBE** — upstream GPLv3 miniport and display-driver code used by the
+  Windows 2000/XP preview. The driver bundle includes corresponding
+  sources and licence notices. [NT graphics notices](LICENSES/winvbe.md)
 - **[86Box](https://github.com/86Box/86Box)** — the pinned Voodoo renderer and
   span recompiler, used under GPLv3 from its GPL-2.0-or-later distribution.
   See [provenance and port changes](pc/voodoo/UPSTREAM.md) and its preserved
