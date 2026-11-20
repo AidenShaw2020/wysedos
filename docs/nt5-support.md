@@ -106,16 +106,14 @@ The physical GPT/ESP belong to the monitor. Guest partitioning must stay inside
 the native guest container. Before replacing a DOS/9x installation with NT,
 retain a verified recovery copy. Native installation retains the hidden monitor
 partition and gives the selected OS family all remaining guest disk space,
-matching the DOS installation policy. In the physical Windows 2000 test,
-formatting the existing DOS partition left its DOS bootstrap code in
-place. Initializing the hosted disk before Windows Setup let Setup create
-its own partition and boot sector. The first installer restart and a
-later normal restart both loaded Windows from eMMC. The tested
-preparation was a one-shot PXE operation and left the installed monitor
-intact. The distribution installer now uses the same unpartitioned guest
-disk for DOS/Windows 9x and Windows NT. Driver packages are supplied on
-`drivers.iso` in the firmware partition. Physical validation of that
-installer entry point is pending.
+matching the DOS installation policy. New Install created an unpartitioned
+guest disk on physical eMMC. Stock Windows 2000 SP4 Setup created and
+formatted its NTFS partition and booted from eMMC through its normal
+restarts without disk repair or an IDE timing override. The installer
+used the exact distribution files delivered over PXE. After an eMMC
+firmware upgrade, Win+F12 exposed the shared CD, and Windows read it
+offline without a guest restart. Driver packages are supplied on
+`drivers.iso` in the firmware partition.
 NT tests need at least 5 GiB for the
 system and games; this minimum is not a native partition-size cap. Do not
 resize or erase the physical eMMC until a complete verified physical backup
@@ -186,6 +184,6 @@ The previous `emmcbackup` diagnostic is not a full physical snapshot.
 
 ## Remaining qualification
 
-The complete release USB-to-hidden-ESP installation path requires a fresh
-physical validation with this exact combined image. Additional display
+The physical Windows 2000 installation was qualified with the release payload
+over PXE. Booting the combined image from a physical USB stick remains unverified. Additional display
 mode recovery and game coverage remain in progress.

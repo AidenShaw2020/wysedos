@@ -80,6 +80,11 @@ desktop is ready, mount the shared driver CD. Run `NTINST.EXE --install`
 then `NTINST.EXE --display` from its `NT5` directory as Administrator and
 restart if requested. See [NT5 validation and limits](nt5-support.md).
 
+If Windows keeps an older wyseDOS driver with the same Plug and Play rank,
+use **Update Driver → Have Disk** for the matching wyseDOS WGPU
+co-processor and display adapter. Point the wizard to the CD's `NT5`
+directory and restart after the updates.
+
 ## Mount the driver CD
 
 When booted from eMMC, open Win+F12, choose the CD-ROM slot ATA1-0, and select

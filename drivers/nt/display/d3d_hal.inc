@@ -2199,6 +2199,9 @@ void d3dnt_halinfo(DD_HALINFO *info)
 #ifdef WGPU_NT_ENABLE_MATERIAL
     info->ddCaps.ddsCaps.dwCaps |= DDSCAPS_TEXTURE | DDSCAPS_MIPMAP;
     info->vmiData.dwTextureAlign = 64;
+    /* NT can allocate a texture block as an offscreen surface from the
+     * shared rectangular heap. Both paths must align the GPU base. */
+    info->vmiData.dwOffscreenAlign = 64;
 #ifdef WGPU_NT_ENABLE_MIPS
     info->ddCaps.ddsCaps.dwCaps |= DDSCAPS_COMPLEX;
 #endif
