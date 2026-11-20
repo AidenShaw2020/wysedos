@@ -35,65 +35,6 @@ x86-64 bare metal on the Intel Atom x5-Z8350 with both hardware-assisted
 virtualisation (Intel VT-x unrestricted guest) and cycle-paced software
 emulation.
 
-## Installing on the Wyse 3040
-
-1. Download **`wysedos-installer.img`** from
-   [wyseDOS releases](https://github.com/AidenShaw2020/wysedos/releases) or
-   [build it from source](docs/development.md).
-2. Write `wysedos-installer.img` to a USB flash drive in raw / DD mode (using
-   Rufus in DD mode, balenaEtcher or `dd`).
-3. Plug the USB stick into the Wyse 3040, power it on, press **F12** at the Dell
-   splash screen and select the USB stick in the UEFI boot menu.
-4. Select **U — Upgrade** to update an existing supported installation while
-   keeping C: and settings (confirm with U again), or **I — New install** to
-   erase and prepare eMMC (separate Y confirmation). Esc cancels.
-   A new installation partitions the internal 8 GB eMMC as follows:
-   - **Firmware partition (`WYSEDOS`, 128 MiB FAT32 on GPT)** —
-     stores `\EFI\BOOT\BOOTX64.EFI` and `\386\` (`bios.bin`, `vgabios.bin`,
-     `config.ini`, `gm.sf2`, `logo.bin`, `drivers.iso`), and registers the `wyseDOS` UEFI boot
-     entry in NVRAM.
-   - **Guest disk** — exposes the remaining eMMC capacity as the primary
-     master IDE disk (`hda=host:emmc`). DOS or Windows Setup creates the
-     partition and filesystem inside that disk.
-5. Remove the USB stick when installation or upgrade completes and press
-   any key to reboot into **wyseDOS**.
-
-See [installation and upgrade details](docs/installation.md) for detection,
-retained settings and interrupted-update recovery. Upgrade does not replace
-guest drivers or operating system files.
-
-### DOS and Windows 9x
-
-1. Boot DOS from your own floppy, CD or image using Win+F12.
-2. Use DOS partitioning and formatting tools on the internal guest disk
-   and install DOS. Run Windows Setup from your own Windows 9x media
-   if you want a Windows desktop.
-3. Open Win+F12 and mount the firmware's `drivers.iso`. For Windows 98,
-   install the driver from `VELOCITY`. The `USBDOS` and `CTMOUSE`
-   directories contain the DOS USB and mouse drivers.
-   [DOS and Windows 9x setup](docs/installation.md#install-dos-and-windows-9x)
-
-### Windows 2000 and Windows XP
-
-1. For NT, select full CPU speed in Settings with Win+F11. Boot your own
-   32-bit Windows 2000 or XP CD or ISO using Win+F12.
-2. Let Windows Setup partition and format the guest disk. Continue from
-   the hard disk when Setup restarts.
-3. At the desktop, mount the firmware's `drivers.iso` with Win+F12.
-   From its `NT5` directory run `NTINST.EXE --install` and then
-   `NTINST.EXE --display` as Administrator. Restart when prompted.
-4. Use the installed XDDM driver for DirectDraw and legacy Direct3D, and the
-   bundled system ICD for OpenGL. [NT5 configuration and compatibility](docs/nt5-support.md)
-
-### Installation media and USB
-
-Disk Manager can mount bootable images from external FAT storage and
-attach physical USB floppy and CD-ROM drives. In DOS, load the usual
-ATAPI CD driver and MSCDEX. In Windows, stop an external disk before
-handing it to Disk Manager. It returns to guest USB after the last image
-on it is ejected. Windows USB mass storage requires a compatible driver
-for the installed Windows version. [Media mounting and ownership](docs/storage.md)
-
 ## Game showcase
 
 Games running on a **Dell Wyse 3040** under DOS, Windows 98, Windows 2000
@@ -227,6 +168,65 @@ https://github.com/user-attachments/assets/91c403b7-9baf-426a-bde5-9562891d5ccc
 https://github.com/user-attachments/assets/06a94201-6ad6-4418-8548-4897e0b06978
 
 </details>
+
+## Installing on the Wyse 3040
+
+1. Download **`wysedos-installer.img`** from
+   [wyseDOS releases](https://github.com/AidenShaw2020/wysedos/releases) or
+   [build it from source](docs/development.md).
+2. Write `wysedos-installer.img` to a USB flash drive in raw / DD mode (using
+   Rufus in DD mode, balenaEtcher or `dd`).
+3. Plug the USB stick into the Wyse 3040, power it on, press **F12** at the Dell
+   splash screen and select the USB stick in the UEFI boot menu.
+4. Select **U — Upgrade** to update an existing supported installation while
+   keeping C: and settings (confirm with U again), or **I — New install** to
+   erase and prepare eMMC (separate Y confirmation). Esc cancels.
+   A new installation partitions the internal 8 GB eMMC as follows:
+   - **Firmware partition (`WYSEDOS`, 128 MiB FAT32 on GPT)** —
+     stores `\EFI\BOOT\BOOTX64.EFI` and `\386\` (`bios.bin`, `vgabios.bin`,
+     `config.ini`, `gm.sf2`, `logo.bin`, `drivers.iso`), and registers the `wyseDOS` UEFI boot
+     entry in NVRAM.
+   - **Guest disk** — exposes the remaining eMMC capacity as the primary
+     master IDE disk (`hda=host:emmc`). DOS or Windows Setup creates the
+     partition and filesystem inside that disk.
+5. Remove the USB stick when installation or upgrade completes and press
+   any key to reboot into **wyseDOS**.
+
+See [installation and upgrade details](docs/installation.md) for detection,
+retained settings and interrupted-update recovery. Upgrade does not replace
+guest drivers or operating system files.
+
+### DOS and Windows 9x
+
+1. Boot DOS from your own floppy, CD or image using Win+F12.
+2. Use DOS partitioning and formatting tools on the internal guest disk
+   and install DOS. Run Windows Setup from your own Windows 9x media
+   if you want a Windows desktop.
+3. Open Win+F12 and mount the firmware's `drivers.iso`. For Windows 98,
+   install the driver from `VELOCITY`. The `USBDOS` and `CTMOUSE`
+   directories contain the DOS USB and mouse drivers.
+   [DOS and Windows 9x setup](docs/installation.md#install-dos-and-windows-9x)
+
+### Windows 2000 and Windows XP
+
+1. For NT, select full CPU speed in Settings with Win+F11. Boot your own
+   32-bit Windows 2000 or XP CD or ISO using Win+F12.
+2. Let Windows Setup partition and format the guest disk. Continue from
+   the hard disk when Setup restarts.
+3. At the desktop, mount the firmware's `drivers.iso` with Win+F12.
+   From its `NT5` directory run `NTINST.EXE --install` and then
+   `NTINST.EXE --display` as Administrator. Restart when prompted.
+4. Use the installed XDDM driver for DirectDraw and legacy Direct3D, and the
+   bundled system ICD for OpenGL. [NT5 configuration and compatibility](docs/nt5-support.md)
+
+### Installation media and USB
+
+Disk Manager can mount bootable images from external FAT storage and
+attach physical USB floppy and CD-ROM drives. In DOS, load the usual
+ATAPI CD driver and MSCDEX. In Windows, stop an external disk before
+handing it to Disk Manager. It returns to guest USB after the last image
+on it is ejected. Windows USB mass storage requires a compatible driver
+for the installed Windows version. [Media mounting and ownership](docs/storage.md)
 
 ## Documentation
 
