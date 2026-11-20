@@ -168,6 +168,60 @@ https://github.com/user-attachments/assets/06a94201-6ad6-4418-8548-4897e0b06978
 
 </details>
 
+## Documentation
+
+Start with the [documentation index](docs/index.md):
+
+- [Installation and guest OS setup](docs/installation.md)
+- [Configuration and controls](docs/configuration.md)
+- [Windows 98 display and 3D driver](drivers/windows9x/velocity9x/INSTALL.TXT)
+- [Windows 2000 and XP graphics preview](docs/nt5-support.md)
+- [DOS Glide and Voodoo2](docs/voodoo2.md)
+- [Storage, USB and image mounting](docs/storage.md)
+- [Architecture and source map](docs/architecture.md)
+- [Compatibility and known limits](docs/compatibility.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Building and testing](docs/development.md)
+- [Porting to other hardware](docs/portability.md)
+- [Release history](CHANGELOG.md)
+
+## What is inside
+
+| Component | Emulated hardware |
+|---|---|
+| **Processor** | 386, 486, Pentium, Pentium II and Pentium III profiles. The P6 profiles identify as distinct processors and expose the features supported by the backend. Intel VT-x execution with approximate rate limits or unrestricted speed. |
+| **Memory** | Configurable conventional + extended RAM (installer default 128 MB, up to 256 MB), LIM EMS 4.0 at `0xD000` |
+| **Video** | IBM VGA (text, CGA, EGA, Mode X, 256-colour) and VESA VBE 2.0 LFB modes up to 1280x1024 in 8/15/16/24/32 bpp with 8 MB VRAM |
+| **3D graphics** | DOS Glide through Voodoo2 emulation (8/12 MB). Intel Gen8 acceleration for Direct3D, Glide and OpenGL in Windows 98, and for Direct3D and OpenGL in Windows 2000/XP. Windows GPU workspace sizes 32/64/128 MB. |
+| **Sound** | AdLib / Dual OPL2 / OPL3 ([Nuked OPL3](https://github.com/nukeykt/Nuked-OPL3)), Sound Blaster 16 (DSP 4.05, 8-bit and 16-bit DMA, mixer, auto-init), MPU-401 General MIDI ([TinySoundFont](https://github.com/schellingb/TinySoundFont)), Tandy 3-voice (SN76489), Covox Speech Thing & Disney Sound Source on LPT1, PC speaker (PIT channel 2) |
+| **Disks** | Dual IDE/ATA channels (hard disks and ATAPI CD-ROMs, using the native eMMC guest disk, `.img`/`.iso` files or a physical USB CD-ROM drive as appropriate), two 3.5" floppy drives (`.img`/`.ima` or a physical USB floppy drive) |
+| **Network** | NE2000 ISA / ISA PnP Ethernet adapter bridged to the USB/on-board Ethernet |
+| **Input** | i8042 AT/PS/2 keyboard and 3-button PS/2 Intellimouse with scroll wheel, dual analogue gameport at `0x201` |
+| **Clock** | MC146818 CMOS RTC fed from the hardware RTC |
+
+Timing notes cover [display-derived audio clocks](docs/audio-clock.md) and
+[Sound Blaster DMA synchronization](docs/sound-dma.md), including hardware
+validation and regression tests.
+The [native VGA page-flip notes](docs/vga-page-flips.md) explain frame lifetime,
+fine panning and the regression test for incomplete moving sprites.
+
+## How the Wyse 3040 is used
+
+The Dell Wyse 3040 has a quad-core Intel Atom x5-Z8350 (Cherry Trail, 1.44 GHz /
+1.92 GHz burst), 2 GB DDR3L RAM, 8 GB on-board eMMC, DisplayPort outputs, four
+USB ports (one USB 3.0, three USB 2.0), Gigabit Ethernet, and an analog headphone codec
+driven by the RT5672/I2S backend on the qualified unit.
+
+| Part | Role |
+|---|---|
+| **Core 0** | Runs the guest CPU (Intel VT-x VMX non-root mode with EPT and I/O + MMIO trapping, or the software interpreter), hardware I/O emulation, storage and USB polling |
+| **Core 1** | OPL synthesis, audio mixing and display-audio pumping |
+| **Core 2** | VGA snapshots, rendering and copying to the display framebuffer |
+| **Core 3** | General MIDI synthesis, analog headphone FIFO feeding and hang monitoring |
+| **Display** | UEFI GOP framebuffer with monitor-side rendering/scaling; native legacy VGA for suitable guest modes |
+| **Storage** | UEFI Block I/O with caching and a bounded native eMMC guest disk (`host:emmc`) |
+| **USB** | Firmware USB I/O for physical HID/storage; virtual UHCI/BOT for guest USB disks |
+
 ## Installing on the Wyse 3040
 
 1. Download **`wysedos-installer.img`** from
@@ -226,60 +280,6 @@ ATAPI CD driver and MSCDEX. In Windows, stop an external disk before
 handing it to Disk Manager. It returns to guest USB after the last image
 on it is ejected. Windows USB mass storage requires a compatible driver
 for the installed Windows version. [Media mounting and ownership](docs/storage.md)
-
-## Documentation
-
-Start with the [documentation index](docs/index.md):
-
-- [Installation and guest OS setup](docs/installation.md)
-- [Configuration and controls](docs/configuration.md)
-- [Windows 98 display and 3D driver](drivers/windows9x/velocity9x/INSTALL.TXT)
-- [Windows 2000 and XP graphics preview](docs/nt5-support.md)
-- [DOS Glide and Voodoo2](docs/voodoo2.md)
-- [Storage, USB and image mounting](docs/storage.md)
-- [Architecture and source map](docs/architecture.md)
-- [Compatibility and known limits](docs/compatibility.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Building and testing](docs/development.md)
-- [Porting to other hardware](docs/portability.md)
-- [Release history](CHANGELOG.md)
-
-## What is inside
-
-| Component | Emulated hardware |
-|---|---|
-| **Processor** | 386, 486, Pentium, Pentium II and Pentium III profiles. The P6 profiles identify as distinct processors and expose the features supported by the backend. Intel VT-x execution with approximate rate limits or unrestricted speed. |
-| **Memory** | Configurable conventional + extended RAM (installer default 128 MB, up to 256 MB), LIM EMS 4.0 at `0xD000` |
-| **Video** | IBM VGA (text, CGA, EGA, Mode X, 256-colour) and VESA VBE 2.0 LFB modes up to 1280x1024 in 8/15/16/24/32 bpp with 8 MB VRAM |
-| **3D graphics** | DOS Glide through Voodoo2 emulation (8/12 MB). Intel Gen8 acceleration for Direct3D, Glide and OpenGL in Windows 98, and for Direct3D and OpenGL in Windows 2000/XP. Windows GPU workspace sizes 32/64/128 MB. |
-| **Sound** | AdLib / Dual OPL2 / OPL3 ([Nuked OPL3](https://github.com/nukeykt/Nuked-OPL3)), Sound Blaster 16 (DSP 4.05, 8-bit and 16-bit DMA, mixer, auto-init), MPU-401 General MIDI ([TinySoundFont](https://github.com/schellingb/TinySoundFont)), Tandy 3-voice (SN76489), Covox Speech Thing & Disney Sound Source on LPT1, PC speaker (PIT channel 2) |
-| **Disks** | Dual IDE/ATA channels (hard disks and ATAPI CD-ROMs, using the native eMMC guest disk, `.img`/`.iso` files or a physical USB CD-ROM drive as appropriate), two 3.5" floppy drives (`.img`/`.ima` or a physical USB floppy drive) |
-| **Network** | NE2000 ISA / ISA PnP Ethernet adapter bridged to the USB/on-board Ethernet |
-| **Input** | i8042 AT/PS/2 keyboard and 3-button PS/2 Intellimouse with scroll wheel, dual analogue gameport at `0x201` |
-| **Clock** | MC146818 CMOS RTC fed from the hardware RTC |
-
-Timing notes cover [display-derived audio clocks](docs/audio-clock.md) and
-[Sound Blaster DMA synchronization](docs/sound-dma.md), including hardware
-validation and regression tests.
-The [native VGA page-flip notes](docs/vga-page-flips.md) explain frame lifetime,
-fine panning and the regression test for incomplete moving sprites.
-
-## How the Wyse 3040 is used
-
-The Dell Wyse 3040 has a quad-core Intel Atom x5-Z8350 (Cherry Trail, 1.44 GHz /
-1.92 GHz burst), 2 GB DDR3L RAM, 8 GB on-board eMMC, DisplayPort outputs, four
-USB ports (one USB 3.0, three USB 2.0), Gigabit Ethernet, and an analog headphone codec
-driven by the RT5672/I2S backend on the qualified unit.
-
-| Part | Role |
-|---|---|
-| **Core 0** | Runs the guest CPU (Intel VT-x VMX non-root mode with EPT and I/O + MMIO trapping, or the software interpreter), hardware I/O emulation, storage and USB polling |
-| **Core 1** | OPL synthesis, audio mixing and display-audio pumping |
-| **Core 2** | VGA snapshots, rendering and copying to the display framebuffer |
-| **Core 3** | General MIDI synthesis, analog headphone FIFO feeding and hang monitoring |
-| **Display** | UEFI GOP framebuffer with monitor-side rendering/scaling; native legacy VGA for suitable guest modes |
-| **Storage** | UEFI Block I/O with caching and a bounded native eMMC guest disk (`host:emmc`) |
-| **USB** | Firmware USB I/O for physical HID/storage; virtual UHCI/BOT for guest USB disks |
 
 ## Hotkeys
 
