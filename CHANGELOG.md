@@ -3,6 +3,11 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.21 - 2026-11-20
+
+- Preserve VGA latches on reads in 16-colour planar modes so Prehistorik 2
+  passes its startup VGA compatibility check with the default settings.
+
 ## v1.1.20 - 2026-11-19
 
 - Add separate Pentium II and Pentium III settings, period-based clock

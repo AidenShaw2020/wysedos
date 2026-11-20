@@ -273,6 +273,30 @@ static void planar_graphics_backend(void) {
     safe_planar=1;
     puts("PASS planar graphics backend: 16-color mode and latch copy use software; all planes survive Mode X return; chain4 stays RAM; explicit native override remains");
 }
+static void planar_read_then_or(void) {
+    reset();
+    state.sr[4] = 6;
+    state.sr[2] = 1;
+    state.gr[6] = 5;
+    state.gr[5] = 0;
+    state.gr[4] = 0;
+    state.gr[3] = 0;
+    state.gr[8] = 0xff;
+    state.cr[1] = 39;
+    state.cr[0x13] = 20;
+    state.latch = 0;
+
+    // A read after a plain store must prime the latches for the next OR.
+    // An EPT mapping of a single plane would return 1 without priming them.
+    const unsigned address = 0x2000;
+    uint32_t base;
+    CHECK(vga_simple_plane(&state, &base) == -1);
+    vga_mem_write(&state, address, 1);
+    CHECK(vga_mem_read(&state, address) == 1);
+    state.gr[3] = 0x11;
+    vga_mem_write(&state, address, 0xa0);
+    CHECK(vga_mem_read(&state, address) == 0x51);
+}
 static void chain4_planar_handoff(void) {
     for(unsigned trapped=0;trapped<2;trapped++) {
     reset();state.sr[4]=0x0e;state.sr[2]=15;state.gr[5]=0x40;state.gr[6]=5;
@@ -405,7 +429,7 @@ static void vbe_lfb_survives_vdd_font_access(void) {
 }
 int main(void) {
     transfer_controls();unchanged_native_trace();concrete_handoff_loss();surface_handoff_and_proposal();old_new_selector_loss();
-    vbe_clear_handoff();planar_graphics_backend();chain4_planar_handoff();vbe_depth_shadow();
+    vbe_clear_handoff();planar_graphics_backend();planar_read_then_or();chain4_planar_handoff();vbe_depth_shadow();
     vbe_lfb_survives_vdd_font_access();
     puts("PASS VGA transfers: native/planar controls and VBE clear/display-core transition regressions");
     return 0;

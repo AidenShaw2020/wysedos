@@ -557,10 +557,7 @@ static void plane_update(void) {
     io_pass_update();
     if (hw_on) return;
     uint32_t base = 0;
-    /* A direct page mapping cannot load the VGA latches on reads. Windows'
-     * planar driver reads pixels in mode 0 before using those latches for
-     * masked drawing and screen copies. Keep that path fully interpreted. */
-    int p = safe_planar && vga_native_planar_needs_software(g_pc->vga) ? -1 : vga_simple_plane(g_pc->vga, &base);
+    int p = vga_simple_plane(g_pc->vga, &base);
     if (p == plane_cur && (p < 0 || base == plane_base)) return;
     plane_release();
     if (p >= 0) {

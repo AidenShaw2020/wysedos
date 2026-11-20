@@ -3729,9 +3729,7 @@ int vga_vbe_on(VGAState *s)
 /* The Intel legacy aperture drops unaligned bitmap words at an 8-byte
  * boundary. The existing wide-planar fallback must consider the virtual
  * row as well as the visible width: Keen 4's intro has a 320-pixel viewport
- * into a 1984-pixel row (CR13=7Ch). Its game returns to a 336-pixel row.
- * This predicate also disables direct single-plane RAM mappings where
- * reads must load latches. Mode X uses RAM too, but may keep those mappings. */
+ * into a 1984-pixel row (CR13=7Ch). Its game returns to a 336-pixel row. */
 int vga_native_planar_needs_software(const VGAState *s)
 {
     return (s->gr[6] & 3) == 1 && !(s->sr[4] & 8) &&
@@ -3755,6 +3753,10 @@ int vga_chain4_simple(VGAState *s)
 
 int vga_simple_plane(VGAState *s, uint32_t *base)
 {
+    // Planar EGA/VGA reads feed later masked and logical writes through the
+    // latches even when addressing one plane with plain write mode 0.
+    if ((s->gr[VGA_GFX_MISC] & 1) && !(s->gr[VGA_GFX_MODE] & 0x60))
+        return -1;
     if (s->sr[VGA_SEQ_MEMORY_MODE] & VGA_SR04_CHN_4M) return -1;
     if (s->gr[VGA_GFX_MISC] & 0x02) return -1;
     if (((s->gr[VGA_GFX_MISC] >> 2) & 3) != 1) return -1;
