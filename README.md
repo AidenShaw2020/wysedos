@@ -415,7 +415,7 @@ them. Windows USB storage requires a separately supplied compatible driver.
   The [fork package](drivers/windows9x/velocity9x/README.md) includes complete
   corresponding modified source and preserves upstream third-party notices.
   See the [license](LICENSES/velocity9x.txt).
-- **WINVBE** — upstream GPLv3 miniport and display-driver code used by the
+- **[WINVBE](https://github.com/ages2001/WINVBE)** — upstream GPLv3 miniport and display-driver code used by the
   Windows 2000/XP preview. The driver bundle includes corresponding
   sources and licence notices. [NT graphics notices](LICENSES/winvbe.md)
 - **[86Box](https://github.com/86Box/86Box)** — the pinned Voodoo renderer and
