@@ -242,6 +242,7 @@ Start with the [documentation index](docs/index.md):
 - [Compatibility and known limits](docs/compatibility.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Building and testing](docs/development.md)
+- [Porting to other hardware](docs/portability.md)
 - [Release history](CHANGELOG.md)
 
 ## What is inside
