@@ -37,9 +37,18 @@ emulation.
 
 ## Game showcase
 
-Games running on a **Dell Wyse 3040** under DOS, Windows 98, Windows 2000
-and Windows XP. All files are **720p60** and play at their original speed.
-The NT clips use direct HDMI capture with digital audio.
+These games run on a **Dell Wyse 3040** under DOS, Windows 98, Windows 2000
+and Windows XP. The clips play at their original speed in **720p60**.
+Windows 2000 and XP were captured directly over HDMI with digital audio, and
+the four original DOS clips have sound enabled. Game FPS is measured
+separately from the capture rate. Doom and Quake use sound-off timedemos,
+Duke Nukem 3D shows its in-game counter for the scene, and Tyrian 2000 uses a
+separate first-level sample at normal speed.
+
+The DOS Glide and Windows 98 3D clips use a 133 MHz base CPU profile with
+automatic CPU Boost. Windows 98 uses a 64 MB GPU workspace. The Windows 2000
+and XP benchmarks run with the CPU unrestricted. Each figure applies to the
+scene measured. [Recording conditions](docs/video/README.md)
 
 | Game | Game resolution | Performance measurement |
 |---|---|---|
@@ -53,11 +62,6 @@ The NT clips use direct HDMI capture with digital audio.
 | **NFS III / Windows XP, Direct3D 5** | 640x480 | **27.94 FPS** over 30.03 s of driving |
 | **NFS III / Windows 98, Glide** | 640x480 | **16.47 swap calls/s** over 15.001 s of driving |
 | **Quake II / Windows 98, 2000 and XP, OpenGL** | 640x480 | **35.09 / 29.44 / 29.53 FPS**, separate opening-scene rotation |
-
-Game FPS and capture FPS are different measurements. The original four DOS clips have sound
-enabled; Doom and Quake benchmark results come from separate no-sound runs.
-Duke3D's counter is scene-dependent, and Tyrian's sample is not an unlocked
-benchmark or the recorded demo's average.
 
 <details open>
 <summary><strong>Doom</strong> · 18 seconds · high-detail demo with sound</summary>
@@ -92,11 +96,6 @@ https://github.com/user-attachments/assets/7ca1a682-eaba-4a30-b432-ed5d3b593327
 https://github.com/user-attachments/assets/5645a36b-19c8-43b2-8efc-84873c90fd31
 
 </details>
-
-The DOS and Windows 98 3D clips use a 133 MHz base CPU profile with
-automatic CPU Boost and a 64 MB Windows GPU workspace. The Windows 2000
-and XP benchmarks use an unrestricted CPU. The figures apply to the
-scenes measured. [Recording conditions](docs/video/README.md)
 
 <details>
 <summary><strong>Tomb Raider</strong> · 30 seconds · DOS Glide and automatic CPU Boost</summary>
