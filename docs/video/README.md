@@ -44,6 +44,12 @@ The driver counted 578 handled flips over 20.117 s (**28.73 FPS**) on
 the PXE test disk at Full Speed. The clip includes digital game audio
 and omits the bottom row of the race leaderboard.
 
+[Need for Speed III on Windows 98 / Glide 3](07-nfs3-glide.mp4) used
+the same route at 640×480. Velocity9x recorded a fresh Glide 3 census.
+The display driver counted 324 handled DirectDraw flips in 20.143 s
+(**16.09 FPS**). The clip includes digital game audio and omits the
+bottom leaderboard row.
+
 [Need for Speed III on Windows 2000](09-nfs3-windows2000-directx.mp4)
 used the same Hometown route and 640×480×16 graphics settings. It
 completed 832 VGA page flips over 30.009 s (**27.73 FPS**) at Full
@@ -62,7 +68,7 @@ includes digital game audio.
 | --- | --- | --- |
 | DOS Tomb Raider / Glide (earlier clip) | 640x480, Voodoo2 emulation, CPU span renderer | 437 completed buffer changes / 20.129 s = **21.71 FPS**, original stationary level start; sound disabled |
 | Windows NFS III / DirectX (earlier clip) | 640x480, native **DX5**, Hometown / Corvette | 621 handled Flips / 20.984 s = **29.59 FPS**, driving; zero declined Flips throughout the run |
-| [Windows NFS III / Glide](07-nfs3-glide.mp4) | 640x480, Velocity9x Glide3, Hometown / Corvette | 247 swap calls / 15.001 s = **16.47 swaps/s**, complete periodic interval inside the marked race sample |
+| Windows NFS III / Glide (earlier clip) | 640x480, Velocity9x Glide3, Hometown / Corvette | 247 swap calls / 15.001 s = **16.47 swaps/s**, complete periodic interval inside the marked race sample |
 | [Windows Quake II test / OpenGL](08-quake2-opengl.mp4) | 640x480, Velocity9x Intel Gen8 ICD | Separate opening-scene rotation: 128 views / 3.647994 s = **35.087779 FPS** |
 | Windows 2000 NFS III / DirectX (earlier clip) | 640x480x16, Direct3D 5, Hometown / Corvette | **27.65 FPS** over 30.02 s of a race with the Windows 98 detail preset |
 | [Windows XP NFS III / DirectX](10-nfs3-windowsxp-directx.mp4) | 640x480x16, Direct3D 5, Hometown / Corvette | **27.94 FPS** over 30.03 s with the same detail preset |
@@ -113,9 +119,9 @@ the game's frame cadence. Playback remains at original speed.
 DOS counts completed buffer changes, with matching processed swap deltas.
 DirectX counts successfully handled Flips; the new DX5 run also records zero
 declined Flips, so declined-Flip fallback is excluded for that run. Neither
-counter measures physical monitor refresh. Windows Glide counts swap calls
-before the operation without checking successful completion, so its caption
-is a provisional backend rate. Quake II reports its own rotation benchmark.
+counter measures physical monitor refresh. The earlier Windows Glide rate
+counted swap calls before the operation. The new rate counts handled
+DirectDraw flips. Quake II reports its own rotation benchmark.
 
 The retained Windows Glide and OpenGL clips used a shared MJPEG input with
 a 1/25-second time base before conversion to 60 fps. That input could drop

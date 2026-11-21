@@ -60,7 +60,7 @@ a 64 MB GPU workspace. Each figure applies to the scene measured.
 | **NFS III / Windows 98, Direct3D 5** | 640x480 | **28.73 FPS** over 20.117 s of driving at full CPU speed |
 | **NFS III / Windows 2000, Direct3D 5** | 640x480 | **27.73 FPS** over 30.009 s of driving at full CPU speed |
 | **NFS III / Windows XP, Direct3D 5** | 640x480 | **27.94 FPS** over 30.03 s of driving |
-| **NFS III / Windows 98, Glide** | 640x480 | **16.47 swap calls/s** over 15.001 s of driving |
+| **NFS III / Windows 98, Glide** | 640x480 | **16.09 FPS** over 20.143 s of driving at full CPU speed |
 | **Quake II / Windows 98, 2000 and XP, OpenGL** | 640x480 | **35.09 / 27.59 / 29.53 FPS**, separate opening-scene rotation |
 
 <details open>
@@ -117,12 +117,12 @@ https://github.com/user-attachments/assets/ea7a27ac-7ca3-43f3-be07-8434b524b7a9
 </details>
 
 <details>
-<summary><strong>Need for Speed III</strong> · 22 seconds · Windows Glide</summary>
+<summary><strong>Need for Speed III</strong> · 20 seconds · Full Speed · Windows Glide 3</summary>
 
-Velocity9x Glide3, Hometown / Corvette. The caption reports swap calls;
-it does not independently measure display completion.
+Velocity9x Glide 3, Hometown / Corvette, with digital game audio.
+The benchmark counts handled DirectDraw flips from the Glide renderer.
 
-https://github.com/user-attachments/assets/d2db54b6-d459-40ef-a5dd-0abe269c8034
+https://github.com/user-attachments/assets/33a2a4d4-f63b-442e-ba44-adeba062eead
 
 </details>
 
