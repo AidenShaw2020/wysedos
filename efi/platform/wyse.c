@@ -52,7 +52,7 @@ void analog_start(void);
 void analog_feed(void);
 bool mp_start(int core, void (*fn)(void));
 volatile int g_wyse_vga_core;
-uint32_t g_vga_flips;       // page flips at the retrace (vga.c), per report
+uint32_t g_vga_flips;       // cumulative page flips at the retrace (vga.c)
 extern uint64_t g_vmx_exits[64], g_vmx_bursts, g_vmx_burst_insns, g_vmx_irqs, g_vmx_guest_tsc;
 extern uint32_t g_netfs_retries, g_netfs_requests;
 
@@ -1622,13 +1622,15 @@ static void report(PC *pc, uint64_t elapsed_us) {
         last_smi = smi;
         g_vmx_emul_tsc = g_vmx_state_tsc = g_vmx_io_tsc = 0;
     }
+    static uint32_t previous_vga_flips;
+    const uint32_t vga_flips = g_vga_flips - previous_vga_flips;
+    previous_vga_flips = g_vga_flips;
     printf("10s: loops %llu, pc_step %llu ms, redraw %llu ms in %llu calls (%llu kpx), hid %llu ms, ctl %llu ms, "
            "page flips %u (%u.%u fps)\n",
            (unsigned long long)n_loops, (unsigned long long)(t_step / tsc_khz), (unsigned long long)(t_redraw / tsc_khz),
            (unsigned long long)n_redraw, (unsigned long long)(px_redraw / 1000), (unsigned long long)(t_hid / tsc_khz),
-           (unsigned long long)(t_ctl / tsc_khz), g_vga_flips, g_vga_flips / 10, g_vga_flips % 10);
+           (unsigned long long)(t_ctl / tsc_khz), vga_flips, vga_flips / 10, vga_flips % 10);
     n_loops = t_step = t_redraw = n_redraw = px_redraw = t_hid = t_ctl = 0;
-    g_vga_flips = 0;
     {
         extern uint32_t g_audio_peak, g_audio_frames, g_lpe_underruns, g_lpe_periods;
         printf("audio: %u frames, peak %u, %u periods, %u underruns\n", g_audio_frames, g_audio_peak,

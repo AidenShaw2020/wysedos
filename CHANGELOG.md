@@ -3,6 +3,12 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.25 - 2026-11-21
+
+- Start Mode X in emulated VGA to prevent sprite corruption in Jazz
+  Jackrabbit. Switch automatically to the physical VGA aperture after
+  four page flips in compatible modes.
+
 ## v1.1.24 - 2026-11-21
 
 - Let Jazz Jackrabbit CD 1.2 start at Full Speed by handling the startup

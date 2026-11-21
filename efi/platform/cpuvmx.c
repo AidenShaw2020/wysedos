@@ -485,7 +485,13 @@ static int win_mode = WIN_EMU;
 static bool ram_13h;        // vga_ram holds a mode 13h picture (not a VBE one)
 static bool ram_planar;
 static int safe_planar = 1;
-static bool mode_x_needs_latch_emulation;
+/* Observe the first page flips before exposing the physical Mode X
+ * aperture. A game can upload graphics before its first latch copy. */
+#define MODE_X_OBSERVATION_FLIPS 4u
+static bool mode_x_observing;
+static bool mode_x_keep_emulated;
+static uint32_t mode_x_first_flip;
+extern uint32_t g_vga_flips;
 static void dos_vga_copy_mode(bool native_mode_x);
 static void dos_vga_copy_arm(bool enable);
 void hwvga_fetch(VGAState *s);
@@ -497,20 +503,33 @@ static void hw_update(bool resync) {
     /* Keep the existing 16-colour planar and text safeguards. */
     const bool planar_graphics = !(v->sr[4] & 8) && (v->gr[6] & 1);
     const bool mode_x = planar_graphics && (v->gr[5] & 0x60) == 0x40;
-    /* Some VGA programs combine write mode 1, read mode 1 and Host Odd/Even
-     * Read in unchained Mode X. The native aperture corrupts sprite copies
-     * in this combination. Keep the planar model for the rest of that mode
-     * so its contents and latches do not alternate on every copy. */
-    if (!mode_x) mode_x_needs_latch_emulation = false;
-    else if (!(v->gr[6] & 2) && (v->gr[5] & 0x1b) == 0x19)
-        mode_x_needs_latch_emulation = true;
+    if (!mode_x) {
+        mode_x_keep_emulated = false;
+        mode_x_observing = false;
+    } else {
+        if (!mode_x_observing) {
+            mode_x_observing = true;
+            mode_x_first_flip = g_vga_flips;
+        }
+        const int last_line = v->cr[0x12] | ((v->cr[7] & 2) << 7) |
+                                             ((v->cr[7] & 0x40) << 3);
+        /* The native snapshot cannot treat a shared lower panel as part
+         * of either front page. The Atom aperture also differs for the
+         * write-mode-1, read-mode-1, Host Odd/Even Read combination. */
+        const bool split_screen = vga_get_line_compare(v) < last_line;
+        const bool latch_copy = (v->gr[5] & 0x1b) == 0x19;
+        if (!(v->gr[6] & 2) && (latch_copy || split_screen))
+            mode_x_keep_emulated = true;
+    }
+    const bool mode_x_has_flipped =
+        g_vga_flips - mode_x_first_flip >= MODE_X_OBSERVATION_FLIPS;
     const bool planar_needs_emulation = planar_graphics &&
-        (!mode_x || mode_x_needs_latch_emulation);
+        (!mode_x || mode_x_keep_emulated || !mode_x_has_flipped);
     int want = vga_vbe_on(v) || (safe_planar && planar_needs_emulation) ? WIN_EMU
              : (v->sr[4] & 0x08) ? (vga_chain4_simple(v) ? WIN_RAM : WIN_EMU)
              : g_hwvga_on ? WIN_HW : WIN_EMU;
     const bool trap_text = want == WIN_HW && safe_planar && !(v->gr[6] & 1);
-    if (g_hwvga_on && win_mode != WIN_HW && want == WIN_EMU && ram_13h &&
+    if (!mode_x && g_hwvga_on && win_mode != WIN_HW && want == WIN_EMU && ram_13h &&
         !vga_vbe_on(v) && !(v->sr[4] & 8) && (v->gr[6] & 3) == 1) {
         pc_vga_hold(1);
         hwvga_store_chain4(v->vga_ram);
