@@ -76,6 +76,7 @@ def main():
     parser.add_argument('drivers', type=Path)
     parser.add_argument('nt_media', type=Path)
     parser.add_argument('output', type=Path)
+    parser.add_argument('--cpu-speed', type=Path)
     args = parser.parse_args()
     if not (args.drivers / 'SHA256.TXT').is_file():
         parser.error('Run prepare_drivers.py first')
@@ -86,6 +87,8 @@ def main():
                for path in sorted(args.drivers.rglob('*'))
                if path.is_file() and path != args.drivers / 'SHA256.TXT']
     payload.extend(nt_payload(args.nt_media))
+    if args.cpu_speed:
+        payload.append((('DOS', 'CPUSPEED.COM'), args.cpu_speed.read_bytes()))
     checksums = ''.join(f"{hashlib.sha256(data).hexdigest()}  {'/'.join(parts)}\r\n"
                         for parts, data in payload)
     payload.append((('SHA256.TXT',), checksums.encode('ascii')))

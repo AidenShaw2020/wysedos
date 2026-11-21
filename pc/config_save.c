@@ -45,8 +45,6 @@ static int cfg_voodoo2       = 1;
 static int cfg_voodoo2_mem   = 12;
 static int cfg_wgpu_mb       = 64;
 static int cfg_wgpu_enabled  = 1;
-static int cfg_voodoo2_turbo = 1;
-static int cfg_graphics_turbo = 1;
 
 /* The mixer: a level for each sound source and for the headphone output,
  * 0..16 with 16 as unity (for the headphones, the codec's full +12 dB). */
@@ -62,8 +60,6 @@ int g_mouse_invert_y = 0;
 int g_picture = PICTURE_4_3;
 int g_cpu_speed_mhz, g_cpu_speed_gen;   /* read by the host: 0 MHz = no limit */
 int g_mouse_speed = 100;
-int g_voodoo2_turbo = 1;
-int g_graphics_turbo = 1;
 
 void config_bind_pc(PC *pc) { bound_pc = pc; }
 
@@ -76,8 +72,6 @@ static void apply_live(void)
     g_cpu_speed_mhz = config_get_speed_mhz();
     g_cpu_speed_gen = cfg_cpu_gen;
     g_mouse_speed = cfg_mouse_speed;
-    g_voodoo2_turbo = cfg_voodoo2_turbo;
-    g_graphics_turbo = cfg_graphics_turbo;
     if (!bound_pc) return;
     bound_pc->pcspk_enabled    = cfg_pcspeaker;
     bound_pc->adlib_enabled    = cfg_adlib;
@@ -135,8 +129,6 @@ void config_set_display_output(int output)
     cfg_display_output = output;
     changed = true;
 }
-LIVE_SETTING(voodoo2_turbo, cfg_voodoo2_turbo)
-LIVE_SETTING(graphics_turbo, cfg_graphics_turbo)
 
 /* The board is part of the machine: fitting it or changing its memory means
  * building the machine again. */
@@ -292,18 +284,7 @@ const int *config_speed_options(int *count)
     }
 }
 
-static int default_speed(void)
-{
-    switch (cfg_cpu_gen) {
-    case PC_CPU_386:         return 40;
-    case PC_CPU_486:         return 66;
-    case PC_CPU_PENTIUM_II:  return 400;
-    case PC_CPU_PENTIUM_III: return 800;
-    default:                return 133;
-    }
-}
-
-int config_get_speed_mhz(void) { return cfg_speed < 0 ? default_speed() : cfg_speed; }
+int config_get_speed_mhz(void) { return cfg_speed < 0 ? 0 : cfg_speed; }
 void config_set_speed_mhz(int mhz)
 {
     if (cfg_speed == mhz) return;
@@ -361,8 +342,6 @@ void config_set_from_ini(const char *name, const char *value)
     else if (!strcmp(name, "picture"))      cfg_picture = v < 0 || v > 2 ? PICTURE_4_3 : v;
     else if (!strcmp(name, "display_output"))
         cfg_display_output = v >= DISPLAY_AUTO && v <= DISPLAY_MIRROR ? v : DISPLAY_AUTO;
-    else if (!strcmp(name, "voodoo2_turbo")) cfg_voodoo2_turbo = v != 0;
-    else if (!strcmp(name, "graphics_turbo")) cfg_graphics_turbo = v != 0;
     else
         for (int i = 0; i < MIX_COUNT; i++)
             if (!strcmp(name, mix_keys[i])) cfg_mix[i] = v < 0 ? 0 : v > 16 ? 16 : v;
@@ -477,8 +456,6 @@ static bool write_config(void)
     ok &= putf(&fp, "power_button", cfg_power_button);
     ok &= putf(&fp, "picture", cfg_picture);
     ok &= putf(&fp, "display_output", cfg_display_output);
-    ok &= putf(&fp, "voodoo2_turbo", cfg_voodoo2_turbo);
-    ok &= putf(&fp, "graphics_turbo", cfg_graphics_turbo);
     if (cfg_speed >= 0) ok &= putf(&fp, "speed", cfg_speed);
 
     return f_close(&fp) == FR_OK && ok;

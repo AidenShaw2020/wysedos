@@ -71,9 +71,7 @@ backend CPUID behavior. [Intel Pentium II clock range](https://www.intel.com/pre
 | `[pc] usb_storage=1` | Automatic guest USB disk exposure |
 | `[pc] timezone=cet` | Central European RTC conversion including summer time; `utc` disables conversion |
 | `[pc] firmware_timer_us=5000` | Requested firmware timer period; `0` preserves firmware timing |
-| `[wyseDOS] speed` | Approximate execution-rate profile |
-| `[wyseDOS] graphics_turbo=1` | Full CPU speed during accepted Windows 3D work from the matching Velocity driver |
-| `[wyseDOS] voodoo2_turbo=1` | Independent full CPU speed while DOS Voodoo2 owns the display |
+| `[wyseDOS] speed` | Approximate execution-rate profile, default `0` (Full Speed) |
 | `[wyseDOS] volume`, `vol_*` | Master and per-source levels, 0–16 |
 | `[wyseDOS] pcspeaker`, `adlib`, `soundblaster`, `mpu401` | Audio enable flags |
 | `[wyseDOS] tandy`, `covox`, `dss` | Optional audio sources |
@@ -85,28 +83,28 @@ backend CPUID behavior. [Intel Pentium II clock range](https://www.intel.com/pre
 automatic safe per-mode fallback. Not every debug key survives menu saving.
 `devctl` enables development control; the installer removes it from defaults.
 
-## Automatic CPU boost
+## CPU speed
 
-The GPU menu offers **CPU Boost DOS: Glide** under Voodoo2 and **CPU Boost
-Windows: DirectX/Glide/OpenGL** under the Windows accelerator. These are independent
-CPU boost switches; the selected row explains their effect. The CPU menu's base **Speed**
-setting stays unchanged. Neither requires a booster executable, AUTOEXEC
-command, Windows startup program or fixed C: path.
+Full Speed is the default in DOS and Windows. The CPU menu can save a
+lower speed for a machine. To slow an individual DOS game, copy
+`DOS/CPUSPEED.COM` from the driver CD to the game's directory or to a
+directory on the DOS path, then use it in the game's batch file.
 
-The matching Velocity driver marks actual Direct3D, Glide and OpenGL render
-submissions. The firmware boosts only after accepting that work. Windows
-startup, VBE activation, capability queries and ordinary GDI fills do not
-activate it. Three seconds without further marked work restore base speed;
-a paused game that keeps drawing remains boosted. Text-mode transitions and
-guest reset revoke activity. An older driver without marking leaves Windows
-at base speed. Existing DOS Voodoo2 boost remains independent.
+```bat
+@ECHO OFF
+CPUSPEED 33
+IF ERRORLEVEL 1 GOTO END
+GAME.EXE
+CPUSPEED /R
+:END
+```
 
-The NT5 WGPU driver uses the same Windows boost for accelerated Direct3D.
-DirectDraw copies, fills and the bridge's fixed test patterns leave the
-processor at its configured base speed when no application 3D is active.
-The NT5 OpenGL development build routes hardware draws through that same
-Direct3D HAL and inherits its boost behavior.
-[NT5 OpenGL build](../drivers/nt/README.md#opengl-development-build)
+The number is the approximate execution rate in MHz of the selected CPU
+profile. `CPUSPEED 0` selects full speed and `CPUSPEED /R` restores the saved
+setting. The command acts immediately without writing to the saved settings.
+Restarting the guest restores the saved speed too.
+
+## GPU memory
 
 Voodoo2 memory offers **8 or 12 MB**. **Windows 3D memory** independently
 selects the WGPU workspace: **32, 64 or 128 MB**. The separate **Windows 3D
@@ -121,11 +119,7 @@ The persisted keys are `[pc] wgpu` (workspace MB) and `wgpu_enabled` (on/off).
 Older configurations with `wgpu=0` still disable the channel.
 
 Fresh firmware and the installer both enable Voodoo2 (12 MB), the Windows
-accelerator (64 MB), and both CPU Boost switches by default. Missing keys use
-these defaults; an explicit saved OFF value is preserved during an upgrade.
-
-VBE activation alone does not establish that an application is rendering
-3D. A fixed boot delay and a separate Windows helper are not used.
+accelerator (64 MB) by default. An upgrade preserves saved settings.
 
 ## Guest devices
 

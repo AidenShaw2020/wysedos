@@ -112,15 +112,11 @@ static const Row rows[] = {
     /* Null options: see row_options(). */
     { ROW_CHOICE,  "Voodoo2 memory",       config_get_voodoo2_mem, config_set_voodoo2_mem,
                                            0, 0, EFFECT_RESTART },
-    { ROW_TOGGLE,  "CPU Boost DOS: Glide", config_get_voodoo2_turbo, config_set_voodoo2_turbo,
-                                           0, 0, EFFECT_NOW },
     { ROW_HEADING, "Windows 3D",            0, 0, 0, 0, EFFECT_NOW },
     { ROW_TOGGLE,  "Windows 3D accelerator", config_get_wgpu, config_set_wgpu,
                                            0, 0, EFFECT_RESTART },
     { ROW_CHOICE,  "Windows 3D memory", config_get_wgpu_mem, config_set_wgpu_mem,
                                            0, 0, EFFECT_RESTART },
-    { ROW_TOGGLE,  "CPU Boost Windows: DirectX/Glide/OpenGL", config_get_graphics_turbo, config_set_graphics_turbo,
-                                           0, 0, EFFECT_NOW },
 
     { ROW_TAB,     "SOUND",                0, 0, 0, 0, EFFECT_NOW },
     { ROW_VOLUME,  "Volume",               config_get_volume, config_set_volume, 0, 0, EFFECT_NOW },
@@ -397,9 +393,6 @@ static void draw(void)
     if (rows[cursor].effect == EFFECT_RESTART)
         osd_print(x, footer - 2, "\x07 takes effect when the machine restarts",
                   OSD_ATTR(OSD_BROWN, OSD_BLUE));
-    else if (rows[cursor].set == config_set_voodoo2_turbo ||
-             rows[cursor].set == config_set_graphics_turbo)
-        osd_print(x, footer - 2, "Full CPU speed during 3D rendering", OSD_ATTR_HINT);
 
     if (config_has_changes())
         osd_print(x, footer - 1, "changed, not yet saved", OSD_ATTR_HINT);

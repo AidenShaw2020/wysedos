@@ -30,7 +30,7 @@ typedef struct WgpuNtDevice {
     volatile ULONG *aperture;
     ULONG aperture_map_bytes;
     ULONG aperture_bytes;
-    ULONG surface_lfb_bytes, surface_lfb_gfx, surface_gfx, surface_3d_flags;
+    ULONG surface_lfb_bytes, surface_lfb_gfx, surface_gfx;
 #ifdef WGPU_NT_PIPELINE
     ULONG pending_fence;
 #ifdef WGPU_NT_QUEUED_GROUPS
@@ -400,10 +400,10 @@ static NTSTATUS wgpu_queue_material(WgpuNtDevice *device, const WgpuNtMaterialGr
         *fence = wgpu_next_fence(submitted);
     }
 #ifdef WGPU_NT_QUEUED_GROUPS
-    wgpu_nt_queue_material_descriptor(device->aperture, &prepared, *fence, device->surface_3d_flags);
+    wgpu_nt_queue_material_descriptor(device->aperture, &prepared, *fence, 0);
 #else
     wgpu_nt_publish_material_group(device->aperture, &prepared, submitted, *fence,
-                                   device->surface_3d_flags);
+                                   0);
 #endif
     status = wgpu_ring_doorbell(device);
     if (NT_SUCCESS(status)) {
@@ -530,7 +530,6 @@ static NTSTATUS wgpu_surface_op(WgpuNtDevice *device, ULONG code, const void *re
         device->surface_lfb_bytes = wgpu_read(device, 0x18);
         device->surface_lfb_gfx = wgpu_read(device, 0x1c);
         device->surface_gfx = wgpu_read(device, 0x14);
-        device->surface_3d_flags = wgpu_read(device, 0x3c) & WGPU_NT_FLAG_USER_3D;
         device->surface_ready = TRUE;
     }
     lfb_bytes = device->surface_lfb_bytes;
@@ -564,9 +563,7 @@ static NTSTATUS wgpu_surface_op(WgpuNtDevice *device, ULONG code, const void *re
     status=wgpu_idle_fence(device,&submitted,&fence);
     if (!NT_SUCCESS(status)) return status;
     gfx = device->surface_gfx;
-    /* 2D uses the render engine too, but must not renew the CPU boost. */
-    flags = code == WGPU_NT_IOCTL_FILL || code == WGPU_NT_IOCTL_COPY ?
-        0 : device->surface_3d_flags;
+    flags = 0;
     WGPU_ELAPSED(prepare_ticks, prepare_start);
     WGPU_TIMER(build_start);
 #ifdef WGPU_NT_ENABLE_GROUPS

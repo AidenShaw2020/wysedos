@@ -39,6 +39,7 @@
 #define FDC_DMA_CHAN      2       /* ISA 8-bit DMA channel              */
 #define FDC_IRQ           6       /* IRQ line                           */
 #define FDC_MAX_DRIVES    2       /* A: (0) and B: (1) only             */
+#define FDC_LOGICAL_DRIVES 4      /* Independent controller units 0-3  */
 #define FIFO_DEPTH        16      /* bytes in command / result FIFO     */
 #define FDC_SECTOR_SIZE   512     /* always 512 for FDD images          */
 #define FDC_IRQ_DELAY_MS  1       /* ticks before IRQ fires             */
@@ -158,7 +159,7 @@ struct FDCState {
     int      result_len;     /* bytes in result phase                  */
 
     /* Per-drive state */
-    FDCDrive drive[FDC_MAX_DRIVES];
+    FDCDrive drive[FDC_LOGICAL_DRIVES];
 
     /* Interrupt bookkeeping */
     int      irq_pending;    /* IRQ scheduled but not yet raised        */
@@ -213,13 +214,7 @@ static int  fdc_dma_handler(void *opaque, int nchan, int dma_pos, int dma_len);
 
 static inline int fdc_selected_drive(FDCState *s)
 {
-    return (s->dor & DOR_DSEL) % FDC_MAX_DRIVES;   /* 0 or 1 */
-}
-
-/* Map logical drive (0/1) to disk[] array index (always same here) */
-static inline int fdc_drivenum(int drive)
-{
-    return drive & 1;
+    return s->dor & DOR_DSEL;
 }
 
 static inline int fdc_drive_ready(int drivenum)
@@ -346,7 +341,7 @@ static void fdc_reset(FDCState *s, int software_reset)
         i8257_dma_release_DREQ((IsaDma *)s->dma, FDC_DMA_CHAN);
     }
 
-    for (int i = 0; i < FDC_MAX_DRIVES; i++) {
+    for (int i = 0; i < FDC_LOGICAL_DRIVES; i++) {
         s->drive[i].seeking = 0;
         s->drive[i].track   = 0;
         s->drive[i].next_id_sector = 1;
@@ -557,9 +552,8 @@ static void fdc_execute_command(FDCState *s)
 {
     uint8_t *f    = s->fifo;          /* shorthand                      */
     uint8_t  cmd  = f[0] & 0x1F;     /* opcode without option bits      */
-    int      drive = f[1] & 0x03;    /* drive select in most commands   */
-    int      head  = (f[1] >> 2) & 1;
-    int      dn    = fdc_drivenum(drive);
+    int      dn   = f[1] & 0x03;     /* drive select in most commands */
+    int      head = (f[1] >> 2) & 1;
 
     switch (cmd) {
 
@@ -576,28 +570,29 @@ static void fdc_execute_command(FDCState *s)
     case 0x04: {
         uint8_t st3 = (uint8_t)(dn & ST3_DS)
                     | (head ? ST3_HD : 0)
-                    | ST3_TS            /* always two-sided              */
+                    | ST3_TS
                     | (fdc_drive_ready(dn) ? ST3_RY : 0)
-                    | (s->drive[dn].track == 0 ? ST3_T0 : 0);
+                    | (dn < FDC_MAX_DRIVES && s->drive[dn].track == 0 ? ST3_T0 : 0);
         uint8_t res[1] = { st3 };
         fdc_set_result(s, res, 1);
         break;
     }
 
     /* ---- RECALIBRATE (07h) --------------------------------------- */
-    case 0x07:
+    case 0x07: {
+        uint8_t st0 = (uint8_t)(ST0_SE | dn);
+        if (dn >= FDC_MAX_DRIVES)
+            st0 |= ST0_IC_ABNORM | ST0_EC;
         /* The step pulses are what clear DSKCHG, and only over a disk;
          * SENSE DRIVE STATUS used to clear it and never should have. */
         if (s->drive[dn].track != 0 && fdc_drive_ready(dn))
             s->drive[dn].media_changed = 0;
         s->drive[dn].track   = 0;
         s->drive[dn].seeking = 0;
-        {
-            uint8_t st0 = ST0_SE | (uint8_t)(dn & ST0_DS);
-            fdc_schedule_irq(s, st0, 0);
-        }
+        fdc_schedule_irq(s, st0, 0);
         s->phase = PHASE_CMD;
         break;
+    }
 
     /* ---- SENSE INTERRUPT STATUS (08h) ---------------------------- */
     case 0x08:
@@ -609,7 +604,7 @@ static void fdc_execute_command(FDCState *s)
             s->reset_sensei--;
             uint8_t res[2] = {
                 (uint8_t)(ST0_IC_RDYCHG | (idx & 0x03)),
-                s->drive[idx & 0x01].track
+                s->drive[idx].track
             };
             fdc_set_result(s, res, 2);
             /* Keep IRQ asserted until queue drained.
@@ -636,6 +631,8 @@ static void fdc_execute_command(FDCState *s)
 
     /* ---- SEEK (0Fh) ---------------------------------------------- */
     case 0x0F: {
+        /* SEEK counts steps internally even without a mechanism. Only
+         * RECALIBRATE needs a physical track-zero signal. */
         uint8_t ncyl = f[2];
         if (ncyl != s->drive[dn].track && fdc_drive_ready(dn))
             s->drive[dn].media_changed = 0;
@@ -819,8 +816,8 @@ static void fdc_execute_command(FDCState *s)
         uint8_t res[10];
         res[0] = s->drive[0].track;
         res[1] = s->drive[1].track;
-        res[2] = 0;   /* drive 2 (N/A) */
-        res[3] = 0;   /* drive 3 (N/A) */
+        res[2] = s->drive[2].track;
+        res[3] = s->drive[3].track;
         /* 82077AA order: PCN0-3, SRT/HUT, HLT/ND, SC/EOT,
          * LOCK|perpendicular, CONFIGURE's byte, PRETRK.  LOCK and
          * PRETRK used to be swapped.                                 */

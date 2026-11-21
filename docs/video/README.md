@@ -3,7 +3,7 @@
 The original DOS and Windows 98 clips were recorded on 2026-11-12 with
 128 MB guest RAM, 8 MB VGA memory, 12 MB
 Voodoo2 and a 64 MB WGPU workspace. The base CPU setting is 133 MHz;
-selected CPU Boost activates automatically for DOS Glide and Windows 3D.
+automatic CPU acceleration was enabled for DOS Glide and Windows 3D in the earlier recordings.
 No separate Windows booster program is installed.
 
 These are scene samples, not whole-game averages or controlled comparisons
@@ -11,7 +11,12 @@ between renderers. The videos are 1280x720 at 60 fps with a captured digital
 audio track; container frame rate is not game FPS. Tomb Raider's installed
 configuration has game sound disabled. Game data is not distributed.
 
-## Replacement measurements
+## Full Speed measurements
+
+Doom `demo3`, 320×200 high detail with sound off, finished 1091 game ticks
+in 456 real ticks at 35 Hz on the Wyse 3040, yielding **83.74 FPS**.
+
+## Earlier measurements
 
 | Recording | Game mode | Measurement |
 | --- | --- | --- |

@@ -16,10 +16,7 @@ voodoo2_mem=12
 
 Optional keys: `voodoo2_async=0` renders on the main core instead of core 3
 (core 3 otherwise renders, core 2 helps with every other line, and the
-headphones and General MIDI move to core 1); `voodoo2_turbo=0` keeps the set
-processor speed while the board shows its picture (by default the guest runs
-unrestricted while fbiInit0 VGA pass-through is on, and the set speed returns
-when the game releases the monitor).
+headphones and General MIDI move to core 1).
 
 The guest then sees PCI `121a:0002`, revision 2, class 0400, with one 16 MB
 memory BAR. Use a Voodoo2 Glide driver kit in the guest (DOS `GLIDE2X.OVL`,
@@ -27,10 +24,8 @@ Windows 9x Glide2/Glide3 DLLs). Proprietary 3dfx drivers are not bundled.
 For Windows, the bundled [Velocity9x package](../drivers/windows9x/velocity9x/README.md)
 uses its own WGPU path and does not require a Voodoo2 Windows driver.
 
-GPU settings keep hardware on/off separate from `CPU Boost DOS: Glide`.
-The DOS boost follows Voodoo2 display ownership. Windows has a separate
-`CPU Boost Windows: DirectX/Glide/OpenGL` switch, activated by actual 3D
-submissions in the Windows driver. Neither switch installs a Windows helper.
+GPU settings control the virtual Voodoo2 board and Windows 3D accelerator.
+Both use the CPU speed selected in the CPU menu.
 
 ## What is modelled
 

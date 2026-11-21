@@ -18,9 +18,7 @@ through the same render channel. A game's local DLL takes precedence over
 SYSTEM: back up that DLL and copy this build alongside the game if needed.
 Do not replace unrelated real 3dfx drivers on another machine.
 
-Windows Glide is separate from DOS Voodoo2 emulation. This folder does not
-install a Windows CPU booster or depend on a booster executable on C:.
-CPU boost settings belong to the firmware settings menu.
+Windows Glide and DOS Voodoo2 are separate rendering paths.
 
 Licensing and source
 --------------------

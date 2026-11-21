@@ -156,7 +156,7 @@ int main(void)
 
     /* registers */
     assert(rd(s, WGPU_REG_MAGIC) == WGPU_MAGIC && rd(s, WGPU_REG_VERSION) == WGPU_VERSION);
-    assert(rd(s, WGPU_REG_FEATURES) == WGPU_FEATURE_USER_3D);
+    assert(rd(s, WGPU_REG_FEATURES) == 0);
     assert(rd(s, WGPU_REG_USER_3D_SUBMITS) == 0);
     assert(wgpu_read(s, BAR0 + 1, 1, &v) && v == 0x47);   /* 'G' */
     assert(rd(s, WGPU_REG_STATUS) == WGPU_STATUS_READY && fake.opens == 1);

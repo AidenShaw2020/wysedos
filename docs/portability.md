@@ -44,7 +44,7 @@ wyseDOS to another machine.
    backend and pass validated draw operations from the guest driver.
 4. Run the same guest images and scenes on the new host and on the Wyse.
    Match guest CPU, RAM, resolution and sound settings. Check frame integrity,
-   sound, CPU Boost and return to DOS or the desktop. Confirm real GPU work
+   sound and return to DOS or the desktop. Confirm real GPU work
    from driver and firmware counters. Use game FPS or buffer swaps as
    appropriate and record video capture rates separately.
    [Reference measurements and test settings](video/README.md)

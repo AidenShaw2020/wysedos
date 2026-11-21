@@ -3,6 +3,14 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.23 - 2026-11-21
+
+- Keep all four logical floppy controller units independent. Windows 98 can
+  start at full CPU speed with its original tape detection driver.
+- Make Full Speed the default across DOS and Windows. Retire the automatic
+  DOS Glide and Windows 3D clock exceptions.
+- Include DOS/CPUSPEED.COM on the shared driver medium for per-game limits.
+
 ## v1.1.21 - 2026-11-20
 
 - Preserve VGA latches on reads in 16-colour planar modes so Prehistorik 2

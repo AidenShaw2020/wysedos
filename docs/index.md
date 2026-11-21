@@ -9,7 +9,7 @@ hardware. Detailed engineering reports retain their original test conditions.
 | Guide | Contents |
 |---|---|
 | [Installation](installation.md) | Release files, New installation, data-preserving upgrade, DOS and Windows setup |
-| [Configuration](configuration.md) | Controls, persistent settings, CPU Boost, GPU memory, RAM and sound |
+| [Configuration](configuration.md) | Controls, persistent settings, CPU speed, GPU memory, RAM and sound |
 | [Windows 98 graphics](../drivers/windows9x/velocity9x/INSTALL.TXT) | Velocity9x installation, Direct3D, Glide and OpenGL |
 | [Windows 2000 and XP](nt5-support.md) | Installation, graphics preview, hardware checks and limits |
 | [DOS Glide](voodoo2.md) | Voodoo2 emulation, memory and renderer |

@@ -67,7 +67,7 @@ build and its separate validation are documented in the
 The NT5 OpenGL ICD uses Velocity's OpenGL front end with a DirectDraw 7
 surface adapter and the NT Direct3D 7 HAL. The firmware receives the same
 validated application 3D submissions as it does for Direct3D. OpenGL
-inherits the existing automatic CPU boost on those submissions.
+uses the configured guest CPU speed.
 
 Run `tools/installer/build_nt5_opengl.ps1 -Watcom <Open-Watcom-path>` from
 the project root to build `WGGLNT.DLL`. The build verifies the pinned

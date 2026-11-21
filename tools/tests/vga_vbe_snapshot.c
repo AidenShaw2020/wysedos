@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <string.h>
 #include <stddef.h>
-#include "../../pc/cpu_speed_policy.h"
 static unsigned char *live_row;
 static int mutate_after_copy;
 static void *capture_copy(void *dst, const void *src, size_t bytes);
@@ -77,11 +76,9 @@ int main(void)
         memcpy(vram,original,sizeof vram);
         vga_refresh(&s,redraw,NULL,0);
         CHECK(!memcmp(surface,expected,sizeof surface));
-        CHECK(cpu_speed_effective(133, 1, vbe_enabled(&s), 0, 0) == 0);
         vga_reset_display(&s);
         CHECK(!vbe_enabled(&s));
         CHECK(s.vbe_index == VBE_DISPI_INDEX_ID);
-        CHECK(cpu_speed_effective(133, 1, vbe_enabled(&s), 0, 0) == 133);
         free(s.vbe_shadow);
     }
     puts("PASS: VBE 8/15/16/32-bit scanout uses the captured row during guest writes");

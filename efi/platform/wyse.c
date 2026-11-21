@@ -14,7 +14,6 @@
 #include "edid.h"
 #include "ini.h"
 #include "config_save.h"
-#include "cpu_speed_policy.h"
 #include "cpu_profile.h"
 #include "vga.h"
 #include "ff.h"
@@ -352,7 +351,6 @@ static int cfg_handler(void *user, const char *section, const char *name, const 
     else if (!strcmp(name, "voodoo2_mem")) voodoo2_mem = atoi(value) == 8 ? 8 : 12;
     else if (!strcmp(name, "wgpu")) wgpu_mb = atoi(value);
     else if (!strcmp(name, "wgpu_enabled")) wgpu_enabled = atoi(value) != 0;
-    else if (!strcmp(name, "voodoo2_turbo")) config_set_from_ini(name, value);   // older files had it here
     else if (!strcmp(name, "firmware_timer_us")) {
         char *end;
         unsigned long us=strtoul(value,&end,10);
@@ -1165,9 +1163,6 @@ static void poll_control(PC *pc) {
     } else if (!strncmp(cmd, "v2busy ", 7)) {
         voodoo2_set_queue_busy(pc->voodoo2, atoi(cmd + 7) != 0);
         printf("voodoo2: queued work %s busy\n", atoi(cmd + 7) ? "shows as" : "does not show as");
-    } else if (!strncmp(cmd, "v2turbo ", 8)) {
-        g_voodoo2_turbo = atoi(cmd + 8) != 0;   // this session; the menu saves it
-        printf("voodoo2: processor turbo while the board shows %s\n", g_voodoo2_turbo ? "on" : "off");
     } else if (!strncmp(cmd, "v2async ", 8)) {
         bool on = atoi(cmd + 8) != 0 && voodoo_core_started;
         voodoo2_set_async(pc->voodoo2, on);
@@ -1906,8 +1901,6 @@ void wyse_main(void) {
     display_layout(g_picture);      // clears the screen for the PC's picture
     void wyse_cpu_set_speed(int mhz, int gen);
     int speed_applied = g_cpu_speed_mhz, gen_applied = g_cpu_speed_gen;
-    CpuWindows3DBoost graphics_boost = {0};
-    bool turbo_applied = false;
     wyse_cpu_set_speed(speed_applied, gen_applied);
     load_bios_and_reset(pc);
 
@@ -1981,47 +1974,21 @@ void wyse_main(void) {
             t_ctl += rdtsc_() - tc;
             last_ctl = now;
         }
+        if (g_cpu_speed_mhz != speed_applied || g_cpu_speed_gen != gen_applied) {
+            speed_applied = g_cpu_speed_mhz;
+            gen_applied = g_cpu_speed_gen;
+            wyse_cpu_set_speed(speed_applied, gen_applied);
+        }
         if (now - last_sync > 100000) {
             // the guest's writes, half a second after its last one; the cache
             // keeps nothing dirty for longer than two seconds
             ide_sync_idle(0);
             // the headphone level from the mixer menu: 16 is the codec's
             // full +12 dB, each step below 3 dB less, 0 mutes
-            // the processor's speed from the menu (or config.ini)
-            // ...unrestricted while the Voodoo2 drives the monitor: its games
-            // were made for far faster processors than the old DOS titles the
-            // speed setting exists for, and the guest's CPU limits them first
-            bool turbo = g_voodoo2_turbo && pc->voodoo2 && voodoo2_owns_display(pc->voodoo2);
-            /* Only accepted, explicitly tagged application 3D work permits
-             * Windows boost. VBE, GDI and driver probing cannot enable it. */
-            bool graphics_active = pc->vga &&
-                (pc->vga->vbe_regs[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_ENABLED) != 0;
-            /* An unused Windows render engine must not keep GT forcewake
-             * asserted during CPU-rendered DOS Glide. The experimental DOS
-             * GPU backend owns its own active engine and is excluded. */
-            if (!graphics_active && !voodoo2_uses_gpu(pc->voodoo2))
+            /* Release an idle Windows renderer in DOS without affecting CPU speed. */
+            if ((!pc->vga || !(pc->vga->vbe_regs[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_ENABLED)) &&
+                !voodoo2_uses_gpu(pc->voodoo2))
                 gpu3d_idle_release();
-            int boost_was_active = graphics_boost.active;
-            graphics_active = cpu_windows_3d_boost_step(&graphics_boost,
-                (uint32_t)now, pc->vga ? pc->vga->vbe_disable_epoch : 0,
-                pc->wgpu ? wgpu_reg_read(pc->wgpu, WGPU_REG_USER_3D_SUBMITS) : 0,
-                g_graphics_turbo, graphics_active);
-            if (graphics_boost.active != boost_was_active) {
-                printf("Windows 3D boost: %s (base %d MHz, tagged %u)\n",
-                    graphics_boost.active ? "active" : "off", g_cpu_speed_mhz,
-                    graphics_boost.last_count);
-            }
-            int speed_wanted = cpu_speed_effective(g_cpu_speed_mhz,
-                g_graphics_turbo, graphics_active, g_voodoo2_turbo, turbo);
-            if (speed_wanted != speed_applied || g_cpu_speed_gen != gen_applied) {
-                speed_applied = speed_wanted;
-                gen_applied = g_cpu_speed_gen;
-                wyse_cpu_set_speed(speed_applied, gen_applied);
-            }
-            if (turbo != turbo_applied) {
-                printf("Voodoo2: %s\n", turbo ? "3D picture on, processor unrestricted" : "3D picture off, processor follows graphics/base setting");
-                turbo_applied = turbo;
-            }
             static int hp_applied = -1;
             if (g_mix_level[MIX_HEADPHONES] != hp_applied) {
                 void analog_set_volume(int step);
@@ -2092,7 +2059,6 @@ void wyse_main(void) {
             g_cpu_speed_gen = config_get_cpu_gen();
             speed_applied = g_cpu_speed_mhz;
             gen_applied = g_cpu_speed_gen;
-            turbo_applied = false;
             wyse_cpu_set_speed(speed_applied, gen_applied);
             load_bios_and_reset(pc);
         }

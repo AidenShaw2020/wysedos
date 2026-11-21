@@ -114,11 +114,11 @@ static void settings_tests(void)
      * hardware discovery has supplied a value. Explicit OFF still wins. */
     assert(config_get_voodoo2() == 1 && config_get_voodoo2_mem() == 12);
     assert(config_get_wgpu() == 1 && config_get_wgpu_mem() == 64);
-    assert(config_get_graphics_turbo() == 1 && g_graphics_turbo == 1);
-    assert(config_get_voodoo2_turbo() == 1 && g_voodoo2_turbo == 1);
-    config_set_from_ini("graphics_turbo", "0");
+    assert(config_get_speed_mhz() == 0);
+    config_set_from_ini("graphics_turbo", "1");
+    config_set_from_ini("voodoo2_turbo", "1");
     config_apply_all();
-    assert(config_get_graphics_turbo() == 0 && g_graphics_turbo == 0);
+    assert(config_get_speed_mhz() == 0 && g_cpu_speed_mhz == 0);
     config_note_machine(64, 5);
     config_note_voodoo2(1, 12);
     config_note_wgpu(64, 1);
@@ -166,9 +166,9 @@ static void settings_tests(void)
     assert(config_get_speed_mhz() == 1400);
     key(KEY_UP); key(KEY_UP);
     key(KEY_LEFT); key(KEY_LEFT);
-    assert(config_get_cpu_gen() == 5 && config_get_speed_mhz() == 133);
+    assert(config_get_cpu_gen() == 5 && config_get_speed_mhz() == 0);
     key(KEY_RIGHT); key(KEY_RIGHT);
-    assert(config_get_cpu_gen() == 7 && config_get_speed_mhz() == 800);
+    assert(config_get_cpu_gen() == 7 && config_get_speed_mhz() == 0);
     config_set_speed_mhz(1400);
 
     key(KEY_TAB);
@@ -180,12 +180,6 @@ static void settings_tests(void)
     key(KEY_RIGHT);
     assert(config_get_voodoo2_mem() == 8 && config_needs_restart());
     assert(row_has(find_row("Voodoo2 memory"), "8 MB", NULL));
-    key(KEY_DOWN);
-    assert(selected_row("CPU Boost DOS: Glide") && g_voodoo2_turbo == 1);
-    key(KEY_SPACE);
-    assert(config_get_voodoo2_turbo() == 0 && g_voodoo2_turbo == 0);
-    key(KEY_SPACE);
-    assert(g_voodoo2_turbo == 1);
     key(KEY_DOWN);
     assert(selected_row("Windows 3D accelerator") && config_get_wgpu() == 1);
     key(KEY_SPACE);
@@ -203,13 +197,7 @@ static void settings_tests(void)
     assert(config_get_wgpu_mem() == 64 && config_get_voodoo2_mem() == 8);
     config_set_wgpu_mem(96);
     assert(config_get_wgpu_mem() == 64);
-    key(KEY_DOWN);
-    assert(selected_row("CPU Boost Windows: DirectX/Glide/OpenGL") && tab_current("GPU"));
-    assert(g_graphics_turbo == 0);
-    key(KEY_SPACE);
-    assert(config_get_graphics_turbo() == 1 && g_graphics_turbo == 1);
-    key(KEY_SPACE);
-    assert(g_graphics_turbo == 0 && g_voodoo2_turbo == 1);
+    assert(find_row("CPU Boost") < 0);
 
     key(KEY_TAB);
     assert(tab_current("SOUND") && selected_row("Volume"));
@@ -232,8 +220,8 @@ static void settings_tests(void)
     writes = 0;
     key(KEY_ENTER);                       /* saves; a restart is offered */
     assert(writes > 0);
-    assert(strstr(saved_config, "graphics_turbo=0") != NULL);
-    assert(strstr(saved_config, "voodoo2_turbo=1") != NULL);
+    assert(strstr(saved_config, "graphics_turbo") == NULL);
+    assert(strstr(saved_config, "voodoo2_turbo") == NULL);
     assert(strstr(saved_config, "wgpu=64\n") != NULL);
     assert(strstr(saved_config, "wgpu_enabled=1\n") != NULL);
     assert(strstr(saved_config, "cpu=7\n") != NULL);
@@ -241,7 +229,7 @@ static void settings_tests(void)
     key(KEY_N);
     key(KEY_ESC);
     assert(!settingsui_is_open());
-    puts("Settings menu pages, Voodoo2 memory (restart) and turbo (live), page wrap and scroll: PASS");
+    puts("Settings menu pages, Voodoo2 memory (restart), page wrap and scroll: PASS");
 }
 
 static void disk_tests(void)

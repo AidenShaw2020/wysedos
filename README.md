@@ -25,7 +25,7 @@ shared driver CD. Choose an OS family at install time. Windows 2000 SP4
 and XP SP3 boot directly from their own system partition. DOS and Windows
 9x can share the same DOS-based installation.
 
-The GPU menu provides automatic CPU Boost for DOS Glide and Windows 3D.
+DOS and Windows run at full CPU speed by default. Older DOS games can use a per-game speed limit.
 The Windows switch applies to accelerated work in Windows 98, 2000 and XP.
 
 The emulator core and peripheral set come from
@@ -45,14 +45,14 @@ separately from the capture rate. Doom and Quake use sound-off timedemos,
 Duke Nukem 3D shows its in-game counter for the scene, and Tyrian 2000 uses a
 separate first-level sample at normal speed.
 
-The DOS Glide and Windows 98 3D clips use a 133 MHz base CPU profile with
-automatic CPU Boost. Windows 98 uses a 64 MB GPU workspace. The Windows 2000
-and XP benchmarks run with the CPU unrestricted. Each figure applies to the
-scene measured. [Recording conditions](docs/video/README.md)
+CPU settings for earlier captures are listed in the recording notes. The
+Windows 2000 and XP measurements already used full speed. Windows 98 uses
+a 64 MB GPU workspace. Each figure applies to the scene measured.
+[Recording conditions](docs/video/README.md)
 
 | Game | Game resolution | Performance measurement |
 |---|---|---|
-| **Doom** | 320×200, high detail | **64.50 FPS** — separate unlocked `demo3` timedemo, sound off |
+| **Doom** | 320×200, high detail | **83.74 FPS** — `demo3` timedemo at full CPU speed, sound off |
 | **Quake** | 320×200 → 640×480 | **62.4 → 16.6 FPS** — separate `demo1` timedemos, sound off |
 | **Duke Nukem 3D** | 320×200 | In-game **DNRATE** counter in the clip's final, separately marked scene |
 | **Tyrian 2000** | 320×200 | **31.2 FPS** — separate early-level debug sample, normal speed / low detail |
@@ -98,7 +98,7 @@ https://github.com/user-attachments/assets/5645a36b-19c8-43b2-8efc-84873c90fd31
 </details>
 
 <details>
-<summary><strong>Tomb Raider</strong> · 30 seconds · DOS Glide and automatic CPU Boost</summary>
+<summary><strong>Tomb Raider</strong> · 30 seconds · DOS Glide</summary>
 
 The measured section is the original stationary level start, followed by
 unmeasured movement. After using Windows 3D, a repeat through a DOS boot
@@ -315,9 +315,7 @@ timezone=cet
 firmware_timer_us=5000
 
 [wyseDOS]
-speed=133
-voodoo2_turbo=1
-graphics_turbo=1
+speed=0
 volume=12
 vol_pcspeaker=16
 vol_adlib=16
@@ -341,12 +339,24 @@ power_restore=1
 power_button=0
 ```
 
-In **GPU** settings, `CPU Boost DOS: Glide` enables unrestricted CPU speed
-while DOS Glide owns the display. `CPU Boost Windows: DirectX/Glide/OpenGL`
-activates on accepted 3D driver submissions and returns to the selected base
-speed when activity ends. Both are independent of the hardware enable and
-memory settings. Windows GPU memory is host workspace, not additional VGA
-VRAM. See [GPU settings](docs/configuration.md) for all options.
+Full Speed is the default in DOS and Windows. The CPU menu can save a
+lower speed for a machine. To slow an individual DOS game, copy
+`DOS/CPUSPEED.COM` from the driver CD to the game's directory or to a
+directory on the DOS path, then use it in the game's batch file.
+
+```bat
+@ECHO OFF
+CPUSPEED 33
+IF ERRORLEVEL 1 GOTO END
+GAME.EXE
+CPUSPEED /R
+:END
+```
+
+The number is the approximate execution rate in MHz of the selected CPU
+profile. `CPUSPEED 0` selects full speed and `CPUSPEED /R` restores the saved
+setting. The command acts immediately without writing to the saved settings.
+Restarting the guest restores the saved speed too.
 
 `firmware_timer_us` defaults to 5000 (5 ms). It shortens a slower firmware
 hardware timer so USB mouse completions are delivered more regularly; an

@@ -153,7 +153,7 @@ uint32_t wgpu_reg_read(WgpuState *s, uint32_t reg)
     case WGPU_REG_COMPLETED: return fence_offset_valid(s) ? aperture_word(s, s->fence_offset) : 0;
     case WGPU_REG_RESETS: notice_resets(s); return s->resets_seen;
     case WGPU_REG_SUBMITS: return s->submits;
-    case WGPU_REG_FEATURES: return WGPU_FEATURE_USER_3D;
+    case WGPU_REG_FEATURES: return 0; /* Legacy descriptor flags remain accepted. */
     case WGPU_REG_USER_3D_SUBMITS: return s->user_3d_submits;
     default: return 0;
     }

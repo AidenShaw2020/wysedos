@@ -190,6 +190,29 @@ int main(void)
     CHECK(result[0] == 0 && result[1] == 0 && result[2] == 0);
     controller.dor = DOR_NRESET | DOR_DMAEN;
     puts("PASS: FDC DOR IRQ gate and deferred reset interrupt");
+    fdc_reset(&controller, 0);
+    const uint8_t seek_units[] = { 0x0f, 1, 9, 0x08, 0x0f, 3, 4, 0x08 };
+    const uint8_t expected_seek[][2] = {{ ST0_SE | 1, 9 }, { ST0_SE | 3, 4 }};
+    for (unsigned unit = 0; unit < 2; unit++) {
+        for (unsigned byte = 0; byte < 4; byte++)
+            fdc_ioport_write(&controller, 0x3f5, seek_units[unit * 4 + byte]);
+        CHECK(fdc_ioport_read(&controller, 0x3f5) == expected_seek[unit][0]);
+        CHECK(fdc_ioport_read(&controller, 0x3f5) == expected_seek[unit][1]);
+    }
+    fdc_ioport_write(&controller, 0x3f5, 0x0e);
+    const uint8_t expected_pcn[] = { 0, 9, 0, 4 };
+    for (unsigned unit = 0; unit < sizeof(expected_pcn); unit++)
+        CHECK(fdc_ioport_read(&controller, 0x3f5) == expected_pcn[unit]);
+    for (unsigned byte = 4; byte < 10; byte++)
+        fdc_ioport_read(&controller, 0x3f5);
+    fdc_ioport_write(&controller, 0x3f5, 0x07);
+    fdc_ioport_write(&controller, 0x3f5, 3);
+    fdc_ioport_write(&controller, 0x3f5, 0x08);
+    CHECK(fdc_ioport_read(&controller, 0x3f5) == (ST0_IC_ABNORM | ST0_SE | ST0_EC | 3));
+    CHECK(fdc_ioport_read(&controller, 0x3f5) == 0);
+    CHECK(controller.drive[1].track == 9);
+    CHECK(controller.drive[3].track == 0);
+    puts("PASS: FDC drive 3 seek and recalibrate do not change drive B state");
     const uint8_t read_cylinder[] = { 0xc6, 0, 0, 0, 1, 2, 18, 27, 255 };
     const unsigned transfer_sectors[] = { 1, 18, 36 };
     for (unsigned test = 0; test < sizeof(transfer_sectors) / sizeof(transfer_sectors[0]); test++) {

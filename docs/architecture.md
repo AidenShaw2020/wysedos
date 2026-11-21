@@ -15,7 +15,7 @@ domains and restores the saved ring control before accessing the engine.
 A failed acknowledgement or ring-control readback prevents submission.
 The optional DOS Voodoo2 GPU
 backend is excluded from this idle DOS policy. This lifecycle is separate
-from the guest CPU Boost switches and changes no Windows driver ABI.
+from guest CPU speed selection and changes no Windows driver ABI.
 
 [Documentation index](index.md)
 

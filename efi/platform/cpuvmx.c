@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include "pc.h"
 #include "cpu_profile.h"
+#include "cpu_speed_dos.h"
+#include "config_save.h"
 #include "wgpu_cpu.h"
 #include "fpu.h"
 #include "../src/vm.h"
@@ -879,15 +881,27 @@ static uint16_t iot_lo[8], iot_hi[8];
 static uint32_t iot_ranges;
 static void iot_note(int port, bool write, int size, uint32_t val);
 
-static void do_io(void) {
+static bool do_io(void) {
     uint64_t q = vm.exit_qual;
     g_io_count[!(q & 8)][(q >> 16) & 0x3ff]++;
     if (q & (1 << 4)) {         // string I/O (ins/outs, rep): the interpreter does it whole
         emulate(1, 1);
-        return;
+        return false;
     }
     int size = (q & 7) + 1;
     int port = (q >> 16) & 0xffff;
+    if (size == 2 && (q & 8) && port == WYSE_CPU_SPEED_ID_PORT) {
+        vm.regs.rax = (vm.regs.rax & ~0xffffULL) | WYSE_CPU_SPEED_ID;
+        vm_skip_instr(&vm);
+        return false;
+    }
+    if (size == 2 && !(q & 8) && port == WYSE_CPU_SPEED_PORT) {
+        uint16_t mhz = (uint16_t)vm.regs.rax;
+        vm_skip_instr(&vm);
+        if (mhz > WYSE_CPU_SPEED_MAX && mhz != WYSE_CPU_SPEED_RESTORE) return false;
+        g_cpu_speed_mhz = mhz == WYSE_CPU_SPEED_RESTORE ? config_get_speed_mhz() : mhz;
+        return true; /* Apply the new speed before another guest instruction. */
+    }
     CPU_CB *cb = &icpu->cb;
     if (q & 8) {
         uint64_t v;
@@ -901,6 +915,7 @@ static void do_io(void) {
     }
     if (iot_ranges) iot_note(port, !(q & 8), size, (uint32_t)vm.regs.rax);
     vm_skip_instr(&vm);
+    return false;
 }
 
 // "iotrace 220-22f 0-f c0-df": the last 16384 port accesses in up to eight
@@ -1527,7 +1542,7 @@ void wyse_cpu_step(PC *pc) {
             break;
         case EXIT_IO: {
             uint64_t ti = rdtsc_();
-            do_io();
+            if (do_io()) deadline = start;
             g_vmx_io_tsc += rdtsc_() - ti;
             uint32_t port = (uint32_t)(vm.exit_qual >> 16) & 0xffff;
             if ((port >= 0x3c4 && port <= 0x3cf) || port == 0x1ce || port == 0x1cf || (vm.exit_qual & (1 << 4)))

@@ -255,7 +255,6 @@ struct VGAState {
     /* VBE extension */
     uint16_t vbe_index;
     uint16_t vbe_regs[VBE_DISPI_INDEX_NB];
-    uint32_t vbe_disable_epoch; /* Revokes delayed boost on every text return. */
     uint32_t vbe_start_addr;
     uint32_t vbe_line_offset;
 

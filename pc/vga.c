@@ -2014,7 +2014,6 @@ static void vbe_retire_on_legacy_reprogram(VGAState *s)
     if (!vbe_enabled(s)) return;
     if (s->vbe_regs[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_LFB_ENABLED) return;
     s->vbe_regs[VBE_DISPI_INDEX_ENABLE] &= ~VBE_DISPI_ENABLED;
-    s->vbe_disable_epoch++;
     s->bank_offset = 0;
 }
 
@@ -2402,7 +2401,6 @@ void vbe_write(VGAState *s, uint32_t offset, uint32_t val)
             break;
         case VBE_DISPI_INDEX_ENABLE: {
             const bool starting = (val & VBE_DISPI_ENABLED) && !vbe_enabled(s);
-            if (!(val & VBE_DISPI_ENABLED)) s->vbe_disable_epoch++;
             if (starting) {
                 s->vbe_regs[VBE_DISPI_INDEX_VIRT_WIDTH] =
                     s->vbe_regs[VBE_DISPI_INDEX_XRES];
