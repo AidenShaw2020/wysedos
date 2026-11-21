@@ -40,9 +40,9 @@ effects.
 
 [Need for Speed III on Windows 98](06-nfs3-directx.mp4) used 640×480×16
 and the native Direct3D 5 renderer on Hometown with the Corvette.
-The driver counted 597 handled flips over 20.152 s (**29.63 FPS**) from
-the eMMC installation at Full Speed. This clip is silent and omits the
-bottom row of the race leaderboard.
+The driver counted 578 handled flips over 20.117 s (**28.73 FPS**) on
+the PXE test disk at Full Speed. The clip includes digital game audio
+and omits the bottom row of the race leaderboard.
 
 [Need for Speed III on Windows 2000](09-nfs3-windows2000-directx.mp4)
 used the same Hometown route and 640×480×16 graphics settings. It

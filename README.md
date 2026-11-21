@@ -40,8 +40,7 @@ emulation.
 These games run on a **Dell Wyse 3040** under DOS, Windows 98, Windows 2000
 and Windows XP. The clips play at their original speed in **720p60**.
 Windows 2000 and XP were captured directly over HDMI with digital audio.
-The newly recorded DOS clips include digital game audio. The current
-Windows 98 Direct3D clip is silent. Game FPS is measured
+The newly recorded clips include digital game audio. Game FPS is measured
 separately from the capture rate. Doom and Quake use sound-off timedemos,
 Duke Nukem 3D shows its in-game counter for the scene, and Tyrian 2000 uses a
 debug sample from early in the level.
@@ -58,7 +57,7 @@ a 64 MB GPU workspace. Each figure applies to the scene measured.
 | **Duke Nukem 3D** | 320×200 | **698 FPS** — a single rooftop DNRATE reading at full CPU speed |
 | **Tyrian 2000** | 320×200 | **34.746 FPS** — in-game debug sample in Torm, Normal difficulty, full CPU speed |
 | **Tomb Raider / DOS Glide** | 640x480 | **21.95 FPS** — 450 completed frames / 20.501 s at the stationary level start |
-| **NFS III / Windows 98, Direct3D 5** | 640x480 | **29.63 FPS** over 20.152 s of driving at full CPU speed |
+| **NFS III / Windows 98, Direct3D 5** | 640x480 | **28.73 FPS** over 20.117 s of driving at full CPU speed |
 | **NFS III / Windows 2000, Direct3D 5** | 640x480 | **27.73 FPS** over 30.009 s of driving at full CPU speed |
 | **NFS III / Windows XP, Direct3D 5** | 640x480 | **27.94 FPS** over 30.03 s of driving |
 | **NFS III / Windows 98, Glide** | 640x480 | **16.47 swap calls/s** over 15.001 s of driving |
@@ -113,7 +112,7 @@ https://github.com/user-attachments/assets/6c7109fd-8203-4a22-94b8-52087020eac2
 Hometown / Corvette, driving at 640×480×16 with the original DX5 renderer.
 The new recording has no audio track.
 
-https://github.com/user-attachments/assets/6734fee0-3dba-40bc-9cc6-420ea98861fc
+https://github.com/user-attachments/assets/ea7a27ac-7ca3-43f3-be07-8434b524b7a9
 
 </details>
 
