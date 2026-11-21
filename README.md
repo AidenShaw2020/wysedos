@@ -88,9 +88,9 @@ https://github.com/user-attachments/assets/2ec6219c-977c-4903-a145-c0b0ed2a0e31
 </details>
 
 <details>
-<summary><strong>Tyrian 2000</strong> · 16 seconds · Full Speed · Torm with music and effects</summary>
+<summary><strong>Tyrian 2000</strong> · 16 seconds · Full Speed · FM music and Sound Blaster effects</summary>
 
-https://github.com/user-attachments/assets/85ccbf9c-c665-42f7-9f70-3d50fd106354
+https://github.com/user-attachments/assets/3c8a3d45-53ea-47bb-845b-3a49d3a3d176
 
 </details>
 

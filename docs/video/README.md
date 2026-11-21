@@ -30,8 +30,9 @@ digital game audio.
 
 [Tyrian 2000](04-tyrian-full-speed.mp4) ran from the clean MS-DOS 6.22
 profile in the Torm level at 320×200 on Normal difficulty. The
-in-game debug display reached **34.746 FPS** in the recorded section.
-The clip includes the game's original music and effects.
+in-game debug display reached **34.746 FPS** in a separate Torm sample.
+The new gameplay clip shows the opening Tyrian level with FM music and
+Sound Blaster effects.
 
 [Tomb Raider / DOS Glide](05-tombraider-dos-glide.mp4) completed 450
 Voodoo2 frames in 20.501 s at the stationary Caves entrance (**21.95 FPS**).
