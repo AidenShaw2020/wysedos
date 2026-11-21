@@ -66,11 +66,13 @@ control the physical Intel display hardware.
 Suitable modes use Cherry Trail's legacy VGA aperture/registers. Ordinary
 16-color planar graphics use the software VGA window by default, preserving
 native CPU execution and avoiding costly physical read/latch-copy transitions.
-Native text, existing chain4 and 256-color Mode X choices remain separate;
-the explicit native override is retained. VBE uses software memory. The display core takes
-snapshots and renders/scales them into the UEFI GOP framebuffer in `wyse.c`.
-Firmware establishes the physical display mode; guest resolution is separate.
-There is no `chvdisp.c` implementing independent native display initialization.
+Native text uses byte-safe accesses. Simple chain-4 modes map to linear
+memory. Mode X uses the physical aperture and applies a targeted workaround
+when it finds the DOS HMA video-copy routine. Its word stores crossing an
+eight-byte boundary are split into byte stores. VBE uses software memory.
+The display core renders the guest image into the UEFI GOP framebuffer.
+GOP selects either physical output independently of the guest resolution.
+For mirroring, the Cherryview display pipes scan the same framebuffer.
 
 Automatic planar fallback accounts for both visible width and virtual pitch.
 Double-buffer requests latch start address and fine pan atomically. See

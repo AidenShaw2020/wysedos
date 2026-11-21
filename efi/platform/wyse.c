@@ -19,6 +19,7 @@
 #include "vga.h"
 #include "ff.h"
 #include "blockdev.h"
+#include "bio.h"
 #include "osd.h"
 #include "settingsui.h"
 #include "diskui.h"
@@ -44,6 +45,7 @@ int usbhid_poll(PC *pc);
 bool wc_map(uint64_t base, uint64_t size);
 int mp_init(void);
 bool lpe_init(uint32_t sample_rate);
+void lpe_stop(void);
 void lpe_test_tone(uint32_t ms, void (*delay_us)(uint32_t));
 bool audio_start(PC *pc);
 bool analog_init(void);
@@ -457,6 +459,7 @@ static uint32_t *surface, *shown;
 static bool voodoo_surface_active;
 static uint32_t *gop_fb;
 static uint32_t gop_w, gop_h, gop_stride;
+static int firmware_default_display;
 static uint32_t dst_w, dst_h, off_x, off_y;
 static uint16_t *col_src;       // destination column -> source column
 
@@ -545,23 +548,197 @@ static void display_edid(EFI_GRAPHICS_OUTPUT_PROTOCOL *gop) {
     printf("edid: no valid EDID on the active GOP; DDC unavailable\n");
 }
 
-static void display_init(void) {
-    static const EFI_GUID gop_guid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
-    EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
-    console_log = false;    // the screen belongs to the guest from here on
-    surface = calloc(SURF_MAX_W * SURF_MAX_H, 4);
-    shown = malloc(SURF_MAX_W * SURF_MAX_H * 4);
-    memset(shown, 0xff, SURF_W * SURF_H * 4);   // nothing shown yet: every row differs
-    if (EFI_ERROR(gBS->LocateProtocol(&gop_guid, NULL, (void **)&gop))) return;
+typedef struct {
+    uint32_t size;
+    uint8_t *data;
+} DisplayEdid;
+
+/* ACPI video output addresses assigned by the Dell firmware, in DP port order. */
+static const uint32_t wyse_display_address[] = { 0, 0x800103b1, 0x800103d2 };
+static const EFI_GUID display_gop_guid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
+static const EFI_GUID display_discovered_edid =
+    {0x1c0c34f6,0xd380,0x41fa,{0xa0,0x49,0x8a,0xd0,0x6c,0x1a,0x66,0xaa}};
+
+static EFI_DEVICE_PATH *display_address_node(EFI_HANDLE handle, uint32_t address) {
+    for (EFI_DEVICE_PATH *p = bio_device_path(handle); p && !dp_end(p) &&
+         p->Length >= sizeof(*p); p = dp_next(p)) {
+        if (p->Type != DP_ACPI || p->SubType != 3 || p->Length != 8) continue;
+        uint32_t found;
+        memcpy(&found, (uint8_t *)p + sizeof(*p), sizeof(found));
+        if (found == address) return p;
+    }
+    return NULL;
+}
+
+static EFI_GRAPHICS_OUTPUT_PROTOCOL *display_find_gop(uint32_t address) {
+    EFI_GRAPHICS_OUTPUT_PROTOCOL *gop = NULL;
+    if (!address) {
+        if (EFI_ERROR(gBS->LocateProtocol(&display_gop_guid, NULL, (void **)&gop))) return NULL;
+        return gop;
+    }
+
+    EFI_HANDLE *handles = NULL;
+    uint64_t count = 0;
+    if (EFI_ERROR(gBS->LocateHandleBuffer(2, &display_gop_guid, NULL, &count, &handles))) return NULL;
+    for (uint64_t i = 0; i < count; i++) {
+        EFI_GRAPHICS_OUTPUT_PROTOCOL *candidate = NULL;
+        if (display_address_node(handles[i], address) &&
+            !EFI_ERROR(gBS->HandleProtocol(handles[i], &display_gop_guid, (void **)&candidate)) &&
+            candidate && candidate->Mode && candidate->Mode->Info &&
+            candidate->Mode->FrameBufferBase && candidate->Mode->FrameBufferSize) {
+            gop = candidate;
+            break;
+        }
+    }
+    gBS->FreePool(handles);
+    return gop;
+}
+
+static EFI_GRAPHICS_OUTPUT_PROTOCOL *display_select(int output) {
+    if (output == DISPLAY_AUTO) return display_find_gop(0);
+
+    uint32_t address = wyse_display_address[output];
+    EFI_GRAPHICS_OUTPUT_PROTOCOL *gop = display_find_gop(address);
+    if (gop) {
+        printf("display: monitor %d already active\n", output);
+        return gop;
+    }
+
+    static const EFI_GUID pci_io_guid =
+        {0x4cf5b200,0x68b8,0x4ca5,{0x9e,0xec,0xb2,0x3e,0x3f,0x50,0x02,0x9a}};
+    typedef EFI_STATUS (*LocatePath)(const EFI_GUID *, EFI_DEVICE_PATH **, EFI_HANDLE *);
+    EFI_HANDLE *handles = NULL;
+    EFI_HANDLE controller = NULL;
+    uint64_t count = 0;
+    /* A discovered EDID is available even when the output has no GOP yet. */
+    if (!EFI_ERROR(gBS->LocateHandleBuffer(2, &display_discovered_edid, NULL, &count, &handles))) {
+        for (uint64_t i = 0; i < count; i++) {
+            if (!display_address_node(handles[i], address)) continue;
+            DisplayEdid *edid = NULL;
+            EFI_DEVICE_PATH *path = bio_device_path(handles[i]);
+            if (!EFI_ERROR(gBS->HandleProtocol(handles[i], &display_discovered_edid, (void **)&edid)) &&
+                edid && edid->data && edid->size >= 128 &&
+                !EFI_ERROR(((LocatePath)gBS->LocateDevicePath)(&pci_io_guid, &path, &controller)))
+                break;
+        }
+        gBS->FreePool(handles);
+    }
+    if (controller) {
+        struct __attribute__((packed)) {
+            EFI_DEVICE_PATH node;
+            uint32_t address;
+            EFI_DEVICE_PATH end;
+        } route = { { DP_ACPI, 3, 8 }, address, { DP_END, 0xff, 4 } };
+
+        /* Route before taking ownership of the framebuffer and digital audio. */
+        EFI_STATUS status = gBS->ConnectController(controller, NULL, &route, false);
+        printf("display: monitor %d firmware switch %llx\n", output, (unsigned long long)status);
+        gop = display_find_gop(address);
+        if (gop) return gop;
+    }
+    printf("display: monitor %d unavailable, using firmware default output\n", output);
+    gop = display_find_gop(0);
+    if (!gop && controller) {
+        gBS->ConnectController(controller, NULL, NULL, false);
+        gop = display_find_gop(0);
+    }
+    return gop;
+}
+
+bool chv_mirror_capture(void);
+bool chv_mirror_enable(void);
+bool chv_mirror_active(void);
+void chv_mirror_disable(void);
+
+static bool edid_has_1080p60(const DisplayEdid *edid) {
+    if (!edid || !edid->data || edid->size < 128) return false;
+    const uint8_t *e = edid->data;
+    for (unsigned i = 38; i < 54; i += 2)
+        if (e[i] == 0xd1 && e[i + 1] == 0xc0) return true;
+    for (unsigned i = 54; i <= 108; i += 18) {
+        unsigned clock = e[i] | e[i + 1] << 8;
+        unsigned w = e[i + 2] | (e[i + 4] & 0xf0) << 4;
+        unsigned h = e[i + 5] | (e[i + 7] & 0xf0) << 4;
+        if (w == 1920 && h == 1080 && clock >= 14830 && clock <= 14860 &&
+            !(e[i + 17] & 0x80)) return true;
+    }
+    for (unsigned block = 1; block <= e[126] && block < edid->size / 128; block++) {
+        const uint8_t *cta = e + 128 * block;
+        if (cta[0] != 2 || cta[2] < 4 || cta[2] > 127) continue;
+        for (unsigned i = 4; i < cta[2]; ) {
+            unsigned length = cta[i] & 31;
+            unsigned end = i + 1 + length;
+            if (end > cta[2]) break;
+            if ((cta[i] >> 5) == 2)
+                for (unsigned j = i + 1; j < end; j++)
+                    if ((cta[j] & 0x7f) == 16) return true;
+            i = end;
+        }
+    }
+    return false;
+}
+
+static bool display_mirror_supported(void) {
+    EFI_HANDLE *handles = NULL;
+    uint64_t count = 0;
+    bool supported = false;
+    if (EFI_ERROR(gBS->LocateHandleBuffer(2, &display_discovered_edid, NULL, &count, &handles)))
+        return false;
+    for (uint64_t i = 0; i < count; i++) {
+        DisplayEdid *edid = NULL;
+        if (display_address_node(handles[i], wyse_display_address[DISPLAY_MONITOR_2]) &&
+            !EFI_ERROR(gBS->HandleProtocol(handles[i], &display_discovered_edid, (void **)&edid)) &&
+            edid_has_1080p60(edid)) {
+            supported = true;
+            break;
+        }
+    }
+    gBS->FreePool(handles);
+    return supported;
+}
+
+/* The GOP remains on monitor 1. The secondary uses the same GTT surface. */
+static EFI_GRAPHICS_OUTPUT_PROTOCOL *display_mirror(bool *enabled) {
+    *enabled = false;
+    if (!display_mirror_supported()) {
+        printf("mirror: second display did not advertise 1080p60\n");
+        return display_select(DISPLAY_MONITOR_1);
+    }
+    EFI_GRAPHICS_OUTPUT_PROTOCOL *secondary = display_select(DISPLAY_MONITOR_2);
+    bool captured = secondary && secondary == display_find_gop(wyse_display_address[DISPLAY_MONITOR_2]) &&
+                    chv_mirror_capture();
+    EFI_GRAPHICS_OUTPUT_PROTOCOL *primary = display_select(DISPLAY_MONITOR_1);
+    if (captured && primary && primary == display_find_gop(wyse_display_address[DISPLAY_MONITOR_1]))
+        *enabled = chv_mirror_enable();
+    return primary;
+}
+
+static bool display_adopt(EFI_GRAPHICS_OUTPUT_PROTOCOL *gop) {
+    if (!gop || !gop->Mode || !gop->Mode->Info || !gop->Mode->FrameBufferBase ||
+        !gop->Mode->FrameBufferSize) return false;
     display_edid(gop);
     gop_fb = (uint32_t *)gop->Mode->FrameBufferBase;
     gop_w = gop->Mode->Info->HorizontalResolution;
     gop_h = gop->Mode->Info->VerticalResolution;
     gop_stride = gop->Mode->Info->PixelsPerScanLine;
-    col_src = calloc(MAX_FB_W, sizeof(uint16_t));
     wc_map(gop->Mode->FrameBufferBase, gop->Mode->FrameBufferSize);
     printf("display: fb %llx size %llx, %ux%u stride %u\n", (unsigned long long)gop->Mode->FrameBufferBase,
            (unsigned long long)gop->Mode->FrameBufferSize, gop_w, gop_h, gop_stride);
+    return true;
+}
+
+static void display_init(int output) {
+    console_log = false;
+    surface = calloc(SURF_MAX_W * SURF_MAX_H, 4);
+    shown = malloc(SURF_MAX_W * SURF_MAX_H * 4);
+    col_src = calloc(MAX_FB_W, sizeof(uint16_t));
+    memset(shown, 0xff, SURF_W * SURF_H * 4);
+    EFI_GRAPHICS_OUTPUT_PROTOCOL *initial = display_find_gop(0);
+    for (int i = DISPLAY_MONITOR_1; i <= DISPLAY_MONITOR_2; i++)
+        if (initial && display_find_gop(wyse_display_address[i]) == initial)
+            firmware_default_display = i;
+    bool mirrored;
+    display_adopt(output == DISPLAY_MIRROR ? display_mirror(&mirrored) : display_select(output));
 }
 
 // Where the 640x480 picture goes on the screen (the menu's "Picture"):
@@ -618,7 +795,7 @@ static void splash_show(void) {
 }
 
 // Installer uses the same logo and framebuffer as startup.
-void installer_ui_begin(void) { display_init(); splash_show(); }
+void installer_ui_begin(void) { display_init(DISPLAY_AUTO); splash_show(); }
 static void install_rect(int x,int y,int w,int h,uint32_t color) {
     if (!gop_fb) return;
     for (int j=0;j<h;j++) for (int i=0;i<w;i++)
@@ -1587,6 +1764,56 @@ static void menu_frame(void) {
     }
 }
 
+bool wyse_display_switch(int output) {
+    int target = output == DISPLAY_AUTO ? firmware_default_display : output;
+    bool mirror = target == DISPLAY_MIRROR;
+    bool was_mirrored = chv_mirror_active();
+    if (target < DISPLAY_MONITOR_1 || target > DISPLAY_MIRROR) return false;
+    if (was_mirrored && mirror) return true;
+    if (!was_mirrored && !mirror && display_find_gop(wyse_display_address[target])) return true;
+    if (!was_mirrored && mirror && !display_mirror_supported()) return false;
+    int previous = display_find_gop(wyse_display_address[DISPLAY_MONITOR_2]) ?
+                   DISPLAY_MONITOR_2 : DISPLAY_MONITOR_1;
+
+    /* Settings pauses the guest. Hold its display worker and let queued
+     * Voodoo work finish before handing the display back to firmware. */
+    bool hold = g_wyse_vga_core && !menu_on;
+    if (hold) pc_vga_hold(1);
+    if (g_wyse_pc->voodoo2) (void)voodoo2_stats(g_wyse_pc->voodoo2);
+    bool render_open;
+    bool gpu3d_close_for_modeset(bool *reopen);
+    if (!gpu3d_close_for_modeset(&render_open)) {
+        if (hold) pc_vga_hold(0);
+        return false;
+    }
+    lpe_stop();
+    void hwvga_save_for_modeset(void);
+    void hwvga_restore_after_modeset(void);
+    hwvga_save_for_modeset();
+    if (was_mirrored) chv_mirror_disable();
+    bool selected;
+    EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
+    if (mirror) {
+        gop = display_mirror(&selected);
+        if (!selected && previous == DISPLAY_MONITOR_2) gop = display_select(previous);
+    } else {
+        gop = display_select(target);
+        selected = gop && display_find_gop(wyse_display_address[target]) == gop;
+        if (!selected && was_mirrored) gop = display_mirror(&was_mirrored);
+    }
+    hwvga_restore_after_modeset();
+    if (render_open) (void)gpu3d_open();
+    display_adopt(gop);
+    (void)lpe_init(SOUND_FREQUENCY);
+    layout_mode = -1;
+    if (hold) pc_vga_hold(0);
+    if (mirror)
+        printf("display: live switch to mirror %s\n", selected ? "complete" : "failed");
+    else
+        printf("display: live switch to monitor %d %s\n", target, selected ? "complete" : "failed");
+    return selected;
+}
+
 static void menu_leave(PC *pc) {
     menu_on = false;
     g_audio_pause = 0;
@@ -1619,7 +1846,7 @@ void wyse_main(void) {
     void firmware_events_poll(uint64_t now);
     firmware_events_init(firmware_timer_us);
     int hid = usbhid_init();
-    display_init();
+    display_init(config_get_display_output());
     splash_show();
     bool have_audio = lpe_init(SOUND_FREQUENCY);
     bool have_analog = analog_init();

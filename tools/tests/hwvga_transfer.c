@@ -59,6 +59,7 @@ static void transition_fetch_proposal(VGAState *s,int want) {
         CHECK(s->vga_ram_size>=VGA_BYTES);flush_window();memcpy(s->vga_ram,win,VGA_BYTES);
     } else hwvga_fetch(s);
 }
+static void dos_vga_copy_mode(bool enabled) { (void)enabled; }
 #include "../../work/hwvga-transfer/actual_transfer.h"
 void wyse_vga_surface(VGAState *s) { (void)s; }
 uint32_t get_uticks(void) { return 1; }
@@ -253,17 +254,15 @@ static void planar_graphics_backend(void) {
     vga_mem_write(&state,700,0);
     CHECK(model[700]==source);
     saved[700]=source;
-    state.gr[5]=0x40;hw_update(false);
-    CHECK(win_mode==WIN_EMU && !hw_on && !state.hw_mem && !stores);
-    CHECK(!memcmp(model,saved,sizeof saved));
-    /* Unaligned multi-plane words must retain both bytes across an 8-byte
-     * aperture boundary; simple single-plane stores still qualify for RAM. */
-    state.sr[2]=15;
+    /* The protected planar backend must still retain both bytes across
+     * the aperture boundary. */
+    state.gr[5]=0;state.sr[2]=15;
     vga_mem_write16(&state,7,0x6655);
     CHECK(model[7]==0x55555555 && model[8]==0x66666666);
-    state.sr[2]=1;
-    uint32_t base=~0u;
-    CHECK(vga_simple_plane(&state,&base)==0 && base==0);
+    saved[7]=model[7];saved[8]=model[8];
+    state.gr[5]=0x40;hw_update(false);
+    CHECK(win_mode==WIN_HW && hw_on && state.hw_mem && stores==VGA_BYTES);
+    CHECK(!memcmp(physical,saved,sizeof saved));
     state.sr[2]=15;
     state.sr[4]=0x0e;hw_update(false);
     CHECK(win_mode==WIN_RAM && !hw_on && ram_13h);
@@ -314,10 +313,15 @@ static void chain4_planar_handoff(void) {
     hw_update(false);
     CHECK(win_mode==WIN_EMU && ram_planar && !ram_13h);
     CHECK(!memcmp(model,saved,sizeof saved));
-    state.gr[5]=0x40;hw_update(false);
-    CHECK(win_mode==WIN_EMU && !memcmp(model,saved,sizeof saved));
+    state.sr[2]=15;state.sr[4]=0x0e;
+    hw_update(false);
+    CHECK(win_mode==WIN_RAM && ram_13h);
+    for(unsigned index=0;index<0x10000;index++)
+        CHECK(((uint8_t *)model)[index]==(uint8_t)(index*37+(index>>8)));
+    state.sr[4]=6;state.gr[5]=0x40;hw_update(false);
+    CHECK(win_mode==WIN_HW && !memcmp(physical,saved,sizeof saved));
     }
-    puts("PASS direct and trapped chain4 -> software planar -> safe Mode X preserve all VGA planes");
+    puts("PASS chain4 -> software planar -> chain4 -> native Mode X preserves pixels and planes");
     reset();
     state.vga_ram_size=0x100000;
     state.vbe_regs[VBE_DISPI_INDEX_XRES]=640;

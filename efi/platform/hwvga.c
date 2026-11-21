@@ -239,6 +239,58 @@ void hwvga_store_planar(const uint8_t *src) {
     }
 }
 
+/* Save the native VGA storage and the mappings it shares with GOP. */
+static struct {
+    volatile uint64_t *gtt;
+    volatile uint32_t *invalidate;
+    uint64_t screen[VGA_BYTES / 4096], window[VGA_BYTES / 4096];
+    uint32_t pixels[VGA_BYTES / 4];
+    uint8_t sequencer[5], graphics[9], sr_index, gr_index, misc;
+} modeset;
+
+void hwvga_save_for_modeset(void) {
+    if (!g_hwvga_on) return;
+    uint64_t mmio = ((uint64_t)pci_read(0, 2, 0, 0x14) << 32 | pci_read(0, 2, 0, 0x10)) & ~0xfull;
+    modeset.gtt = (volatile uint64_t *)(mmio + (8u << 20));
+    modeset.invalidate = (volatile uint32_t *)(mmio + 0x101008);
+    for (unsigned i = 0; i < VGA_BYTES / 4096; i++) {
+        modeset.screen[i] = modeset.gtt[i];
+        modeset.window[i] = modeset.gtt[WIN_PAGE + i];
+    }
+    flush_window();
+    memcpy(modeset.pixels, win, VGA_BYTES);
+    modeset.sr_index = inb(0x3c4);
+    modeset.gr_index = inb(0x3ce);
+    modeset.misc = inb(0x3cc);
+    for (unsigned i = 0; i < sizeof(modeset.sequencer); i++)
+        modeset.sequencer[i] = hwvga_read(0x3c4, i);
+    for (unsigned i = 0; i < sizeof(modeset.graphics); i++)
+        modeset.graphics[i] = hwvga_read(0x3ce, i);
+}
+
+void hwvga_restore_after_modeset(void) {
+    if (!g_hwvga_on) return;
+    for (unsigned i = 0; i < VGA_BYTES / 4096; i++) {
+        modeset.gtt[i] = modeset.screen[i];
+        modeset.gtt[WIN_PAGE + i] = modeset.window[i];
+    }
+    (void)modeset.gtt[WIN_PAGE + VGA_BYTES / 4096 - 1];
+    *modeset.invalidate = 1;
+    (void)*modeset.invalidate;
+    flush_window();
+    if (memcmp(win, modeset.pixels, VGA_BYTES)) {
+        memcpy((void *)win, modeset.pixels, VGA_BYTES);
+        flush_window();
+    }
+    outb(0x3c2, modeset.misc);
+    for (unsigned i = 0; i < sizeof(modeset.sequencer); i++)
+        hwvga_reg(0x3c4, i, modeset.sequencer[i]);
+    for (unsigned i = 0; i < sizeof(modeset.graphics); i++)
+        hwvga_reg(0x3ce, i, modeset.graphics[i]);
+    outb(0x3c4, modeset.sr_index);
+    outb(0x3ce, modeset.gr_index);
+}
+
 // On the display core before a frame: the VGA's memory into vga_ram
 void hwvga_fetch(VGAState *s) {
     if (!win || s->vga_ram_size < (int)VGA_BYTES) return;

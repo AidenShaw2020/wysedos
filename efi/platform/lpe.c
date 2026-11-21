@@ -43,6 +43,7 @@ static int16_t *bufs[NBUF];
 static int head;                    // next buffer the hardware will finish
 static uint32_t rate = 44100;
 static bool running;
+static int pump_lock;
 uint32_t g_lpe_underruns, g_lpe_periods;
 
 static inline uint32_t pci_read(int bus, int dev, int fn, int reg) {
@@ -79,9 +80,11 @@ static void prog_bd(int i) {
 
 static bool alloc_bufs(void) {
     for (int i = 0; i < NBUF; i++) {
-        EFI_PHYSICAL_ADDRESS a = 0xffffffff;
-        if (EFI_ERROR(gBS->AllocatePages(AllocateMaxAddress, EfiLoaderData, 1, &a))) return false;
-        bufs[i] = (int16_t *)a;
+        if (!bufs[i]) {
+            EFI_PHYSICAL_ADDRESS a = 0xffffffff;
+            if (EFI_ERROR(gBS->AllocatePages(AllocateMaxAddress, EfiLoaderData, 1, &a))) return false;
+            bufs[i] = (int16_t *)a;
+        }
         memset(bufs[i], 0, PERIOD * 4);
     }
     return true;
@@ -126,7 +129,7 @@ static bool lpe_init_hdmi(int port, int pipe, uint32_t port_reg, uint32_t en_dbg
     head = 0;
     awr(AUD_HDMI_STATUS, ard(AUD_HDMI_STATUS) | (1u << 29) | (1u << 31));
     awr(AUD_CONFIG, cfg | 1);
-    running = true;
+    __atomic_store_n(&running, true, __ATOMIC_RELEASE);
     printf("lpe: HDMI audio running, %u Hz, N %u CTS %u, port %08x, status %08x\n", rate, n, cts,
            rd(VLV_DISPLAY_BASE + port_reg), ard(AUD_HDMI_STATUS));
     return true;
@@ -198,12 +201,7 @@ bool lpe_init(uint32_t sample_rate) {
     static const uint32_t cfg_off[3] = {0x000, 0x800, 0x900};
     aud = (volatile uint32_t *)(mmio + LPE_AUDIO_BASE + cfg_off[pipe]);
 
-    for (int i = 0; i < NBUF; i++) {
-        EFI_PHYSICAL_ADDRESS a = 0xffffffff;
-        if (EFI_ERROR(gBS->AllocatePages(AllocateMaxAddress, EfiLoaderData, 1, &a))) return false;
-        bufs[i] = (int16_t *)a;
-        memset(bufs[i], 0, PERIOD * 4);
-    }
+    if (!alloc_bufs()) return false;
 
     // reset, N/Maud, info frame, channel status, config, buffers
     awr(AUD_HDMI_STATUS, 1);
@@ -226,15 +224,33 @@ bool lpe_init(uint32_t sample_rate) {
     head = 0;
     awr(AUD_HDMI_STATUS, ard(AUD_HDMI_STATUS) | (1u << 29) | (1u << 31));
     awr(AUD_CONFIG, cfg | 1);               // go
-    running = true;
+    __atomic_store_n(&running, true, __ATOMIC_RELEASE);
     printf("lpe: running, %u Hz, maud %u, status %08x\n", rate, maud, ard(AUD_HDMI_STATUS));
     return true;
+}
+
+bool lpe_active(void) { return __atomic_load_n(&running, __ATOMIC_ACQUIRE); }
+
+static bool begin_pump(void) {
+    if (!lpe_active() || __atomic_exchange_n(&pump_lock, 1, __ATOMIC_ACQUIRE)) return false;
+    if (lpe_active()) return true;
+    __atomic_store_n(&pump_lock, 0, __ATOMIC_RELEASE);
+    return false;
+}
+
+void lpe_stop(void) {
+    if (!__atomic_exchange_n(&running, false, __ATOMIC_ACQ_REL)) return;
+    while (__atomic_exchange_n(&pump_lock, 1, __ATOMIC_ACQUIRE))
+        __asm__ volatile("pause");
+    awr(AUD_CONFIG, ard(AUD_CONFIG) & ~1u);
+    (void)ard(AUD_CONFIG);
+    __atomic_store_n(&pump_lock, 0, __ATOMIC_RELEASE);
 }
 
 // Refill every buffer the hardware has finished. fill(dst, frames) writes
 // interleaved stereo int16. Returns the number of buffers refilled.
 int lpe_pump(void (*fill)(int16_t *dst, int frames)) {
-    if (!running) return 0;
+    if (!begin_pump()) return 0;
     int n = 0;
     for (int k = 0; k < NBUF; k++) {
         uint32_t left = ard(AUD_BUF_LEN(head)) & 0xfffff;
@@ -248,16 +264,16 @@ int lpe_pump(void (*fill)(int16_t *dst, int frames)) {
     if (n == NBUF) g_lpe_underruns++;
     uint32_t st = ard(AUD_HDMI_STATUS);
     if (st & (1u << 31)) awr(AUD_HDMI_STATUS, st | (1u << 31));
+    __atomic_store_n(&pump_lock, 0, __ATOMIC_RELEASE);
     return n;
 }
 
-bool lpe_active(void) { return running; }
-
 // Frames still queued for the hardware (for pacing the mixer).
 int lpe_queued(void) {
-    if (!running) return 0;
+    if (!begin_pump()) return 0;
     int frames = 0;
     for (int k = 0; k < NBUF; k++) frames += (ard(AUD_BUF_LEN(k)) & 0xfffff) / 4;
+    __atomic_store_n(&pump_lock, 0, __ATOMIC_RELEASE);
     return frames;
 }
 

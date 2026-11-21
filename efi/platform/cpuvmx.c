@@ -75,6 +75,8 @@ static CPU_CB orig_cb;
 // With the real VGA in use (hw_on) the interpreter reaches it too: A0000-BFFFF
 // is uncached in the host's map (hwvga.c)
 static bool hw_on;
+static bool dos_vga_copy_active;
+static uint32_t dos_vga_copy_splits;
 static bool text_trapped; /* Native VGA storage, byte-safe interpreted text accesses. */
 #define HWVGA(a) (hw_on && (uint32_t)(a) - 0xa0000u < 0x20000u)
 static u8 cb_mr8(void *o, uword a) {
@@ -92,7 +94,12 @@ static u16 cb_mr16(void *o, uword a) {
 static void cb_mw16(void *o, uword a, u16 v) {
     icpu->burst_mmio++;
     if (HWVGA(a)) {
-        if (text_trapped) hwvga_store_bytes(a,v,2); else *(volatile u16 *)(uintptr_t)a = v;
+        if (text_trapped || (dos_vga_copy_active && (a & 7u) == 7u)) {
+            if (dos_vga_copy_active && (a & 7u) == 7u) dos_vga_copy_splits++;
+            hwvga_store_bytes(a, v, 2);
+        } else {
+            *(volatile u16 *)(uintptr_t)a = v;
+        }
     } else orig_cb.iomem_write16(o, a, v);
 }
 static u32 cb_mr32(void *o, uword a) {
@@ -476,17 +483,18 @@ static int win_mode = WIN_EMU;
 static bool ram_13h;        // vga_ram holds a mode 13h picture (not a VBE one)
 static bool ram_planar;
 static int safe_planar = 1;
+static void dos_vga_copy_mode(bool native_mode_x);
+static void dos_vga_copy_arm(bool enable);
 void hwvga_fetch(VGAState *s);
 void hwvga_store_chain4(const uint8_t *src);
 void hwvga_store_planar(const uint8_t *src);
 
 static void hw_update(bool resync) {
     VGAState *v = g_pc->vga;
-    /* Mode X has the same aperture store-boundary loss as 16-colour VGA.
-     * Keep all unchained graphics in RAM. plane_update still maps simple
-     * single-plane writes directly, so those stores do not need emulation. */
+    /* Keep the 16-colour planar and text safeguards. Use native VGA for Mode X. */
     const bool planar_graphics = !(v->sr[4] & 8) && (v->gr[6] & 1);
-    int want = vga_vbe_on(v) || (safe_planar && (planar_graphics || vga_native_planar_needs_software(v))) ? WIN_EMU
+    const bool mode_x = planar_graphics && (v->gr[5] & 0x60) == 0x40;
+    int want = vga_vbe_on(v) || (safe_planar && planar_graphics && !mode_x) ? WIN_EMU
              : (v->sr[4] & 0x08) ? (vga_chain4_simple(v) ? WIN_RAM : WIN_EMU)
              : g_hwvga_on ? WIN_HW : WIN_EMU;
     const bool trap_text = want == WIN_HW && safe_planar && !(v->gr[6] & 1);
@@ -510,6 +518,7 @@ static void hw_update(bool resync) {
             io_pass_off();
             hwvga_sync(v);
         }
+        dos_vga_copy_mode(want == WIN_HW && mode_x);
         return;
     }
     io_pass_off();
@@ -520,6 +529,13 @@ static void hw_update(bool resync) {
         if (!vga_vbe_on(v) || (v->vbe_regs[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_NOCLEARMEM))
             hwvga_fetch(v);
         v->hw_mem = 0;
+        pc_vga_hold(0);
+    } else if (want == WIN_RAM && ram_planar && g_hwvga_on) {
+        /* The incoming chain-4 window expects linear pixels. Repack the
+         * previous planar image exactly like a direct HW -> RAM handoff. */
+        pc_vga_hold(1);
+        hwvga_store_planar(v->vga_ram);
+        hwvga_fetch(v);
         pc_vga_hold(0);
     } else if (want == WIN_HW && ram_13h && v->vga_ram_size >= 0x10000) {
         // leaving mode 13h: its pixels where chain 4 would have put them
@@ -545,6 +561,7 @@ static void hw_update(bool resync) {
     hw_on = want == WIN_HW;
     text_trapped = trap_text;
     v->hw_mem = hw_on;
+    dos_vga_copy_mode(hw_on && mode_x);
     printf("vmx: VGA window %s\n", want == WIN_HW ? (trap_text ? "on the real VGA (byte-safe text)" : "on the real VGA") : want == WIN_RAM ? "in memory (13h)" : "emulated");
 }
 
@@ -1039,6 +1056,100 @@ static bool fetch_code(uint32_t lin, uint8_t *code, unsigned n) {
     if ((uint64_t)first + split > vm.ram_size || (uint64_t)(last & ~0xfffu) + (n - split) > vm.ram_size) return false;
     memcpy(code, vm.ram + first, split);
     if (split < n) memcpy(code + split, vm.ram + (last & ~0xfffu), n - split);
+    return true;
+}
+
+/* MS-DOS 6.22 and 7.1 HMA copy routine. Only when physical Mode X is active, replace
+ * its verified REP prefix in RAM with a breakpoint. The original MOVSW is
+ * interpreted at that site so crossing VGA stores can be split. */
+static uint32_t dos_vga_copy_linear;
+static uint32_t dos_vga_copy_phys;
+static uint32_t dos_vga_copy_hits;
+static bool dos_vga_copy_enabled;
+static bool dos_vga_copy_native_mode;
+
+static void dos_vga_copy_mode(bool native_mode_x) {
+    if (native_mode_x == dos_vga_copy_native_mode) return;
+    dos_vga_copy_native_mode = native_mode_x;
+    dos_vga_copy_arm(native_mode_x);
+}
+
+static bool dos_vga_copy_find(uint32_t *linear, uint32_t *physical) {
+    /* Match the whole HMA copy sequence, not a generic REP MOVSW.
+     * A unique match is required. HMA ends at FFFF:FFFF inclusive. */
+    static const uint8_t expected[] = {
+        0x8c,0xc3,0x8e,0x06,0x2e,0x03,0x8e,0xdb,0x87,0xfe,0xd1,0xe9,
+        0xf3,0xa5,0x83,0xd1,0x00,0xf3,0xa4,0x07,0x36,0xc5,0x3e,0xe2,0x05
+    };
+    const uint32_t hma_start = 0x100000u, hma_end = 0x10fff0u;
+    const unsigned rep_offset = 12;
+    bool found = false;
+    for (uint32_t page = hma_start; page < hma_end; page += 4096) {
+        uint32_t base;
+        if (!lin_to_phys(page, &base) || (uint64_t)base + 4096 > vm.ram_size)
+            continue;
+        const unsigned limit = page + 4096 < hma_end ? 4096 : hma_end - page;
+        for (unsigned offset = 0; offset < limit; offset++) {
+            uint32_t ip = page + offset;
+            if (vm.ram[base + offset] != 0xf3 || ip < hma_start + rep_offset ||
+                ip + sizeof(expected) - rep_offset > hma_end)
+                continue;
+            uint8_t actual[sizeof(expected)];
+            if (!fetch_code(ip - rep_offset, actual, sizeof(actual)) ||
+                memcmp(actual, expected, sizeof(expected)))
+                continue;
+            if (found) return false;
+            *linear = ip;
+            *physical = base + offset;
+            found = true;
+        }
+    }
+    return found;
+}
+
+static void dos_vga_copy_arm(bool enable) {
+    const uint32_t bp = 1u << 3;
+    uint32_t bitmap = (uint32_t)vm_read(VMCS_EXCEPTION_BITMAP);
+    if (enable == dos_vga_copy_enabled) return;
+    if (!enable) {
+        if (vm.ram[dos_vga_copy_phys] == 0xcc)
+            vm.ram[dos_vga_copy_phys] = 0xf3;
+        vm_write(VMCS_EXCEPTION_BITMAP, bitmap & ~bp);
+        dos_vga_copy_enabled = false;
+        printf("dos VGA copy: %u calls, %u split writes\n", dos_vga_copy_hits, dos_vga_copy_splits);
+        return;
+    }
+    if ((bitmap & bp) || !a20_on) return;
+    uint32_t phys;
+    if (!dos_vga_copy_find(&dos_vga_copy_linear, &phys)) return;
+    dos_vga_copy_phys = phys;
+    dos_vga_copy_hits = dos_vga_copy_splits = 0;
+    vm.ram[phys] = 0xcc;
+    vm_write(VMCS_EXCEPTION_BITMAP, bitmap | bp);
+    dos_vga_copy_enabled = true;
+    printf("dos VGA copy: enabled at %05x\n", phys);
+}
+
+static bool dos_vga_copy_breakpoint(uint32_t info) {
+    if (!dos_vga_copy_enabled || (info & 0x800007ffu) != 0x80000603u) return false;
+    const uint64_t cs = vm_read(VMCS_GUEST_CS_BASE);
+    const uint64_t ip = vm_read(VMCS_GUEST_RIP);
+    uint32_t phys;
+    uint8_t code[2];
+    if (cs + ip != dos_vga_copy_linear ||
+        !lin_to_phys(dos_vga_copy_linear, &phys) || phys != dos_vga_copy_phys ||
+        !fetch_code(dos_vga_copy_linear, code, sizeof(code)) ||
+        code[0] != 0xcc || code[1] != 0xa5) {
+        vm_write(VMCS_ENTRY_INSTR_LEN, vm.exit_instr_len);
+        inject(3, 6, false, 0);
+        return true;
+    }
+    vm.ram[phys] = 0xf3;
+    dos_vga_copy_active = true;
+    dos_vga_copy_hits++;
+    emulate(1, 1);
+    dos_vga_copy_active = false;
+    vm.ram[phys] = 0xcc;
     return true;
 }
 
@@ -1646,6 +1757,7 @@ void wyse_cpu_step(PC *pc) {
             // with "trapexc 1" (debugging): the guest's exceptions, logged and
             // delivered as they were; otherwise only host NMIs come here
             uint32_t info = vm.exit_intr_info;
+            if (dos_vga_copy_breakpoint(info)) break;
             if ((info & 0x80000000u) && ((info >> 8) & 7) == 3) {
                 uint32_t vec = info & 0xff, err = (uint32_t)vm_read(VMCS_EXIT_INTR_ERRCODE);
                 if (vec == 1 && hw_watch) {
@@ -1690,6 +1802,7 @@ void wyse_cpu_reset(PC *pc) {
     wyse_cpu_pam_changed();
     plane_release();
     hw_update(true);
+    dos_vga_copy_mode(false);
     vm_reset_real(&vm, 0xf000, 0xfff0);
     vm_write(VMCS_GUEST_CS_BASE, 0xf0000);
     vm_write(VMCS_ENTRY_INTR_INFO, 0);

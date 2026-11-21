@@ -40,6 +40,7 @@ static int cfg_joystick     = 0;
 static int cfg_power_restore = POWER_RESTORE_ON;
 static int cfg_power_button  = 0;
 static int cfg_picture       = PICTURE_4_3;
+static int cfg_display_output = DISPLAY_AUTO;
 static int cfg_voodoo2       = 1;
 static int cfg_voodoo2_mem   = 12;
 static int cfg_wgpu_mb       = 64;
@@ -125,6 +126,15 @@ LIVE_SETTING(joystick,     cfg_joystick)
 LIVE_SETTING(power_restore, cfg_power_restore)
 LIVE_SETTING(power_button, cfg_power_button)
 LIVE_SETTING(picture,      cfg_picture)
+
+int config_get_display_output(void) { return cfg_display_output; }
+
+void config_set_display_output(int output)
+{
+    if (output < DISPLAY_AUTO || output > DISPLAY_MIRROR || output == cfg_display_output) return;
+    cfg_display_output = output;
+    changed = true;
+}
 LIVE_SETTING(voodoo2_turbo, cfg_voodoo2_turbo)
 LIVE_SETTING(graphics_turbo, cfg_graphics_turbo)
 
@@ -349,6 +359,8 @@ void config_set_from_ini(const char *name, const char *value)
     else if (!strcmp(name, "power_button")) cfg_power_button = v != 0;
     else if (!strcmp(name, "speed"))        cfg_speed = v < 0 ? -1 : v;
     else if (!strcmp(name, "picture"))      cfg_picture = v < 0 || v > 2 ? PICTURE_4_3 : v;
+    else if (!strcmp(name, "display_output"))
+        cfg_display_output = v >= DISPLAY_AUTO && v <= DISPLAY_MIRROR ? v : DISPLAY_AUTO;
     else if (!strcmp(name, "voodoo2_turbo")) cfg_voodoo2_turbo = v != 0;
     else if (!strcmp(name, "graphics_turbo")) cfg_graphics_turbo = v != 0;
     else
@@ -464,6 +476,7 @@ static bool write_config(void)
     ok &= putf(&fp, "power_restore", cfg_power_restore);
     ok &= putf(&fp, "power_button", cfg_power_button);
     ok &= putf(&fp, "picture", cfg_picture);
+    ok &= putf(&fp, "display_output", cfg_display_output);
     ok &= putf(&fp, "voodoo2_turbo", cfg_voodoo2_turbo);
     ok &= putf(&fp, "graphics_turbo", cfg_graphics_turbo);
     if (cfg_speed >= 0) ok &= putf(&fp, "speed", cfg_speed);

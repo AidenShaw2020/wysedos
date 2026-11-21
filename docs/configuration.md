@@ -21,6 +21,20 @@ The current section name is `[wyseDOS]`. Older `[X86Pi]` sections remain
 readable for backward compatibility. Saving from either menu rewrites the
 settings under `[wyseDOS]` with the same values; no manual migration is needed.
 
+## Display output
+
+Under **Win+F11 → GPU → Display output**, choose **Automatic** to use the
+display that the firmware selected at boot. **Monitor 1 only**, **Monitor 2
+only**, and **Mirror** take effect immediately. DOS or Windows resumes when
+you close Settings. Press **Enter** to keep the selection for the next boot.
+
+Mirror uses monitor 1's 1080p60 timing and digital audio. Both outputs scan
+the same framebuffer. This mode requires two HDMI or DVI (TMDS) sinks,
+such as monitors connected through passive DisplayPort-to-HDMI adapters,
+with 1080p60 support on both. Connect them before starting the Wyse. If
+mirror is unavailable at boot, the monitor uses the first output when
+available.
+
 ## CPU and memory
 
 Choose the processor separately from its speed in the CPU settings page.
@@ -65,6 +79,7 @@ backend CPUID behavior. [Intel Pentium II clock range](https://www.intel.com/pre
 | `[wyseDOS] tandy`, `covox`, `dss` | Optional audio sources |
 | `[wyseDOS] mouse`, `mouse_speed`, `mouse_invert_y` | Mouse enable, percent scaling, Y inversion |
 | `[wyseDOS] picture` | Layout: choose aspect/fill/integer options in Settings |
+| `[wyseDOS] display_output` | `0` automatic, `1` first DisplayPort, `2` second DisplayPort, `3` mirror |
 
 `[pc] hwvga=0` is a diagnostic startup override, not a prerequisite for
 automatic safe per-mode fallback. Not every debug key survives menu saving.

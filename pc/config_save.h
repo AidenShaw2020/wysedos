@@ -127,6 +127,11 @@ enum { PICTURE_4_3, PICTURE_FILL, PICTURE_SHARP_2X };
 extern int g_picture;
 int  config_get_picture(void);
 void config_set_picture(int how);
+
+enum { DISPLAY_AUTO, DISPLAY_MONITOR_1, DISPLAY_MONITOR_2, DISPLAY_MIRROR };
+int  config_get_display_output(void);
+void config_set_display_output(int output);
+
 int  config_get_power_button(void);
 void config_set_power_button(int hold);   /* 1 = hold four seconds */
 

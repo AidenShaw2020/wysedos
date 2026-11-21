@@ -71,6 +71,18 @@ static const int mouse_speed_options[] = { 25, 50, 75, 100, 125, 150, 200, 300, 
 static const int power_restore_options[] = { POWER_RESTORE_OFF, POWER_RESTORE_ON, POWER_RESTORE_LAST };
 static const int power_button_options[] = { 0, 1 };
 static const int picture_options[] = { PICTURE_4_3, PICTURE_FILL, PICTURE_SHARP_2X };
+#if WYSE_BUILD
+bool wyse_display_switch(int output);
+static bool display_switch_failed;
+
+static void display_output_preview(int output)
+{
+    display_switch_failed = !wyse_display_switch(output);
+    if (!display_switch_failed) config_set_display_output(output);
+}
+
+static const int display_options[] = { DISPLAY_AUTO, DISPLAY_MONITOR_1, DISPLAY_MONITOR_2, DISPLAY_MIRROR };
+#endif
 
 static const Row rows[] = {
     { ROW_TAB,     "CPU",                  0, 0, 0, 0, EFFECT_NOW },
@@ -91,6 +103,10 @@ static const Row rows[] = {
                                            0, 0, EFFECT_RESTART },
     { ROW_CHOICE,  "Picture",              config_get_picture, config_set_picture,
                                            picture_options, 3, EFFECT_NOW },
+#if WYSE_BUILD
+    { ROW_CHOICE,  "Display output",       config_get_display_output, display_output_preview,
+                                           display_options, sizeof display_options / sizeof *display_options, EFFECT_NOW },
+#endif
     { ROW_HEADING, "Voodoo2 3D card",      0, 0, 0, 0, EFFECT_NOW },
     { ROW_TOGGLE,  "Voodoo2",              config_get_voodoo2, config_set_voodoo2, 0, 0, EFFECT_RESTART },
     /* Null options: see row_options(). */
@@ -188,6 +204,9 @@ void settingsui_open(void)
 {
     if (state != STATE_CLOSED) return;
     state = STATE_MAIN;
+#if WYSE_BUILD
+    display_switch_failed = false;
+#endif
     osd_show();
     draw();
 }
@@ -265,6 +284,10 @@ static void format_value(const Row *r, char *out, size_t cap)
             if (v) snprintf(out, cap, "%d MHz", v);
             else   snprintf(out, cap, "full speed");
         }
+        else if (r->get == config_get_display_output)
+            snprintf(out, cap, "%s", v == DISPLAY_MONITOR_1 ? "monitor 1 only" :
+                                     v == DISPLAY_MONITOR_2 ? "monitor 2 only" :
+                                     v == DISPLAY_MIRROR ? "mirror" : "automatic");
         else if (r->set == config_set_picture)
             snprintf(out, cap, "%s", v == PICTURE_FILL ? "fill the screen" :
                                      v == PICTURE_SHARP_2X ? "sharp, 2x pixels" : "4:3");
@@ -366,6 +389,11 @@ static void draw(void)
      * part of the list rather than as a remark about the row under the
      * cursor.  A line that is always there stops being read.
      */
+#if WYSE_BUILD
+    if (rows[cursor].get == config_get_display_output && display_switch_failed)
+        osd_print(x, footer - 2, "Could not switch display output", OSD_ATTR_HINT);
+    else
+#endif
     if (rows[cursor].effect == EFFECT_RESTART)
         osd_print(x, footer - 2, "\x07 takes effect when the machine restarts",
                   OSD_ATTR(OSD_BROWN, OSD_BLUE));

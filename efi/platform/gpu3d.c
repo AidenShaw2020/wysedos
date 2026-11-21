@@ -708,6 +708,20 @@ void gpu3d_idle_release(void)
     }
     unlock();
 }
+/* Caller has paused all render producers. A completed fence can be ahead
+ * of the final padding; wait for both before disabling the ring. */
+bool gpu3d_close_for_modeset(bool *reopen) {
+    *reopen = g.open;
+    if (!g.open) return true;
+    uint64_t deadline = wyse_ticks_us() + 100000;
+    while (!g.suspended && (gpu3d_busy() || (rd(RCS + 0x34) & 0x1ffffcu) != g.ring_tail)) {
+        if (wyse_ticks_us() >= deadline) return false;
+        __asm__ volatile("pause");
+    }
+    gpu3d_close();
+    return !g.open;
+}
+
 uint32_t gpu3d_resets(void) { return g.resets; }
 
 void gpu3d_report(void)
