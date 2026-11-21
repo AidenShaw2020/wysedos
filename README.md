@@ -57,7 +57,7 @@ a 64 MB GPU workspace. Each figure applies to the scene measured.
 | **Duke Nukem 3D** | 320×200 | In-game **DNRATE** counter in the clip's final, separately marked scene |
 | **Tyrian 2000** | 320×200 | **31.2 FPS** — separate early-level debug sample, normal speed / low detail |
 | **Tomb Raider / DOS Glide** | 640x480 | **21.71 FPS** - 437 completed frames / 20.129 s at the stationary level start |
-| **NFS III / Windows 98, Direct3D 5** | 640x480 | **29.59 FPS** over 20.984 s of driving |
+| **NFS III / Windows 98, Direct3D 5** | 640x480 | **29.63 FPS** over 20.152 s of driving at full CPU speed |
 | **NFS III / Windows 2000, Direct3D 5** | 640x480 | **27.65 FPS** over 30.02 s of driving |
 | **NFS III / Windows XP, Direct3D 5** | 640x480 | **27.94 FPS** over 30.03 s of driving |
 | **NFS III / Windows 98, Glide** | 640x480 | **16.47 swap calls/s** over 15.001 s of driving |
@@ -109,11 +109,12 @@ https://github.com/user-attachments/assets/ccedbfa9-1434-4aef-a04d-e2ba064c99da
 </details>
 
 <details>
-<summary><strong>Need for Speed III</strong> · 25 seconds · Windows DirectX / DX5</summary>
+<summary><strong>Need for Speed III</strong> · 20 seconds · Full Speed · Windows Direct3D 5</summary>
 
-Hometown / Corvette, driving with the original DX5 renderer, VSync and sound.
+Hometown / Corvette, driving at 640×480×16 with the original DX5 renderer.
+The new recording has no audio track.
 
-https://github.com/user-attachments/assets/5b0644e6-2e52-42bc-a817-b1f0330182d2
+https://github.com/user-attachments/assets/6734fee0-3dba-40bc-9cc6-420ea98861fc
 
 </details>
 
