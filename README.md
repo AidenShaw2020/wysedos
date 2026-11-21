@@ -39,8 +39,8 @@ emulation.
 
 These games run on a **Dell Wyse 3040** under DOS, Windows 98, Windows 2000
 and Windows XP. The clips play at their original speed in **720p60**.
-Windows 2000 and XP were captured directly over HDMI with digital audio, and
-the earlier DOS clips other than Doom have sound enabled. Game FPS is measured
+Windows 2000 and XP were captured directly over HDMI with digital audio.
+The new Doom, Duke Nukem 3D and Windows 98 Direct3D clips are silent. Game FPS is measured
 separately from the capture rate. Doom and Quake use sound-off timedemos,
 Duke Nukem 3D shows its in-game counter for the scene, and Tyrian 2000 uses a
 separate first-level sample at normal speed.
@@ -54,7 +54,7 @@ a 64 MB GPU workspace. Each figure applies to the scene measured.
 |---|---|---|
 | **Doom** | 320×200, high detail | **83.74 FPS** — `demo3` timedemo at full CPU speed, sound off |
 | **Quake** | 320×200 → 640×480 | **62.4 → 16.6 FPS** — separate `demo1` timedemos, sound off |
-| **Duke Nukem 3D** | 320×200 | In-game **DNRATE** counter in the clip's final, separately marked scene |
+| **Duke Nukem 3D** | 320×200 | **349 FPS** — a single rooftop DNRATE reading at full CPU speed |
 | **Tyrian 2000** | 320×200 | **31.2 FPS** — separate early-level debug sample, normal speed / low detail |
 | **Tomb Raider / DOS Glide** | 640x480 | **21.71 FPS** - 437 completed frames / 20.129 s at the stationary level start |
 | **NFS III / Windows 98, Direct3D 5** | 640x480 | **29.63 FPS** over 20.152 s of driving at full CPU speed |
@@ -81,12 +81,11 @@ https://github.com/user-attachments/assets/adaf09d4-b03b-4b69-a57e-363d88114b64
 </details>
 
 <details>
-<summary><strong>Duke Nukem 3D</strong> · 25 seconds · action demo and live FPS counter</summary>
+<summary><strong>Duke Nukem 3D</strong> · 24 seconds · Full Speed · live FPS counter</summary>
 
-An 18-second built-in demo is followed by a clearly marked 7-second rooftop
-scene showing the game's own FPS counter. Its values apply to that scene.
+The game's DNRATE counter is visible throughout the E1L1 rooftop scene.
 
-https://github.com/user-attachments/assets/7ca1a682-eaba-4a30-b432-ed5d3b593327
+https://github.com/user-attachments/assets/17264846-378d-4194-8b7d-9c1bae3461fa
 
 </details>
 

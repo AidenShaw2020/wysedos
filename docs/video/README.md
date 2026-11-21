@@ -7,8 +7,8 @@ automatic CPU acceleration was enabled for DOS Glide and Windows 3D in the earli
 No separate Windows booster program is installed.
 
 These are scene samples, not whole-game averages or controlled comparisons
-between renderers. The videos are 1280x720 at 60 fps with a captured digital
-audio track; container frame rate is not game FPS. Tomb Raider's installed
+between renderers. The videos are 1280x720 at 60 fps. The earlier clips have a
+digital audio track. Game FPS is measured separately. Tomb Raider's installed
 configuration has game sound disabled. Game data is not distributed.
 
 ## Full Speed measurements
@@ -17,6 +17,10 @@ Doom `demo3`, 320×200 high detail with sound off, finished 1091 game ticks
 in 456 real ticks at 35 Hz on the Wyse 3040, yielding **83.74 FPS**. The
 [16-second Doom clip](01-doom-full-speed.mp4) is normal demo playback at
 720p60 without an audio track.
+
+[Duke Nukem 3D 1.3D](03-duke3d-full-speed.mp4) ran from eMMC at 320×200.
+DNRATE showed **349 FPS** while standing on the E1L1 rooftop. The silent
+24-second clip shows the live counter as the view changes.
 
 [Need for Speed III on Windows 98](06-nfs3-directx.mp4) used 640×480×16
 and the native Direct3D 5 renderer on Hometown with the Corvette.
