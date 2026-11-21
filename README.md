@@ -61,7 +61,7 @@ a 64 MB GPU workspace. Each figure applies to the scene measured.
 | **NFS III / Windows 2000, Direct3D 5** | 640x480 | **27.73 FPS** over 30.009 s of driving at full CPU speed |
 | **NFS III / Windows XP, Direct3D 5** | 640x480 | **27.94 FPS** over 30.03 s of driving |
 | **NFS III / Windows 98, Glide** | 640x480 | **16.09 FPS** over 20.143 s of driving at full CPU speed |
-| **Quake II / Windows 98, 2000 and XP, OpenGL** | 640x480 | **35.09 / 27.59 / 29.53 FPS**, separate opening-scene rotation |
+| **Quake II / Windows 98, 2000 and XP, OpenGL** | 640x480 | **34.27 / 27.59 / 29.53 FPS**, separate opening-scene rotation |
 
 <details open>
 <summary><strong>Doom</strong> · 22 seconds · Full Speed · high-detail demo with sound</summary>
@@ -127,12 +127,12 @@ https://github.com/user-attachments/assets/33a2a4d4-f63b-442e-ba44-adeba062eead
 </details>
 
 <details>
-<summary><strong>Quake II</strong> · 25 seconds · Windows OpenGL</summary>
+<summary><strong>Quake II</strong> · 23 seconds · Windows 98 OpenGL</summary>
 
-Velocity9x Intel Gen8 OpenGL. The 35.09 FPS result is the separate opening
-rotation benchmark, not the moving footage's average.
+Velocity9x Intel Gen8 OpenGL, with digital game audio. The 34.27 FPS result
+comes from a separate Outer Base rotation benchmark.
 
-https://github.com/user-attachments/assets/25071566-8de0-40da-a41e-ed08b81dc538
+https://github.com/user-attachments/assets/81d9c815-3b25-4f94-9cd2-6784b43ee24c
 
 </details>
 

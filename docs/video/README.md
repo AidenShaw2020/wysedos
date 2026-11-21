@@ -50,6 +50,11 @@ The display driver counted 324 handled DirectDraw flips in 20.143 s
 (**16.09 FPS**). The clip includes digital game audio and omits the
 bottom leaderboard row.
 
+[Quake II on Windows 98](08-quake2-opengl.mp4) used Velocity9x Intel
+Gen8 OpenGL at 640×480. The separate Outer Base `timerefresh` timed
+128 views in 3.734579 s (**34.27 FPS**). In the Comm Center clip the
+game uses `gl_modulate 2` and DirectSound at 22,050 Hz.
+
 [Need for Speed III on Windows 2000](09-nfs3-windows2000-directx.mp4)
 used the same Hometown route and 640×480×16 graphics settings. It
 completed 832 VGA page flips over 30.009 s (**27.73 FPS**) at Full
@@ -69,7 +74,7 @@ includes digital game audio.
 | DOS Tomb Raider / Glide (earlier clip) | 640x480, Voodoo2 emulation, CPU span renderer | 437 completed buffer changes / 20.129 s = **21.71 FPS**, original stationary level start; sound disabled |
 | Windows NFS III / DirectX (earlier clip) | 640x480, native **DX5**, Hometown / Corvette | 621 handled Flips / 20.984 s = **29.59 FPS**, driving; zero declined Flips throughout the run |
 | Windows NFS III / Glide (earlier clip) | 640x480, Velocity9x Glide3, Hometown / Corvette | 247 swap calls / 15.001 s = **16.47 swaps/s**, complete periodic interval inside the marked race sample |
-| [Windows Quake II test / OpenGL](08-quake2-opengl.mp4) | 640x480, Velocity9x Intel Gen8 ICD | Separate opening-scene rotation: 128 views / 3.647994 s = **35.087779 FPS** |
+| Windows Quake II test / OpenGL (earlier clip) | 640x480, Velocity9x Intel Gen8 ICD | Separate opening-scene rotation: 128 views / 3.647994 s = **35.087779 FPS** |
 | Windows 2000 NFS III / DirectX (earlier clip) | 640x480x16, Direct3D 5, Hometown / Corvette | **27.65 FPS** over 30.02 s of a race with the Windows 98 detail preset |
 | [Windows XP NFS III / DirectX](10-nfs3-windowsxp-directx.mp4) | 640x480x16, Direct3D 5, Hometown / Corvette | **27.94 FPS** over 30.03 s with the same detail preset |
 | Windows 2000 Quake II / OpenGL (earlier clip) | 640x480, RGB565/Z16, WGPU OpenGL ICD | **29.44 FPS** in the separate 128-view opening-scene rotation |
