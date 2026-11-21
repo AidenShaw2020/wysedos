@@ -14,9 +14,9 @@ configuration has game sound disabled. Game data is not distributed.
 ## Full Speed measurements
 
 Doom `demo3`, 320×200 high detail with sound off, finished 1091 game ticks
-in 456 real ticks at 35 Hz on the Wyse 3040, yielding **83.74 FPS**. The
-[16-second Doom clip](01-doom-full-speed.mp4) is normal demo playback at
-720p60 without an audio track.
+in 440 real ticks at 35 Hz from eMMC on the Wyse 3040, yielding **86.78 FPS**.
+The [22-second Doom clip](01-doom-full-speed.mp4) shows the same demo at
+normal speed with digital game audio.
 
 [Duke Nukem 3D 1.3D](03-duke3d-full-speed.mp4) ran from eMMC at 320×200.
 DNRATE showed **349 FPS** while standing on the E1L1 rooftop. The silent
