@@ -3,6 +3,14 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.24 - 2026-11-21
+
+- Let Jazz Jackrabbit CD 1.2 start at Full Speed by handling the startup
+  overflow in its 16-bit delay calibration.
+- Correct Mode X VGA latch behavior in the affected modes while retaining
+  hardware VGA acceleration for other modes.
+- Correct PC speaker timing during the Monster Bash startup transition.
+
 ## v1.1.23 - 2026-11-21
 
 - Keep all four logical floppy controller units independent. Windows 98 can
