@@ -8,8 +8,8 @@ No separate Windows booster program is installed.
 
 These are scene samples, not whole-game averages or controlled comparisons
 between renderers. The videos are 1280x720 at 60 fps. The earlier clips have a
-digital audio track. Game FPS is measured separately. Tomb Raider's installed
-configuration has game sound disabled. Game data is not distributed.
+digital audio track. Game FPS is measured separately. Game data is not
+distributed.
 
 ## Full Speed measurements
 
@@ -33,6 +33,11 @@ profile in the Torm level at 320×200 on Normal difficulty. The
 in-game debug display reached **34.746 FPS** in the recorded section.
 The clip includes the game's original music and effects.
 
+[Tomb Raider / DOS Glide](05-tombraider-dos-glide.mp4) completed 450
+Voodoo2 frames in 20.501 s at the stationary Caves entrance (**21.95 FPS**).
+The moving clip uses the same DOS Glide renderer and includes Sound Blaster
+effects.
+
 [Need for Speed III on Windows 98](06-nfs3-directx.mp4) used 640×480×16
 and the native Direct3D 5 renderer on Hometown with the Corvette.
 The driver counted 597 handled flips over 20.152 s (**29.63 FPS**) from
@@ -43,7 +48,7 @@ bottom row of the race leaderboard.
 
 | Recording | Game mode | Measurement |
 | --- | --- | --- |
-| [DOS Tomb Raider / Glide](05-tombraider-dos-glide.mp4) | 640x480, Voodoo2 emulation, CPU span renderer | 437 completed buffer changes / 20.129 s = **21.71 FPS**, original stationary level start; later movement is unmeasured |
+| DOS Tomb Raider / Glide (earlier clip) | 640x480, Voodoo2 emulation, CPU span renderer | 437 completed buffer changes / 20.129 s = **21.71 FPS**, original stationary level start; sound disabled |
 | Windows NFS III / DirectX (earlier clip) | 640x480, native **DX5**, Hometown / Corvette | 621 handled Flips / 20.984 s = **29.59 FPS**, driving; zero declined Flips throughout the run |
 | [Windows NFS III / Glide](07-nfs3-glide.mp4) | 640x480, Velocity9x Glide3, Hometown / Corvette | 247 swap calls / 15.001 s = **16.47 swaps/s**, complete periodic interval inside the marked race sample |
 | [Windows Quake II test / OpenGL](08-quake2-opengl.mp4) | 640x480, Velocity9x Intel Gen8 ICD | Separate opening-scene rotation: 128 views / 3.647994 s = **35.087779 FPS** |
@@ -88,10 +93,8 @@ A repeat after native Windows 2D, Direct3D, Glide2 and OpenGL checks measured
 
 ## Measurement and capture limits
 
-The replacement Tomb Raider and DX5 clips use direct digital capture with
-an explicitly negotiated 60 fps input and 48 kHz audio. Host timestamps align
-the counter intervals with capture. The first Tomb Raider section remains
-stationary for the measurement; the final short movement is unmeasured.
+The new Tomb Raider clip uses digital capture at 60 fps with 48 kHz audio.
+The stationary Tomb Raider benchmark ran separately from the moving footage.
 Capture may still lose or duplicate frames and cannot independently prove
 the game's frame cadence. Playback remains at original speed.
 

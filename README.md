@@ -57,7 +57,7 @@ a 64 MB GPU workspace. Each figure applies to the scene measured.
 | **Quake** | 320×200 → 640×480 | **211.6 → 21.1 FPS** — separate `demo1` timedemos at full CPU speed, sound off |
 | **Duke Nukem 3D** | 320×200 | **698 FPS** — a single rooftop DNRATE reading at full CPU speed |
 | **Tyrian 2000** | 320×200 | **34.746 FPS** — in-game debug sample in Torm, Normal difficulty, full CPU speed |
-| **Tomb Raider / DOS Glide** | 640x480 | **21.71 FPS** - 437 completed frames / 20.129 s at the stationary level start |
+| **Tomb Raider / DOS Glide** | 640x480 | **21.95 FPS** — 450 completed frames / 20.501 s at the stationary level start |
 | **NFS III / Windows 98, Direct3D 5** | 640x480 | **29.63 FPS** over 20.152 s of driving at full CPU speed |
 | **NFS III / Windows 2000, Direct3D 5** | 640x480 | **27.65 FPS** over 30.02 s of driving |
 | **NFS III / Windows XP, Direct3D 5** | 640x480 | **27.94 FPS** over 30.03 s of driving |
@@ -98,13 +98,12 @@ https://github.com/user-attachments/assets/85ccbf9c-c665-42f7-9f70-3d50fd106354
 </details>
 
 <details>
-<summary><strong>Tomb Raider</strong> · 30 seconds · DOS Glide</summary>
+<summary><strong>Tomb Raider</strong> · 17 seconds · Full Speed · DOS Glide and Sound Blaster</summary>
 
-The measured section is the original stationary level start, followed by
-unmeasured movement. After using Windows 3D, a repeat through a DOS boot
-measured 21.68 FPS in the same scene.
+The benchmark held Lara at the Caves entrance. The clip shows movement
+from that location, with Sound Blaster effects.
 
-https://github.com/user-attachments/assets/ccedbfa9-1434-4aef-a04d-e2ba064c99da
+https://github.com/user-attachments/assets/6c7109fd-8203-4a22-94b8-52087020eac2
 
 </details>
 
