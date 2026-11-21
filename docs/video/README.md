@@ -7,8 +7,8 @@ automatic CPU acceleration was enabled for DOS Glide and Windows 3D in the earli
 No separate Windows booster program is installed.
 
 These are scene samples, not whole-game averages or controlled comparisons
-between renderers. The videos are 1280x720 at 60 fps. The earlier clips have a
-digital audio track. Game FPS is measured separately. Game data is not
+between renderers. The videos are 1280x720 at 60 fps. The Full Speed clips include
+digital game audio. Game FPS is measured separately. Game data is not
 distributed.
 
 ## Full Speed measurements
@@ -72,6 +72,11 @@ used the same Hometown route and 640×480×16 graphics settings. The Full
 Speed sample completed 869 VGA page flips in 30.018 s (**28.95 FPS**).
 The clip includes digital game audio and crops the bottom leaderboard row.
 
+[Quake II on Windows XP](12-quake2-windowsxp-opengl.mp4) used the WGPU
+OpenGL ICD at 640×480. Outer Base `timerefresh` took 4.606140 s for 128
+views (**27.79 FPS**) at default lightmap intensity. The Comm Center clip
+uses `gl_modulate 2` and includes digital game audio.
+
 ## Earlier measurements
 
 | Recording | Game mode | Measurement |
@@ -83,7 +88,7 @@ The clip includes digital game audio and crops the bottom leaderboard row.
 | Windows 2000 NFS III / DirectX (earlier clip) | 640x480x16, Direct3D 5, Hometown / Corvette | **27.65 FPS** over 30.02 s of a race with the Windows 98 detail preset |
 | Windows XP NFS III / DirectX (earlier clip) | 640x480x16, Direct3D 5, Hometown / Corvette | **27.94 FPS** over 30.03 s with the same detail preset |
 | Windows 2000 Quake II / OpenGL (earlier clip) | 640x480, RGB565/Z16, WGPU OpenGL ICD | **29.44 FPS** in the separate 128-view opening-scene rotation |
-| [Windows XP Quake II / OpenGL](12-quake2-windowsxp-opengl.mp4) | 640x480, RGB565/Z16, same ICD | **29.53 FPS** in the separate 128-view opening-scene rotation |
+| Windows XP Quake II / OpenGL (earlier clip) | 640x480, RGB565/Z16, same ICD | **29.53 FPS** in the separate 128-view opening-scene rotation |
 
 NFS retains medium graphics, mirror, VSync and sound. Its clips contain
 different geometry and do not establish an API speed comparison. Quake II's

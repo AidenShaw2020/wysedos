@@ -37,17 +37,15 @@ emulation.
 
 ## Game showcase
 
-These games run on a **Dell Wyse 3040** under DOS, Windows 98, Windows 2000
-and Windows XP. The clips play at their original speed in **720p60**.
-Windows 2000 and XP were captured directly over HDMI with digital audio.
-The newly recorded clips include digital game audio. Game FPS is measured
-separately from the capture rate. Doom and Quake use sound-off timedemos,
+These games run at full CPU speed on a **Dell Wyse 3040** under DOS,
+Windows 98, Windows 2000 and Windows XP. The **720p60** clips play at their
+original speed with digital game audio. Game FPS is measured separately
+from the capture rate. Doom and Quake use sound-off timedemos,
 Duke Nukem 3D shows its in-game counter for the scene, and Tyrian 2000 uses a
 debug sample from early in the level.
 
-CPU settings for earlier captures are listed in the recording notes. The
-Windows 2000 and XP measurements already used full speed. Windows 98 uses
-a 64 MB GPU workspace. Each figure applies to the scene measured.
+Windows 98 uses a 64 MB GPU workspace. Each figure applies to the scene
+measured. The recording notes describe the setup and earlier measurements.
 [Recording conditions](docs/video/README.md)
 
 | Game | Game resolution | Performance measurement |
@@ -61,7 +59,7 @@ a 64 MB GPU workspace. Each figure applies to the scene measured.
 | **NFS III / Windows 2000, Direct3D 5** | 640x480 | **27.73 FPS** over 30.009 s of driving at full CPU speed |
 | **NFS III / Windows XP, Direct3D 5** | 640x480 | **28.95 FPS** over 30.018 s of driving |
 | **NFS III / Windows 98, Glide** | 640x480 | **16.09 FPS** over 20.143 s of driving at full CPU speed |
-| **Quake II / Windows 98, 2000 and XP, OpenGL** | 640x480 | **34.27 / 27.59 / 29.53 FPS**, separate opening-scene rotation |
+| **Quake II / Windows 98, 2000 and XP, OpenGL** | 640x480 | **34.27 / 27.59 / 27.79 FPS**, separate opening-scene rotation |
 
 <details open>
 <summary><strong>Doom</strong> · 22 seconds · Full Speed · high-detail demo with sound</summary>
@@ -163,7 +161,7 @@ https://github.com/user-attachments/assets/e2d83831-dc84-4633-ad04-a7059551e9b3
 
 **Windows XP**
 
-https://github.com/user-attachments/assets/06a94201-6ad6-4418-8548-4897e0b06978
+https://github.com/user-attachments/assets/aa0332ea-416e-4d3d-8c20-c2023f710e04
 
 </details>
 
