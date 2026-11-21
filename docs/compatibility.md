@@ -38,6 +38,30 @@ and physical output matter.
 | M602 | Native-disk file manager, input and idle/screen-saver use |
 | Lemmings | Historical raster-palette work; latest VGA regression reached menus, not newly qualified gameplay |
 
+## Game-specific behavior
+
+These observations apply to the DOS versions tested on a Dell Wyse 3040.
+
+### Jazz Jackrabbit CD 1.2
+
+Set guest RAM to **16 MiB** for the tested MS-DOS 7.1 profile with
+EMM386. With 64 MiB, this copy repeatedly reset the guest during launch
+on v1.1.22 and v1.1.23. Other RAM sizes may behave differently.
+
+CPU speed affects a separate startup check. The original Borland CRT
+can report `Runtime error 200` at Full Speed. A firmware build with
+the CRT compatibility fix can start the game at **Full Speed** with
+16 MiB, without changing the CPU speed during play.
+
+### Monster Bash
+
+On affected firmware, a repeating PC speaker buzz can be heard around
+the blood wipe before the title screen. The game switches PIT channel 2
+to square-wave mode without loading a new divisor. Firmware with the
+PIT fix keeps the speaker enabled while the title music plays as usual.
+On older builds, setting the **PC speaker** mixer level to zero removes
+the buzz while retaining AdLib music and Sound Blaster output.
+
 ## Measurements
 
 The README showcase uses 720p60 capture with sound. Capture frame rate is not

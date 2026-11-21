@@ -177,6 +177,7 @@ Start with the [documentation index](docs/index.md):
 - [Storage, USB and image mounting](docs/storage.md)
 - [Architecture and source map](docs/architecture.md)
 - [Compatibility and known limits](docs/compatibility.md)
+- [Game-specific behavior](docs/compatibility.md#game-specific-behavior)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Building and testing](docs/development.md)
 - [Porting to other hardware](docs/portability.md)
