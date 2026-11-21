@@ -1,5 +1,7 @@
 bc612cd415a56fb5a28250a3f8e00ff7f74425809a64e38e4592d814d8e8f673  01-doom-full-speed.jpg
 625133956a6dd51283cc929acfa6c4d7dcce194504c01f2e57f97ed2b9d6512c  01-doom-full-speed.mp4
+47ceeb6a42fc1f51e7b8ca8c5726a9a96feba5d7df621efbbeba352b7c5d6a36  02-quake-comparison.jpg
+2856a41d45cdd58f627100eba59e4c7ca0fc88bb71a033a53a3b306601c9e575  02-quake-comparison.mp4
 033b8645db210cb28e36804d468166442e07ef960aa4aad84f8c60b5f62c4053  03-duke3d-full-speed.jpg
 7a4bd445dcc9cb70c8e5aa35b8e8c54971f89e0c78aba48bc755d4b5d809152c  03-duke3d-full-speed.mp4
 fa7db51dceb5847db9a158e5cd7e4ac39ece5aa6514f0953f31c612ab7114105  05-tombraider-dos-glide.jpg

@@ -18,6 +18,11 @@ in 440 real ticks at 35 Hz from eMMC on the Wyse 3040, yielding **86.78 FPS**.
 The [22-second Doom clip](01-doom-full-speed.mp4) shows the same demo at
 normal speed with digital game audio.
 
+[Quake 1.06](02-quake-comparison.mp4) ran the sound-off `demo1` timedemo
+from a DOS 6.22 PXE disk. It completed 969 frames in both runs, with
+**211.6 FPS at 320×200** and **21.1 FPS at 640×480** in VESA mode.
+The video shows normal playback with game audio in both modes.
+
 [Duke Nukem 3D 1.3D](03-duke3d-full-speed.mp4) ran from eMMC at 320×200.
 DNRATE showed **698 FPS** in one stationary sample on the E1L1 rooftop.
 The 25-second clip shows the live counter as the view changes and includes

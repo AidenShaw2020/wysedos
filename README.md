@@ -54,7 +54,7 @@ a 64 MB GPU workspace. Each figure applies to the scene measured.
 | Game | Game resolution | Performance measurement |
 |---|---|---|
 | **Doom** | 320×200, high detail | **86.78 FPS** — `demo3` timedemo at full CPU speed, sound off |
-| **Quake** | 320×200 → 640×480 | **62.4 → 16.6 FPS** — separate `demo1` timedemos, sound off |
+| **Quake** | 320×200 → 640×480 | **211.6 → 21.1 FPS** — separate `demo1` timedemos at full CPU speed, sound off |
 | **Duke Nukem 3D** | 320×200 | **698 FPS** — a single rooftop DNRATE reading at full CPU speed |
 | **Tyrian 2000** | 320×200 | **31.2 FPS** — separate early-level debug sample, normal speed / low detail |
 | **Tomb Raider / DOS Glide** | 640x480 | **21.71 FPS** - 437 completed frames / 20.129 s at the stationary level start |
@@ -72,12 +72,12 @@ https://github.com/user-attachments/assets/7661e96b-a27b-41e7-bae6-5604fc8ac841
 </details>
 
 <details>
-<summary><strong>Quake</strong> · 30 seconds · 320×200 and 640×480 side-by-side in time</summary>
+<summary><strong>Quake</strong> · 24 seconds · Full Speed · 320×200 and 640×480</summary>
 
-The resolution changes after 15 seconds. Both segments use the software
-renderer with sound effects enabled.
+The resolution changes after 12 seconds. Both segments use the software
+renderer with the original sound effects.
 
-https://github.com/user-attachments/assets/adaf09d4-b03b-4b69-a57e-363d88114b64
+https://github.com/user-attachments/assets/e54082f6-e940-4ba7-9c8a-d24778b0deea
 
 </details>
 
