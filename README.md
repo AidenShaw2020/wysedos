@@ -40,7 +40,7 @@ emulation.
 These games run on a **Dell Wyse 3040** under DOS, Windows 98, Windows 2000
 and Windows XP. The clips play at their original speed in **720p60**.
 Windows 2000 and XP were captured directly over HDMI with digital audio, and
-the four original DOS clips have sound enabled. Game FPS is measured
+the earlier DOS clips other than Doom have sound enabled. Game FPS is measured
 separately from the capture rate. Doom and Quake use sound-off timedemos,
 Duke Nukem 3D shows its in-game counter for the scene, and Tyrian 2000 uses a
 separate first-level sample at normal speed.
@@ -64,9 +64,9 @@ a 64 MB GPU workspace. Each figure applies to the scene measured.
 | **Quake II / Windows 98, 2000 and XP, OpenGL** | 640x480 | **35.09 / 29.44 / 29.53 FPS**, separate opening-scene rotation |
 
 <details open>
-<summary><strong>Doom</strong> · 18 seconds · high-detail demo with sound</summary>
+<summary><strong>Doom</strong> · 16 seconds · Full Speed · high-detail demo</summary>
 
-https://github.com/user-attachments/assets/93d561f5-158c-41cc-b80b-a2e4b9697752
+https://github.com/user-attachments/assets/714c3bad-620a-4591-84da-37f0a494c5aa
 
 </details>
 

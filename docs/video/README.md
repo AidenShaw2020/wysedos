@@ -14,7 +14,9 @@ configuration has game sound disabled. Game data is not distributed.
 ## Full Speed measurements
 
 Doom `demo3`, 320×200 high detail with sound off, finished 1091 game ticks
-in 456 real ticks at 35 Hz on the Wyse 3040, yielding **83.74 FPS**.
+in 456 real ticks at 35 Hz on the Wyse 3040, yielding **83.74 FPS**. The
+[16-second Doom clip](01-doom-full-speed.mp4) is normal demo playback at
+720p60 without an audio track.
 
 ## Earlier measurements
 
