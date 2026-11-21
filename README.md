@@ -62,7 +62,7 @@ a 64 MB GPU workspace. Each figure applies to the scene measured.
 | **NFS III / Windows 2000, Direct3D 5** | 640x480 | **27.73 FPS** over 30.009 s of driving at full CPU speed |
 | **NFS III / Windows XP, Direct3D 5** | 640x480 | **27.94 FPS** over 30.03 s of driving |
 | **NFS III / Windows 98, Glide** | 640x480 | **16.47 swap calls/s** over 15.001 s of driving |
-| **Quake II / Windows 98, 2000 and XP, OpenGL** | 640x480 | **35.09 / 29.44 / 29.53 FPS**, separate opening-scene rotation |
+| **Quake II / Windows 98, 2000 and XP, OpenGL** | 640x480 | **35.09 / 27.59 / 29.53 FPS**, separate opening-scene rotation |
 
 <details open>
 <summary><strong>Doom</strong> · 22 seconds · Full Speed · high-detail demo with sound</summary>
@@ -160,7 +160,7 @@ the separate 640x480 opening-scene benchmark with default intensity.
 
 **Windows 2000**
 
-https://github.com/user-attachments/assets/91c403b7-9baf-426a-bde5-9562891d5ccc
+https://github.com/user-attachments/assets/e2d83831-dc84-4633-ad04-a7059551e9b3
 
 **Windows XP**
 
