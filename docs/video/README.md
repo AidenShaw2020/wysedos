@@ -19,8 +19,9 @@ The [22-second Doom clip](01-doom-full-speed.mp4) shows the same demo at
 normal speed with digital game audio.
 
 [Duke Nukem 3D 1.3D](03-duke3d-full-speed.mp4) ran from eMMC at 320×200.
-DNRATE showed **349 FPS** while standing on the E1L1 rooftop. The silent
-24-second clip shows the live counter as the view changes.
+DNRATE showed **698 FPS** in one stationary sample on the E1L1 rooftop.
+The 25-second clip shows the live counter as the view changes and includes
+digital game audio.
 
 [Need for Speed III on Windows 98](06-nfs3-directx.mp4) used 640×480×16
 and the native Direct3D 5 renderer on Hometown with the Corvette.

@@ -40,8 +40,8 @@ emulation.
 These games run on a **Dell Wyse 3040** under DOS, Windows 98, Windows 2000
 and Windows XP. The clips play at their original speed in **720p60**.
 Windows 2000 and XP were captured directly over HDMI with digital audio.
-The Doom clip includes digital game audio. The current Duke Nukem 3D and
-Windows 98 Direct3D clips are silent. Game FPS is measured
+The Doom and Duke Nukem 3D clips include digital game audio. The current
+Windows 98 Direct3D clip is silent. Game FPS is measured
 separately from the capture rate. Doom and Quake use sound-off timedemos,
 Duke Nukem 3D shows its in-game counter for the scene, and Tyrian 2000 uses a
 separate first-level sample at normal speed.
@@ -55,7 +55,7 @@ a 64 MB GPU workspace. Each figure applies to the scene measured.
 |---|---|---|
 | **Doom** | 320×200, high detail | **86.78 FPS** — `demo3` timedemo at full CPU speed, sound off |
 | **Quake** | 320×200 → 640×480 | **62.4 → 16.6 FPS** — separate `demo1` timedemos, sound off |
-| **Duke Nukem 3D** | 320×200 | **349 FPS** — a single rooftop DNRATE reading at full CPU speed |
+| **Duke Nukem 3D** | 320×200 | **698 FPS** — a single rooftop DNRATE reading at full CPU speed |
 | **Tyrian 2000** | 320×200 | **31.2 FPS** — separate early-level debug sample, normal speed / low detail |
 | **Tomb Raider / DOS Glide** | 640x480 | **21.71 FPS** - 437 completed frames / 20.129 s at the stationary level start |
 | **NFS III / Windows 98, Direct3D 5** | 640x480 | **29.63 FPS** over 20.152 s of driving at full CPU speed |
@@ -82,11 +82,11 @@ https://github.com/user-attachments/assets/adaf09d4-b03b-4b69-a57e-363d88114b64
 </details>
 
 <details>
-<summary><strong>Duke Nukem 3D</strong> · 24 seconds · Full Speed · live FPS counter</summary>
+<summary><strong>Duke Nukem 3D</strong> · 25 seconds · Full Speed · live FPS counter and sound</summary>
 
 The game's DNRATE counter is visible throughout the E1L1 rooftop scene.
 
-https://github.com/user-attachments/assets/17264846-378d-4194-8b7d-9c1bae3461fa
+https://github.com/user-attachments/assets/2ec6219c-977c-4903-a145-c0b0ed2a0e31
 
 </details>
 
