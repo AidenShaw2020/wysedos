@@ -44,6 +44,12 @@ The driver counted 597 handled flips over 20.152 s (**29.63 FPS**) from
 the eMMC installation at Full Speed. This clip is silent and omits the
 bottom row of the race leaderboard.
 
+[Need for Speed III on Windows 2000](09-nfs3-windows2000-directx.mp4)
+used the same Hometown route and 640×480×16 graphics settings. It
+completed 832 VGA page flips over 30.009 s (**27.73 FPS**) at Full
+Speed. The clip includes digital game audio and crops the bottom
+leaderboard row.
+
 ## Earlier measurements
 
 | Recording | Game mode | Measurement |
@@ -52,7 +58,7 @@ bottom row of the race leaderboard.
 | Windows NFS III / DirectX (earlier clip) | 640x480, native **DX5**, Hometown / Corvette | 621 handled Flips / 20.984 s = **29.59 FPS**, driving; zero declined Flips throughout the run |
 | [Windows NFS III / Glide](07-nfs3-glide.mp4) | 640x480, Velocity9x Glide3, Hometown / Corvette | 247 swap calls / 15.001 s = **16.47 swaps/s**, complete periodic interval inside the marked race sample |
 | [Windows Quake II test / OpenGL](08-quake2-opengl.mp4) | 640x480, Velocity9x Intel Gen8 ICD | Separate opening-scene rotation: 128 views / 3.647994 s = **35.087779 FPS** |
-| [Windows 2000 NFS III / DirectX](09-nfs3-windows2000-directx.mp4) | 640x480x16, Direct3D 5, Hometown / Corvette | **27.65 FPS** over 30.02 s of a race with the Windows 98 detail preset |
+| Windows 2000 NFS III / DirectX (earlier clip) | 640x480x16, Direct3D 5, Hometown / Corvette | **27.65 FPS** over 30.02 s of a race with the Windows 98 detail preset |
 | [Windows XP NFS III / DirectX](10-nfs3-windowsxp-directx.mp4) | 640x480x16, Direct3D 5, Hometown / Corvette | **27.94 FPS** over 30.03 s with the same detail preset |
 | [Windows 2000 Quake II / OpenGL](11-quake2-windows2000-opengl.mp4) | 640x480, RGB565/Z16, WGPU OpenGL ICD | **29.44 FPS** in the separate 128-view opening-scene rotation |
 | [Windows XP Quake II / OpenGL](12-quake2-windowsxp-opengl.mp4) | 640x480, RGB565/Z16, same ICD | **29.53 FPS** in the separate 128-view opening-scene rotation |

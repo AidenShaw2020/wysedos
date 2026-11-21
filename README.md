@@ -59,7 +59,7 @@ a 64 MB GPU workspace. Each figure applies to the scene measured.
 | **Tyrian 2000** | 320×200 | **34.746 FPS** — in-game debug sample in Torm, Normal difficulty, full CPU speed |
 | **Tomb Raider / DOS Glide** | 640x480 | **21.95 FPS** — 450 completed frames / 20.501 s at the stationary level start |
 | **NFS III / Windows 98, Direct3D 5** | 640x480 | **29.63 FPS** over 20.152 s of driving at full CPU speed |
-| **NFS III / Windows 2000, Direct3D 5** | 640x480 | **27.65 FPS** over 30.02 s of driving |
+| **NFS III / Windows 2000, Direct3D 5** | 640x480 | **27.73 FPS** over 30.009 s of driving at full CPU speed |
 | **NFS III / Windows XP, Direct3D 5** | 640x480 | **27.94 FPS** over 30.03 s of driving |
 | **NFS III / Windows 98, Glide** | 640x480 | **16.47 swap calls/s** over 15.001 s of driving |
 | **Quake II / Windows 98, 2000 and XP, OpenGL** | 640x480 | **35.09 / 29.44 / 29.53 FPS**, separate opening-scene rotation |
@@ -142,7 +142,7 @@ https://github.com/user-attachments/assets/25071566-8de0-40da-a41e-ed08b81dc538
 
 **Windows 2000**
 
-https://github.com/user-attachments/assets/19a39fce-11e7-4bfe-b5e9-51b5589da4b5
+https://github.com/user-attachments/assets/56fbfdae-2a97-448e-bdec-6c291a6c73f7
 
 **Windows XP**
 
