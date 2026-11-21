@@ -59,7 +59,7 @@ a 64 MB GPU workspace. Each figure applies to the scene measured.
 | **Tomb Raider / DOS Glide** | 640x480 | **21.95 FPS** — 450 completed frames / 20.501 s at the stationary level start |
 | **NFS III / Windows 98, Direct3D 5** | 640x480 | **28.73 FPS** over 20.117 s of driving at full CPU speed |
 | **NFS III / Windows 2000, Direct3D 5** | 640x480 | **27.73 FPS** over 30.009 s of driving at full CPU speed |
-| **NFS III / Windows XP, Direct3D 5** | 640x480 | **27.94 FPS** over 30.03 s of driving |
+| **NFS III / Windows XP, Direct3D 5** | 640x480 | **28.95 FPS** over 30.018 s of driving |
 | **NFS III / Windows 98, Glide** | 640x480 | **16.09 FPS** over 20.143 s of driving at full CPU speed |
 | **Quake II / Windows 98, 2000 and XP, OpenGL** | 640x480 | **34.27 / 27.59 / 29.53 FPS**, separate opening-scene rotation |
 
@@ -145,7 +145,7 @@ https://github.com/user-attachments/assets/56fbfdae-2a97-448e-bdec-6c291a6c73f7
 
 **Windows XP**
 
-https://github.com/user-attachments/assets/5fc4b346-770e-4f02-9349-f1c86f9c88bd
+https://github.com/user-attachments/assets/331264d3-5e2a-4a86-8540-aafca65b46b1
 
 </details>
 
