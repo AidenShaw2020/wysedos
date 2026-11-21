@@ -40,11 +40,11 @@ emulation.
 These games run on a **Dell Wyse 3040** under DOS, Windows 98, Windows 2000
 and Windows XP. The clips play at their original speed in **720p60**.
 Windows 2000 and XP were captured directly over HDMI with digital audio.
-The Doom and Duke Nukem 3D clips include digital game audio. The current
+The newly recorded DOS clips include digital game audio. The current
 Windows 98 Direct3D clip is silent. Game FPS is measured
 separately from the capture rate. Doom and Quake use sound-off timedemos,
 Duke Nukem 3D shows its in-game counter for the scene, and Tyrian 2000 uses a
-separate first-level sample at normal speed.
+debug sample from early in the level.
 
 CPU settings for earlier captures are listed in the recording notes. The
 Windows 2000 and XP measurements already used full speed. Windows 98 uses
@@ -56,7 +56,7 @@ a 64 MB GPU workspace. Each figure applies to the scene measured.
 | **Doom** | 320×200, high detail | **86.78 FPS** — `demo3` timedemo at full CPU speed, sound off |
 | **Quake** | 320×200 → 640×480 | **211.6 → 21.1 FPS** — separate `demo1` timedemos at full CPU speed, sound off |
 | **Duke Nukem 3D** | 320×200 | **698 FPS** — a single rooftop DNRATE reading at full CPU speed |
-| **Tyrian 2000** | 320×200 | **31.2 FPS** — separate early-level debug sample, normal speed / low detail |
+| **Tyrian 2000** | 320×200 | **34.746 FPS** — in-game debug sample in Torm, Normal difficulty, full CPU speed |
 | **Tomb Raider / DOS Glide** | 640x480 | **21.71 FPS** - 437 completed frames / 20.129 s at the stationary level start |
 | **NFS III / Windows 98, Direct3D 5** | 640x480 | **29.63 FPS** over 20.152 s of driving at full CPU speed |
 | **NFS III / Windows 2000, Direct3D 5** | 640x480 | **27.65 FPS** over 30.02 s of driving |
@@ -91,9 +91,9 @@ https://github.com/user-attachments/assets/2ec6219c-977c-4903-a145-c0b0ed2a0e31
 </details>
 
 <details>
-<summary><strong>Tyrian 2000</strong> · 25 seconds · built-in demo with music and effects</summary>
+<summary><strong>Tyrian 2000</strong> · 16 seconds · Full Speed · Torm with music and effects</summary>
 
-https://github.com/user-attachments/assets/5645a36b-19c8-43b2-8efc-84873c90fd31
+https://github.com/user-attachments/assets/85ccbf9c-c665-42f7-9f70-3d50fd106354
 
 </details>
 

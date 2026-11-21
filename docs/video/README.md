@@ -28,6 +28,11 @@ DNRATE showed **698 FPS** in one stationary sample on the E1L1 rooftop.
 The 25-second clip shows the live counter as the view changes and includes
 digital game audio.
 
+[Tyrian 2000](04-tyrian-full-speed.mp4) ran from the clean MS-DOS 6.22
+profile in the Torm level at 320×200 on Normal difficulty. The
+in-game debug display reached **34.746 FPS** in the recorded section.
+The clip includes the game's original music and effects.
+
 [Need for Speed III on Windows 98](06-nfs3-directx.mp4) used 640×480×16
 and the native Direct3D 5 renderer on Hometown with the Corvette.
 The driver counted 597 handled flips over 20.152 s (**29.63 FPS**) from
