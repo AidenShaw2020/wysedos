@@ -52,6 +52,7 @@ typedef struct PITChannelState {
 	uint8_t write_latch;
 	uint8_t rw_mode;
 	uint8_t mode;
+	uint8_t null_count;
 	uint8_t bcd; /* not supported */
 	uint8_t gate; /* timer start */
 
@@ -102,6 +103,9 @@ static int pit_get_out1(PITChannelState *s, uint32_t current_time)
 	uint32_t d;
 	int out;
 
+	if (__atomic_load_n(&s->null_count, __ATOMIC_ACQUIRE))
+		return s->mode != 0;
+
 	d = ((uint64_t) (current_time - s->count_load_time)) * PIT_FREQ / 1000000;
 	switch(s->mode) {
 	default:
@@ -135,6 +139,7 @@ static inline void pit_load_count(PITState *pit, PITChannelState *s, int val)
 	s->count_load_time = get_uticks();
 	s->last_irq_count = 0;
 	s->count = val;
+	__atomic_store_n(&s->null_count, 0, __ATOMIC_RELEASE);
 }
 
 /* if already latched, do not latch again */
@@ -164,8 +169,8 @@ void i8254_ioport_write(PITState *pit, uint32_t addr, uint32_t val)
 					}
 					if (!(val & 0x10) && !s->status_latched) {
 						/* status latch */
-						/* XXX: add BCD and null count */
 						s->status = (pit_get_out1(s, get_uticks()) << 7) |
+							(__atomic_load_n(&s->null_count, __ATOMIC_RELAXED) << 6) |
 							(s->rw_mode << 4) |
 							(s->mode << 1) |
 							s->bcd;
@@ -179,6 +184,9 @@ void i8254_ioport_write(PITState *pit, uint32_t addr, uint32_t val)
 			if (access == 0) {
 				pit_latch_count(s);
 			} else {
+				/* A control word resets OUT and invalidates the old divisor
+				 * until the complete replacement count has been written. */
+				__atomic_store_n(&s->null_count, 1, __ATOMIC_RELEASE);
 				s->rw_mode = access;
 				s->read_state = access;
 				s->write_state = access;
@@ -318,6 +326,7 @@ void i8254_update_irq(PITState *pit)
 	}
 	pit_last_poll_us = uticks;
 	PITChannelState *s = pit->channels;
+	if (__atomic_load_n(&s->null_count, __ATOMIC_RELAXED)) return;
 	uint32_t d = ((uint64_t) (uticks - s->count_load_time)) * PIT_FREQ / 1000000;
 
 	FRANK_DIAG_COUNT(pit_polls);
@@ -495,6 +504,11 @@ int pit_get_initial_count(PITState *pit, int channel)
 {
 	PITChannelState *s = &pit->channels[channel];
 	return s->count;
+}
+
+bool pit_has_count(PITState *pit, int channel)
+{
+	return !__atomic_load_n(&pit->channels[channel].null_count, __ATOMIC_ACQUIRE);
 }
 
 int pit_get_mode(PITState *pit, int channel)

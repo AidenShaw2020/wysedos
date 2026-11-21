@@ -1,5 +1,6 @@
 #ifndef I8254_H
 #define I8254_H
+#include <stdbool.h>
 #include <stdint.h>
 
 #define PIT_FREQ 1193182
@@ -13,6 +14,7 @@ void i8254_ioport_write(PITState *pit, uint32_t addr, uint32_t val);
 int pit_get_out(PITState *pit, int channel);
 int pit_get_gate(PITState *pit, int channel);
 int pit_get_initial_count(PITState *pit, int channel);
+bool pit_has_count(PITState *pit, int channel);
 int pit_get_mode(PITState *pit, int channel);
 void pit_set_gate(PITState *pit, int channel, int val);
 

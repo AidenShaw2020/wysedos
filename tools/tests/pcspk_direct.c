@@ -9,6 +9,7 @@ struct PITState { int mode, gate, count, out; };
 int pit_get_out(PITState *pit, int channel) { (void)channel; return pit->out; }
 int pit_get_gate(PITState *pit, int channel) { (void)channel; return pit->gate; }
 int pit_get_initial_count(PITState *pit, int channel) { (void)channel; return pit->count; }
+bool pit_has_count(PITState *pit, int channel) { (void)pit; (void)channel; return true; }
 int pit_get_mode(PITState *pit, int channel) { (void)channel; return pit->mode; }
 void pit_set_gate(PITState *pit, int channel, int value) { (void)channel; pit->gate = value; }
 

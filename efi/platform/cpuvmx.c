@@ -485,6 +485,7 @@ static int win_mode = WIN_EMU;
 static bool ram_13h;        // vga_ram holds a mode 13h picture (not a VBE one)
 static bool ram_planar;
 static int safe_planar = 1;
+static bool mode_x_needs_latch_emulation;
 static void dos_vga_copy_mode(bool native_mode_x);
 static void dos_vga_copy_arm(bool enable);
 void hwvga_fetch(VGAState *s);
@@ -493,10 +494,19 @@ void hwvga_store_planar(const uint8_t *src);
 
 static void hw_update(bool resync) {
     VGAState *v = g_pc->vga;
-    /* Keep the 16-colour planar and text safeguards. Use native VGA for Mode X. */
+    /* Keep the existing 16-colour planar and text safeguards. */
     const bool planar_graphics = !(v->sr[4] & 8) && (v->gr[6] & 1);
     const bool mode_x = planar_graphics && (v->gr[5] & 0x60) == 0x40;
-    int want = vga_vbe_on(v) || (safe_planar && planar_graphics && !mode_x) ? WIN_EMU
+    /* Some VGA programs combine write mode 1, read mode 1 and Host Odd/Even
+     * Read in unchained Mode X. The native aperture corrupts sprite copies
+     * in this combination. Keep the planar model for the rest of that mode
+     * so its contents and latches do not alternate on every copy. */
+    if (!mode_x) mode_x_needs_latch_emulation = false;
+    else if (!(v->gr[6] & 2) && (v->gr[5] & 0x1b) == 0x19)
+        mode_x_needs_latch_emulation = true;
+    const bool planar_needs_emulation = planar_graphics &&
+        (!mode_x || mode_x_needs_latch_emulation);
+    int want = vga_vbe_on(v) || (safe_planar && planar_needs_emulation) ? WIN_EMU
              : (v->sr[4] & 0x08) ? (vga_chain4_simple(v) ? WIN_RAM : WIN_EMU)
              : g_hwvga_on ? WIN_HW : WIN_EMU;
     const bool trap_text = want == WIN_HW && safe_planar && !(v->gr[6] & 1);
@@ -643,6 +653,7 @@ static void exc_dump(void) {
 
 static bool exc_trace;          // trapexc 1/3: interrupts and task switches go in too
 static bool exc_only;
+#define CRT_DELAY_EXCEPTION (1u << 0)
 static bool lin_to_phys(uint32_t lin, uint32_t *phys);
 
 static void hw_watch_note(uint32_t qual) {
@@ -777,7 +788,7 @@ void wyse_cpu_trap_exceptions(int on) {
         hw_watch = true;
         ivt_watch_logs = 0;
         hw_watch_arm(true);
-        vm_write(VMCS_EXCEPTION_BITMAP, 1u << 1);
+        vm_write(VMCS_EXCEPTION_BITMAP, CRT_DELAY_EXCEPTION | (1u << 1));
         return;
     }
     if (hw_watch) {
@@ -788,7 +799,7 @@ void wyse_cpu_trap_exceptions(int on) {
     exc_only = on == 4 || on == 6;  // mode 6 includes #PF without IRQs overwriting the fault
     uint32_t bm = ~((1u << 1) | (1u << 3) | (1u << 14));
     if (on == 3 || on == 6) bm |= 1u << 14;
-    vm_write(VMCS_EXCEPTION_BITMAP, on ? bm : 0);
+    vm_write(VMCS_EXCEPTION_BITMAP, CRT_DELAY_EXCEPTION | (on ? bm : 0));
 }
 
 // "mtf <eip> <n>": from the n-th interrupt injected at eip on, the guest runs
@@ -1143,6 +1154,37 @@ static void dos_vga_copy_arm(bool enable) {
     vm_write(VMCS_EXCEPTION_BITMAP, bitmap | bp);
     dos_vga_copy_enabled = true;
     printf("dos VGA copy: enabled at %05x\n", phys);
+}
+
+/* The 16-bit Borland CRT stores the calibration quotient as one word.
+ * Recognize its BIOS tick setup and unsigned DIV CX before handling overflow.
+ * A real divide-by-zero, or overflow in other guest code, still faults. */
+static bool crt_delay_overflow(void) {
+    static const uint8_t calibration[] = {
+        0xbf, 0x6c, 0x00,             /* BIOS tick at ES:006Ch */
+        0x26, 0x8a, 0x1d, 0x26, 0x3a, 0x1d, 0x74, 0xfb,
+        0x26, 0x8a, 0x1d, 0xb8, 0xe4, 0xff, 0x99,
+        0xe8,                         /* call to the calibration loop */
+        0x56, 0x02,
+        0xf7, 0xd0, 0xf7, 0xd2, 0xb9, 0x37, 0x00,
+        0xf7, 0xf1, 0xa3,             /* DIV CX, then store AX to DelayCnt */
+    };
+    const unsigned div_offset = sizeof(calibration) - 3;
+    const uint32_t ip = (uint32_t)vm_read(VMCS_GUEST_RIP);
+    const uint64_t base = vm_read(VMCS_GUEST_CS_BASE);
+    uint8_t code[sizeof(calibration)];
+    if ((vm_read(VMCS_GUEST_CS_AR) & (1u << 14)) ||
+        (uint16_t)vm.regs.rcx != 55 || (uint16_t)vm.regs.rdx < 55 ||
+        ip < div_offset || base + ip > UINT32_MAX - 2 ||
+        !fetch_code((uint32_t)base + ip - div_offset, code, sizeof(code)) ||
+        memcmp(code, calibration, sizeof(code)))
+        return false;
+    const uint32_t count = ((uint32_t)(uint16_t)vm.regs.rdx << 16) | (uint16_t)vm.regs.rax;
+    vm.regs.rax = (vm.regs.rax & ~0xffffull) | 0xffffu;
+    vm.regs.rdx = (vm.regs.rdx & ~0xffffull) | (count % 55u);
+    vm_write(VMCS_GUEST_RIP, ip + 2);
+    printf("crt delay: 16-bit calibration saturated (%u iterations/ms)\n", count / 55u);
+    return true;
 }
 
 static bool dos_vga_copy_breakpoint(uint32_t info) {
@@ -1769,8 +1811,8 @@ void wyse_cpu_step(PC *pc) {
             inject_ud();
             break;
         case EXIT_EXCEPTION_NMI: {
-            // with "trapexc 1" (debugging): the guest's exceptions, logged and
-            // delivered as they were; otherwise only host NMIs come here
+            // Handle legacy CRT calibration overflow. Debugger-trapped
+            // exceptions and ordinary divide faults follow normal delivery.
             uint32_t info = vm.exit_intr_info;
             if (dos_vga_copy_breakpoint(info)) break;
             if ((info & 0x80000000u) && ((info >> 8) & 7) == 3) {
@@ -1781,6 +1823,7 @@ void wyse_cpu_step(PC *pc) {
                     vm_write(VMCS_GUEST_RFLAGS, vm_read(VMCS_GUEST_RFLAGS) | (1u << 16));
                     break;
                 }
+                if (vec == 0 && crt_delay_overflow()) break;
                 exc_note(vec, (info & (1u << 11)) ? err : 0);
                 if (vec == 14) {
                     uint64_t cr2 = vm.exit_qual;
@@ -1844,6 +1887,7 @@ const char *wyse_cpu_init(PC *pc) {
     if (err) return err;
     err = vm_create(&vm, pc->phys_mem, pc->phys_mem_capacity);
     if (err) return err;
+    vm_write(VMCS_EXCEPTION_BITMAP, CRT_DELAY_EXCEPTION);
     voodoo2_set_caller_source(guest_caller);
     fpu_set_native_store(icpu->fpu, native_x87_store);
     wyse_cpu_pam_changed();

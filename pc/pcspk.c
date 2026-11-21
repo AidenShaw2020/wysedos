@@ -105,7 +105,7 @@ void pcspk_callback(void *opaque, uint8_t *stream, int free)
     PCSpkState *s = opaque;
     unsigned int n;
 
-    if (pit_get_mode(s->pit, 2) != 3)
+    if (!pit_has_count(s->pit, 2) || pit_get_mode(s->pit, 2) != 3)
         return;
     if (!s->data_on)
         return;
@@ -281,7 +281,7 @@ int16_t pcspk_sample(PCSpkState *s)
         return (int16_t)sample;
     }
     if (!data_on) return 0;
-    if (mode != 3) return 0;
+    if (mode != 3 || !pit_has_count(s->pit, 2)) return 0;
 
     uint32_t count = pit_get_initial_count(s->pit, 2);
     if (count < PCSPK_MIN_COUNT) return 0;
