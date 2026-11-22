@@ -14,6 +14,8 @@ void storage_list(void);
 const char *storage_source(void);
 // The partition the monitor was loaded from (NULL when netbooted)
 EFI_HANDLE storage_boot_handle(void);
+int storage_open_boot_volume(void);
+void storage_close_boot_volume(int volume);
 
 // Control port diagnostics: "fs N [path]", "fswr N"
 void storage_debug(const char *args, bool write_test);

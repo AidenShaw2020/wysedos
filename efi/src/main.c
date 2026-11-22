@@ -6,7 +6,7 @@
 #include "lib.h"
 #include "net.h"
 
-#define VERSION "0.1"
+#define VERSION "1.1.26"
 
 void wyse_main(void);
 void exc_install(void);
@@ -132,7 +132,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st) {
     gBS->SetWatchdogTimer(60, 0x10000, 0, NULL);
     gST->ConOut->ClearScreen(gST->ConOut);
     gST->ConOut->EnableCursor(gST->ConOut, 0);
-    net_init();
+    if (net_booted_pxe()) net_init();
     {
         static const EFI_GUID li_guid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
         EFI_LOADED_IMAGE_PROTOCOL *li;
@@ -145,7 +145,7 @@ EFI_STATUS efi_main(EFI_HANDLE image, EFI_SYSTEM_TABLE *st) {
         const uint8_t *ip = net_my_ip(), *srv = net_server_ip();
         printf("net: %u.%u.%u.%u, server %u.%u.%u.%u, log udp :5555\n", ip[0], ip[1], ip[2], ip[3],
                srv[0], srv[1], srv[2], srv[3]);
-    } else {
+    } else if (net_booted_pxe()) {
         printf("net: no network\n");
     }
     report_firmware();

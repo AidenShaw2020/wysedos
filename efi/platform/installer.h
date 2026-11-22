@@ -3,6 +3,7 @@
 #define INSTALLER_H
 
 #include <stdbool.h>
+#include "bio.h"
 
 // Whether the medium the monitor started from asks for an installation
 // (install.ini in its root)
@@ -11,5 +12,6 @@ bool installer_wanted(void);
 void installer_run(void);
 // Development: the running monitor and 386/config.ini onto an installed eMMC
 void installer_update_emmc(const char *replace);
+bool installer_mount_existing_esp(void);
 
 #endif

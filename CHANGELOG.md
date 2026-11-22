@@ -3,6 +3,16 @@
 Selected verified changes, not a reconstruction of every development commit.
 See the [documentation](docs/index.md) for current usage and architecture.
 
+## v1.1.26 - 2026-11-22
+
+- Added **Extras** to the boot splash and the USB installer. It pauses guest
+  startup and offers a password-protected passive FTP server.
+- Added DHCP and static IPv4 settings. F2 saves the settings to the boot
+  medium. The WyseDOS firmware partition is read-only by default.
+- Enabled file transfer on FAT12, FAT16, FAT32 and clean NTFS guest
+  partitions. NTFS with an active hibernation file or an unclean volume
+  state is protected against writes.
+
 ## v1.1.25 - 2026-11-21
 
 - Start Mode X in emulated VGA to prevent sprite corruption in Jazz

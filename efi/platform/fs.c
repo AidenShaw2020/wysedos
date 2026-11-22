@@ -10,6 +10,7 @@
 #include "ff.h"
 #include "fatvol.h"
 #include "image_media.h"
+#include "extras_ntfs.h"
 
 FRESULT netfs_open(FIL *fp, const TCHAR *path, BYTE mode);
 FRESULT netfs_close(FIL *fp);
@@ -40,7 +41,7 @@ static int route(const TCHAR *path, int *vol, const TCHAR **rest) {
     if (isdigit((unsigned char)path[0]) && path[1] == ':') {
         *vol = path[0] - '0';
         *rest = path + 2;
-        return FS_FAT;
+        return *vol == EXTRAS_NTFS_VOLUME ? FS_NTFS : FS_FAT;
     }
     if (!strncmp(path, "SD:", 3)) path += 3;
     while (*path == '/') path++;
@@ -67,7 +68,9 @@ static void info_to(FILINFO *o, const fatvol_info *i) {
 FRESULT f_open(FIL *fp, const TCHAR *path, BYTE mode) {
     int vol;
     const TCHAR *rest;
-    if (route(path, &vol, &rest) == FS_NETFS) {
+    int backend = route(path, &vol, &rest);
+    if (backend == FS_NTFS) return extras_ntfs_open(fp, rest, mode);
+    if (backend == FS_NETFS) {
         FRESULT r = netfs_open(fp, rest, mode);
         fp->backend = FS_NETFS;
         return r;
@@ -86,6 +89,7 @@ FRESULT f_open(FIL *fp, const TCHAR *path, BYTE mode) {
 }
 
 FRESULT f_close(FIL *fp) {
+    if (fp->backend == FS_NTFS) return extras_ntfs_close(fp);
     if (fp->backend != FS_FAT) return netfs_close(fp);
     if (!fp->obj.fs) return FR_INVALID_OBJECT;
     int vol=(int)fp->image_volume-1;
@@ -98,6 +102,7 @@ FRESULT f_close(FIL *fp) {
 }
 
 FRESULT f_read(FIL *fp, void *buff, UINT btr, UINT *br) {
+    if (fp->backend == FS_NTFS) return extras_ntfs_read(fp, buff, btr, br);
     if (fp->backend != FS_FAT) return netfs_read(fp, buff, btr, br);
     if (!fp->obj.fs) return FR_INVALID_OBJECT;
     FRESULT r = (FRESULT)fatvol_read(fp->fat, buff, btr, br);
@@ -110,6 +115,7 @@ FRESULT f_read(FIL *fp, void *buff, UINT btr, UINT *br) {
 }
 
 FRESULT f_write(FIL *fp, const void *buff, UINT btw, UINT *bw) {
+    if (fp->backend == FS_NTFS) return extras_ntfs_write(fp, buff, btw, bw);
     if (fp->backend != FS_FAT) return netfs_write(fp, buff, btw, bw);
     if (!fp->obj.fs) return FR_INVALID_OBJECT;
     FRESULT r = (FRESULT)fatvol_write(fp->fat, buff, btw, bw);
@@ -118,6 +124,7 @@ FRESULT f_write(FIL *fp, const void *buff, UINT btw, UINT *bw) {
 }
 
 FRESULT f_lseek(FIL *fp, FSIZE_t ofs) {
+    if (fp->backend == FS_NTFS) return FR_INVALID_PARAMETER;
     if (fp->backend != FS_FAT) return netfs_lseek(fp, ofs);
     if (!fp->obj.fs) return FR_INVALID_OBJECT;
     if (ofs == CREATE_LINKMAP) return FR_OK;    // fatvol maps big files by itself
@@ -127,12 +134,14 @@ FRESULT f_lseek(FIL *fp, FSIZE_t ofs) {
 }
 
 FRESULT f_sync(FIL *fp) {
+    if (fp->backend == FS_NTFS) return extras_ntfs_sync(fp);
     if (fp->backend != FS_FAT) return netfs_sync(fp);
     if (!fp->obj.fs) return FR_INVALID_OBJECT;
     return (FRESULT)fatvol_sync(fp->fat);
 }
 
 FRESULT f_truncate(FIL *fp) {
+    if (fp->backend == FS_NTFS) return FR_INVALID_PARAMETER;
     if (fp->backend != FS_FAT) return netfs_truncate(fp);
     if (!fp->obj.fs) return FR_INVALID_OBJECT;
     FRESULT r = (FRESULT)fatvol_truncate(fp->fat);
@@ -150,7 +159,9 @@ FRESULT f_expand(FIL *fp, FSIZE_t size) {
 FRESULT f_opendir(DIR *dp, const TCHAR *path) {
     int vol;
     const TCHAR *rest;
-    if (route(path, &vol, &rest) == FS_NETFS) {
+    int backend = route(path, &vol, &rest);
+    if (backend == FS_NTFS) return extras_ntfs_opendir(dp, rest);
+    if (backend == FS_NETFS) {
         FRESULT r = netfs_opendir(dp, rest);
         dp->backend = FS_NETFS;
         return r;
@@ -164,6 +175,7 @@ FRESULT f_opendir(DIR *dp, const TCHAR *path) {
 }
 
 FRESULT f_readdir(DIR *dp, FILINFO *fno) {
+    if (dp->backend == FS_NTFS) return extras_ntfs_readdir(dp, fno);
     if (dp->backend != FS_FAT) return netfs_readdir(dp, fno);
     if (!dp->obj.fs) return FR_INVALID_OBJECT;
     static fatvol_info i;
@@ -173,6 +185,7 @@ FRESULT f_readdir(DIR *dp, FILINFO *fno) {
 }
 
 FRESULT f_closedir(DIR *dp) {
+    if (dp->backend == FS_NTFS) return extras_ntfs_closedir(dp);
     if (dp->backend != FS_FAT) return netfs_closedir(dp);
     if (!dp->obj.fs) return FR_INVALID_OBJECT;
     dp->obj.fs = NULL;
@@ -182,7 +195,9 @@ FRESULT f_closedir(DIR *dp) {
 FRESULT f_stat(const TCHAR *path, FILINFO *fno) {
     int vol;
     const TCHAR *rest;
-    if (route(path, &vol, &rest) == FS_NETFS) return netfs_stat(rest, fno);
+    int backend = route(path, &vol, &rest);
+    if (backend == FS_NTFS) return extras_ntfs_stat(rest, fno);
+    if (backend == FS_NETFS) return netfs_stat(rest, fno);
     static fatvol_info i;
     FRESULT r = (FRESULT)fatvol_stat(vol, rest, &i);
     if (r == FR_OK && fno) info_to(fno, &i);
@@ -192,14 +207,18 @@ FRESULT f_stat(const TCHAR *path, FILINFO *fno) {
 FRESULT f_unlink(const TCHAR *path) {
     int vol;
     const TCHAR *rest;
-    if (route(path, &vol, &rest) == FS_NETFS) return netfs_unlink(rest);
+    int backend = route(path, &vol, &rest);
+    if (backend == FS_NTFS) return extras_ntfs_unlink(rest);
+    if (backend == FS_NETFS) return netfs_unlink(rest);
     return (FRESULT)fatvol_unlink(vol, rest);
 }
 
 FRESULT f_mkdir(const TCHAR *path) {
     int vol;
     const TCHAR *rest;
-    if (route(path, &vol, &rest) == FS_NETFS) return netfs_mkdir(rest);
+    int backend = route(path, &vol, &rest);
+    if (backend == FS_NTFS) return extras_ntfs_mkdir(rest);
+    if (backend == FS_NETFS) return netfs_mkdir(rest);
     return (FRESULT)fatvol_mkdir(vol, rest);
 }
 
@@ -207,7 +226,9 @@ FRESULT f_rename(const TCHAR *old, const TCHAR *new_) {
     int vol, vol2;
     const TCHAR *a, *b;
     int be = route(old, &vol, &a);
-    route(new_, &vol2, &b);
+    int be2 = route(new_, &vol2, &b);
+    if (be == FS_NTFS || be2 == FS_NTFS)
+        return be == be2 ? extras_ntfs_rename(a, b) : FR_INVALID_DRIVE;
     if (be == FS_NETFS) return netfs_rename(a, b);
     return (FRESULT)fatvol_rename(vol, a, b);
 }

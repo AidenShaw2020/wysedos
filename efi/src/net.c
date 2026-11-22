@@ -11,6 +11,7 @@
 #include "net.h"
 
 static EFI_SIMPLE_NETWORK_PROTOCOL *snp;
+static EFI_HANDLE exclusive_nic;
 static uint8_t my_mac[6], my_ip[4], server_ip[4], server_mac[6];
 static bool server_mac_known;
 bool g_net_accept_broadcast;
@@ -32,9 +33,7 @@ static bool snp_ready(EFI_SIMPLE_NETWORK_PROTOCOL *s) {
     return s->Mode->State == EfiSimpleNetworkInitialized;
 }
 
-void net_init(void) {
-    EFI_HANDLE nic = NULL;
-
+static EFI_HANDLE pxe_nic(void) {
     // our addresses: from the PXE handle we were loaded from
     EFI_LOADED_IMAGE_PROTOCOL *li;
     if (!EFI_ERROR(gBS->HandleProtocol(gImage, &loaded_image_guid, (void **)&li))) {
@@ -42,9 +41,38 @@ void net_init(void) {
         if (!EFI_ERROR(gBS->HandleProtocol(li->DeviceHandle, &pxe_guid, (void **)&pxe)) && pxe->Mode->Started) {
             memcpy(my_ip, pxe->Mode->StationIp.v4, 4);
             if (pxe->Mode->DhcpAckReceived) memcpy(server_ip, pxe->Mode->DhcpAck + 20, 4);
-            nic = li->DeviceHandle;
+            return li->DeviceHandle;
         }
     }
+    return NULL;
+}
+
+bool net_booted_pxe(void) { return pxe_nic() != NULL; }
+
+bool net_release_for_firmware(void) {
+    if (exclusive_nic) {
+        EFI_HANDLE nic = exclusive_nic;
+        // Leave SNP stopped as it was before the monitor took ownership.
+        // MNP initializes its own receive filters and receive queues.
+        if (snp->Mode->State == EfiSimpleNetworkInitialized)
+            snp->Shutdown(snp);
+        if (snp->Mode->State == EfiSimpleNetworkStarted)
+            snp->Stop(snp);
+        if (EFI_ERROR(gBS->CloseProtocol(nic, &snp_guid, gImage, NULL))) {
+            snp_ready(snp);
+            return false;
+        }
+        exclusive_nic = NULL;
+        snp = NULL;
+        gBS->ConnectController(nic, NULL, NULL, true);
+    }
+    snp = NULL;
+    return true;
+}
+
+void net_init(void) {
+    if (snp) return;
+    EFI_HANDLE nic = pxe_nic();
 
     uint64_t count = 0;
     EFI_HANDLE *handles = NULL;
@@ -54,10 +82,14 @@ void net_init(void) {
         if (nic && handles[i] != nic) continue;
         EFI_SIMPLE_NETWORK_PROTOCOL *s;
         // EXCLUSIVE: the firmware's MNP gets disconnected and stops polling the NIC
-        if (EFI_ERROR(gBS->OpenProtocol(handles[i], &snp_guid, (void **)&s, gImage, NULL, EFI_OPEN_PROTOCOL_EXCLUSIVE)) &&
-            EFI_ERROR(gBS->HandleProtocol(handles[i], &snp_guid, (void **)&s)))
-            continue;
-        if (snp_ready(s) && s->Mode->IfType == 1) snp = s;
+        bool claimed = !EFI_ERROR(gBS->OpenProtocol(handles[i], &snp_guid, (void **)&s, gImage, NULL, EFI_OPEN_PROTOCOL_EXCLUSIVE));
+        if (!claimed && EFI_ERROR(gBS->HandleProtocol(handles[i], &snp_guid, (void **)&s))) continue;
+        if (snp_ready(s) && s->Mode->IfType == 1) {
+            snp = s;
+            if (claimed) exclusive_nic = handles[i];
+        } else if (claimed) {
+            gBS->CloseProtocol(handles[i], &snp_guid, gImage, NULL);
+        }
     }
     for (uint64_t i = 0; i < count && !snp; i++) {
         EFI_SIMPLE_NETWORK_PROTOCOL *s;

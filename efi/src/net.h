@@ -6,6 +6,8 @@
 #include <stddef.h>
 
 void net_init(void);
+bool net_booted_pxe(void);
+bool net_release_for_firmware(void);
 bool net_active(void);
 const uint8_t *net_my_ip(void);
 const uint8_t *net_server_ip(void);

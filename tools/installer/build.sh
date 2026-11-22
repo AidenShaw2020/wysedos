@@ -36,6 +36,7 @@ for name in bios.bin vgabios.bin logo.bin gm.sf2 gm.sf2.LICENSE.txt \
             SeaBIOS-COPYING.txt SeaBIOS-COPYING.LESSER.txt SeaBIOS-NOTICE.txt; do
     cp "../../disks/386/$name" out/runtime/
 done
+"${PYTHON:-python}" ntfs_release.py out/runtime/ntfs.efi out/ntfs-3g-uefi-1.9-source.zip
 ../dos/build.sh
 "${PYTHON:-python}" make_driver_cd.py out/DRIVERS "$NT_MEDIA" out/runtime/drivers.iso --cpu-speed ../dos/out/CPUSPEED.COM
 out/mkusb.exe "$OUT" ../../efi/build/bootx64.efi=EFI/BOOT/BOOTX64.EFI out/install.ini=install.ini out/runtime=386 out/config.ini=386/config.ini

@@ -70,7 +70,7 @@ typedef struct {
     uint64_t fat[16];       // FatFs's own DIR (FATVOL_DIR_BYTES)
 } DIR;
 
-enum { FS_NONE, FS_NETFS, FS_FAT };
+enum { FS_NONE, FS_NETFS, FS_FAT, FS_NTFS };
 
 typedef struct {
     FSIZE_t fsize;

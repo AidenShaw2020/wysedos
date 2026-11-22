@@ -19,11 +19,25 @@ extern EFI_HANDLE gImage;
 static const EFI_GUID bio_guid = EFI_BLOCK_IO_PROTOCOL_GUID;
 static const EFI_GUID li_guid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
 
-static EFI_HANDLE boot_handle;
+static EFI_HANDLE boot_handle, data_handle;
 static char source[64] = "netfs";
 
 const char *storage_source(void) { return source; }
 EFI_HANDLE storage_boot_handle(void) { return boot_handle; }
+
+int storage_open_boot_volume(void) {
+    if (!boot_handle) return -1;
+    if (boot_handle == data_handle) return FATVOL_DATA;
+    EFI_BLOCK_IO_PROTOCOL *bio;
+    if (EFI_ERROR(gBS->HandleProtocol(boot_handle, &bio_guid, (void **)&bio)) ||
+        fatvol_attach(FATVOL_SOURCE, bio, 0, bio->Media->LastBlock + 1) != FR_OK)
+        return -1;
+    return FATVOL_SOURCE;
+}
+
+void storage_close_boot_volume(int volume) {
+    if (volume == FATVOL_SOURCE) fatvol_detach(FATVOL_SOURCE);
+}
 
 // Whether two partition paths are on the same disk: equal up to their hard drive nodes
 static bool same_disk(EFI_DEVICE_PATH *a, EFI_DEVICE_PATH *b) {
@@ -82,6 +96,7 @@ bool storage_init(void) {
     bio_path_str(boot_path, path, sizeof(path));
     // the boot partition itself, then the other partitions of its disk
     if (try_data(boot_handle, boot_bio)) {
+        data_handle = boot_handle;
         snprintf(source, sizeof(source), "%s", path);
         fs_set_default(FS_FAT, FATVOL_DATA);
         printf("storage: data on the boot partition %s\n", path);
@@ -95,6 +110,7 @@ bool storage_init(void) {
             if (hs[i] == boot_handle || EFI_ERROR(gBS->HandleProtocol(hs[i], &bio_guid, (void **)&bio))) continue;
             if (!bio->Media->LogicalPartition || !same_disk(bio_device_path(hs[i]), boot_path)) continue;
             if (!try_data(hs[i], bio)) continue;
+            data_handle = hs[i];
             bio_path_str(bio_device_path(hs[i]), source, sizeof(source));
             fs_set_default(FS_FAT, FATVOL_DATA);
             printf("storage: booted from %s, data on %s\n", path, source);

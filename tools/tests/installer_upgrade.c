@@ -159,6 +159,12 @@ int main(void) {
     put_fixture("2:386/gm.sf2.LICENSE.txt",132,0x65);
     CHECK(save_journal(&old,COMMITTED));
     CHECK(installer_upgrade_files(flush,disk,NULL,&error)); updated();
+    fixture();
+    disk[lookup("2:386/ntfs.efi")].exists=0;
+    put_fixture("2:386/gm.sf2.LICENSE.txt",132,0x65);
+    Journal with_cd={DRIVER_CD_MAGIC,(1u<<DRIVER_CD_FILES)-1,1,0};
+    CHECK(save_journal(&with_cd,COMMITTED));
+    CHECK(installer_upgrade_files(flush,disk,NULL,&error)); updated();
     printf("PASS: upgrade preserves settings/layout/guest files, stages and verifies all assets, activates EFI last; %u I/O failure points and %u process interruptions recover; source/space/conflict/readback checks\n",all_calls,all_mutations);
     return 0;
 }

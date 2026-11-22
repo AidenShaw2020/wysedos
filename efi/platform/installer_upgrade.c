@@ -9,12 +9,14 @@
 static const char *const files[]={
     "EFI/BOOT/BOOTX64.EFI", "386/bios.bin", "386/vgabios.bin", "386/gm.sf2",
     "386/gm.sf2.LICENSE.txt", "386/logo.bin", "386/SeaBIOS-COPYING.txt",
-    "386/SeaBIOS-COPYING.LESSER.txt", "386/SeaBIOS-NOTICE.txt", "386/drivers.iso"
+    "386/SeaBIOS-COPYING.LESSER.txt", "386/SeaBIOS-NOTICE.txt", "386/drivers.iso", "386/ntfs.efi"
 };
 #define FILES (sizeof(files)/sizeof(files[0]))
 #define OLD_MAGIC 0x31505557u
-#define UPGRADE_MAGIC 0x32505557u
+#define DRIVER_CD_MAGIC 0x32505557u
+#define UPGRADE_MAGIC 0x33505557u
 #define OLD_FILES 9u
+#define DRIVER_CD_FILES 10u
 #define JOURNAL "2:386/upgrade.wup"
 #define COMMITTED "2:386/upgrade.done"
 typedef struct { uint32_t magic, old_mask, committed, check; } Journal;
@@ -25,6 +27,7 @@ static uint32_t checksum(const Journal *j) {
 }
 static unsigned journal_files(const Journal *j) {
     if (j->magic==OLD_MAGIC) return OLD_FILES;
+    if (j->magic==DRIVER_CD_MAGIC) return DRIVER_CD_FILES;
     return j->magic==UPGRADE_MAGIC?FILES:0;
 }
 static void paths(unsigned i,char *dest,char *stage,char *backup) {

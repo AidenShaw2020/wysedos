@@ -24,6 +24,7 @@
 #include "diskui.h"
 #include "storage.h"
 #include "installer.h"
+#include "extras.h"
 #include "emmc_snapshot.h"
 #include "delltoken.h"
 #include "blkcache.h"
@@ -750,11 +751,9 @@ static int layout_mode = -1;
 // palette and the pixels). The firmware's own logo cannot be replaced - the
 // flash is locked against writes (BLE, SMM_BWP) - so this is the first
 // picture of ours, until the PC's BIOS takes the screen.
-static uint64_t splash_at;
-
-static void splash_show(void) {
+static bool splash_show(void) {
     FIL f;
-    if (!gop_fb || f_open(&f, "386/logo.bin", FA_READ) != FR_OK) return;
+    if (!gop_fb || f_open(&f, "386/logo.bin", FA_READ) != FR_OK) return false;
     struct __attribute__((packed)) {
         char magic[4];
         uint16_t w, h;
@@ -765,11 +764,11 @@ static void splash_show(void) {
     f_read(&f, &hdr, sizeof(hdr), &got);
     if (got != sizeof(hdr) || memcmp(hdr.magic, "WDLG", 4) || !hdr.w || hdr.w > gop_w || hdr.h > gop_h) {
         f_close(&f);
-        return;
+        return false;
     }
     f_read(&f, pal, sizeof(pal), &got);
     uint8_t *px = malloc((size_t)hdr.w * hdr.h);
-    if (!px) { f_close(&f); return; }
+    if (!px) { f_close(&f); return false; }
     UINT want = (UINT)hdr.w * hdr.h;
     f_read(&f, px, want, &got);
     f_close(&f);
@@ -786,10 +785,25 @@ static void splash_show(void) {
             uint64_t n = line_w;
             __asm__ volatile("rep movsl" : "+D"(d), "+S"(s), "+c"(n) :: "memory");
         }
-        splash_at = wyse_ticks_us();
         printf("display: splash %ux%u\n", hdr.w, hdr.h);
     }
     free(px);
+    return got == want;
+}
+
+void extras_draw(void) {
+    if (!gop_fb) return;
+    static uint32_t pixels[640 * 400];
+    unsigned scale = gop_w >= 1280 && gop_h >= 800 ? 2 : 1;
+    if (gop_w < 640 || gop_h < 400) return;
+    unsigned x0 = (gop_w - 640 * scale) / 2;
+    unsigned y0 = (gop_h - 400 * scale) / 2;
+    memset(pixels, 0, sizeof(pixels));
+    osd_render((uint8_t *)pixels, 640 * 4, 640, 400);
+    for (unsigned y = 0; y < 400 * scale; y++)
+        for (unsigned x = 0; x < 640 * scale; x++)
+            gop_fb[(y0 + y) * gop_stride + x0 + x] = pixels[y / scale * 640 + x / scale];
+    __asm__ volatile("sfence" ::: "memory");
 }
 
 // Installer uses the same logo and framebuffer as startup.
@@ -800,12 +814,16 @@ static void install_rect(int x,int y,int w,int h,uint32_t color) {
         if (x+i>=0 && y+j>=0 && (uint32_t)(x+i)<gop_w && (uint32_t)(y+j)<gop_h)
             gop_fb[(y+j)*gop_stride+x+i]=color;
 }
+void installer_ui_restore(void) {
+    if (!splash_show()) install_rect(0, 0, gop_w, gop_h, 0);
+}
 void installer_ui_status(const char *step,const char *detail,unsigned percent) {
     extern const uint8_t font_8x16[4096];
     if (!gop_fb) return;
     int scale=gop_w>=1280?2:1;
     int w=gop_w>1280?1200:(int)gop_w-40, x=((int)gop_w-w)/2, y=(int)gop_h-112*scale/2;
-    install_rect(x-12,y-8,w+24,112*scale/2,0x08121c);
+    if (!detail) y = (int)gop_h - 30 * scale;
+    install_rect(x-12,y-8,w+24,detail ? 112*scale/2 : 16*scale+16,0x08121c);
     const char *lines[2]={step,detail};
     int max_chars=w/(8*scale);
     for (int row=0;row<2;row++) {
@@ -819,17 +837,29 @@ void installer_ui_status(const char *step,const char *detail,unsigned percent) {
                 install_rect(lx+k*8*scale+i*scale,y+row*19*scale+j*scale,scale,scale,row?0xb3c7d8:0xffffff);
         }
     }
-    int by=y+40*scale, bh=8*scale;
-    install_rect(x,by,w,bh,0x294154);
-    install_rect(x,by,(int)((uint64_t)w*(percent>100?100:percent)/100),bh,0x48c9ed);
+    if (detail) {
+        int by=y+40*scale, bh=8*scale;
+        install_rect(x,by,w,bh,0x294154);
+        install_rect(x,by,(int)((uint64_t)w*(percent>100?100:percent)/100),bh,0x48c9ed);
+    }
     __asm__ volatile("sfence" ::: "memory");
 }
 
-// The logo stays up at least two seconds, then the picture is the PC's
-static void splash_end(void) {
-    if (!splash_at) return;
-    while (wyse_ticks_us() - splash_at < 2000000) __asm__ volatile("pause");
-    splash_at = 0;
+static void splash_extras(void) {
+    installer_ui_status("X: Extras", NULL, 0);
+    uint64_t prompt_at = wyse_ticks_us();
+    while (wyse_ticks_us() - prompt_at < 3000000) {
+        EFI_INPUT_KEY key;
+        extern EFI_SYSTEM_TABLE *gST;
+        if (!EFI_ERROR(gST->ConIn->ReadKeyStroke(gST->ConIn, &key)) &&
+            (key.UnicodeChar == 'x' || key.UnicodeChar == 'X')) {
+            installer_ui_restore();
+            extras_open(false);
+            installer_ui_restore();
+            break;
+        }
+        gBS->Stall(2000);
+    }
 }
 
 static void display_layout(int mode) {
@@ -1830,6 +1860,7 @@ void wyse_main(void) {
     hostblk_list();
     if (!storage_init()) wyse_fatal("no 386/config.ini on the boot disk");
     if (emmc_snapshot_requested()) {
+        net_init();
         bool ok = emmc_snapshot_run();
         gBS->SetWatchdogTimer(0, 0, 0, NULL);
         wyse_fatal(ok ? "eMMC backup verified; guest not started" : "eMMC backup failed; guest not started");
@@ -1839,12 +1870,14 @@ void wyse_main(void) {
     printf("config: bios %s, vga bios %s, hda %s, %ld MB, cpu %d, fpu %d\n", conf.bios, conf.vga_bios,
            conf.ata[0], conf.mem_size >> 20, conf.cpu_gen, conf.fpu);
 
+    display_init(config_get_display_output());
+    splash_show();
+    splash_extras();
+    net_init();
     void firmware_events_init(uint32_t max_period_us);
     void firmware_events_poll(uint64_t now);
     firmware_events_init(firmware_timer_us);
     int hid = usbhid_init();
-    display_init(config_get_display_output());
-    splash_show();
     bool have_audio = lpe_init(SOUND_FREQUENCY);
     bool have_analog = analog_init();
     PC *pc = pc_new(redraw, NULL, NULL, (uint8_t *)surface, &conf);
@@ -1899,7 +1932,6 @@ void wyse_main(void) {
         display_watch_init();
     }
     console_log = false;    // the screen belongs to the guest from here on
-    splash_end();
     display_layout(g_picture);      // clears the screen for the PC's picture
     void wyse_cpu_set_speed(int mhz, int gen);
     int speed_applied = g_cpu_speed_mhz, gen_applied = g_cpu_speed_gen;

@@ -9,6 +9,7 @@ import zipfile
 
 from pyfatfs.PyFatFS import PyFatFS
 import pycdlib
+from ntfs_release import DRIVER_SHA256, SOURCE_NAME, SOURCE_SHA256, verify
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -35,12 +36,13 @@ def unpack_installer(image, efi):
     expected["/EFI/BOOT/BOOTX64.EFI"] = efi.read_bytes()
     with PyFatFS(str(image), offset=offset, read_only=True) as fs:
         names = {name.casefold(): name for name in fs.walk.files("/")}
-        expected_names = {name.casefold() for name in expected} | {"/install.ini", "/386/drivers.iso"}
+        expected_names = {name.casefold() for name in expected} | {"/install.ini", "/386/drivers.iso", "/386/ntfs.efi"}
         if names.keys() != expected_names:
             raise ValueError(f"Unexpected installer layout: {sorted(names.keys() ^ expected_names)}")
         for name, data in expected.items():
             if fs.readbytes(names[name.casefold()]) != data:
                 raise ValueError(f"Installer file mismatch: {name}")
+        verify(fs.readbytes(names["/386/ntfs.efi"]), DRIVER_SHA256, "386/ntfs.efi")
         return fs.readbytes(names["/386/drivers.iso"])
 
 
@@ -80,6 +82,7 @@ def main():
     parser.add_argument("efi", type=Path)
     parser.add_argument("nt_package", type=Path)
     parser.add_argument("output", type=Path, help="New output directory")
+    parser.add_argument("--ntfs-source", type=Path, default=ROOT / "tools/installer/out" / SOURCE_NAME)
     args = parser.parse_args()
     files = unpack_driver_cd(unpack_installer(args.image, args.efi))
     for name, expected in unpack_nt_package(args.nt_package).items():
@@ -92,12 +95,14 @@ def main():
     notices.update({name: data for name, data in files.items()
                     if Path(name).name.upper().startswith(("LICENSE", "COPYING", "NOTICES", "USBINTRO"))
                     or name == "NT5/README.TXT"})
+    ntfs_source = verify(args.ntfs_source.read_bytes(), SOURCE_SHA256, SOURCE_NAME)
     args.output.mkdir(parents=True, exist_ok=False)
     for source, name in ((args.image, INSTALLER), (args.efi, "BOOTX64.EFI"),
                          (args.nt_package, NT_PACKAGE)):
         shutil.copyfile(source, args.output / name)
     make_zip(args.output / DRIVERS, files)
     make_zip(args.output / LICENCES, notices)
+    (args.output / SOURCE_NAME).write_bytes(ntfs_source)
     checksums = "".join(f"{sha(path.read_bytes())}  {path.name}\n"
                         for path in sorted(args.output.iterdir()))
     (args.output / "SHA256SUMS.txt").write_bytes(checksums.encode("ascii"))

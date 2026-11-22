@@ -31,7 +31,7 @@
 #define FF_SFN_BUF		12
 #define FF_FS_RPATH		0
 
-#define FF_VOLUMES		8	/* 0..3 runtime/installer, 4..7 exclusive USB image sources */
+#define FF_VOLUMES		9	/* 0..3 runtime/installer, 4..7 USB images, 8 Extras */
 #define FF_STR_VOLUME_ID	0
 #define FF_VOLUME_STRS		"RAM","NAND","CF","SD","SD2","USB","USB2","USB3"
 #define FF_MULTI_PARTITION	0

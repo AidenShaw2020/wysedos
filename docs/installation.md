@@ -17,6 +17,7 @@ enabled, and the boot policy must permit the unsigned EFI application.
 | `wysedos-drivers.zip` | The same DOS, Windows 9x and NT5 driver files as the shared CD |
 | `wysedos-nt5-driver-package.iso` | Manifest-checked NT5 input for rebuilding the USB installer |
 | `wysedos-licenses.zip` | Licence texts and recorded notices |
+| `ntfs-3g-uefi-1.9-source.zip` | Corresponding source of the UEFI NTFS driver in the installer |
 | `SHA256SUMS.txt` | Checksums of release assets |
 
 Supply your own appropriately licensed DOS/Windows and game installation media.
@@ -43,6 +44,33 @@ its own partition and file system. Supply your own installation media.
 The firmware partition holds `EFI/BOOT/BOOTX64.EFI`, the `386/` runtime assets,
 and `386/drivers.iso`. It is outside the disk presented to the guest. See
 [storage](storage.md).
+
+## Transfer files before boot
+
+Press **X** while the WyseDOS splash is visible to open **Extras**. In the
+installer, **X** opens the same window from the installation mode screen.
+**Tab** switches between **FTP** and **IPv4**. **F2** saves to the eMMC
+firmware partition or the installer flash, according to which medium
+started WyseDOS. **Esc** stops FTP and resumes startup or returns to the
+installer menu.
+
+DHCP is the default. The IPv4 tab shows the address, subnet mask, gateway
+and DNS supplied by DHCP. Choose **Static** to enter these values manually.
+In the FTP tab, set a username and password, turn on the server, and use
+the displayed IP address in your client. Select plain FTP, passive mode,
+and port 21. FTP sends the credentials and files unencrypted.
+
+| FTP directory | Contents and write access |
+|---|---|
+| `/wysedos` | The hidden WyseDOS firmware partition on eMMC. Enable **Write to WyseDOS partition** to upload, replace or delete files here. |
+| `/disk1`, `/disk2`, … | Recognized FAT12, FAT16, FAT32 and NTFS partitions inside the guest disk. Primary and logical MBR partitions are supported. |
+
+Folders can be uploaded recursively from a passive FTP client such as
+WinSCP. On NTFS, fully shut down Windows before replacing files. Extras
+checks the volume's dirty flag and hibernation file, and the NTFS driver
+checks its log. A volume that can be mounted safely for reads may be
+offered read-only until Windows has shut down cleanly. The release
+includes the NTFS-3G UEFI driver, licences and corresponding source.
 
 ## Install DOS and Windows 9x
 

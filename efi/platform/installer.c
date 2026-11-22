@@ -22,6 +22,7 @@
 #include "installer.h"
 #include "delltoken.h"
 #include "native_disk.h"
+#include "extras.h"
 #include "installer_upgrade.h"
 
 extern EFI_SYSTEM_TABLE *gST;
@@ -42,6 +43,7 @@ static const EFI_GUID global_var = EFI_GLOBAL_VARIABLE_GUID;
 //--------------------------------------------------------------------+
 
 void installer_ui_begin(void);
+void installer_ui_restore(void);
 void installer_ui_status(const char *step,const char *detail,unsigned percent);
 static bool graphical;
 static const char *copy_step="4 / 6 - Installing wyseDOS";
@@ -697,6 +699,14 @@ static bool existing_install(EFI_BLOCK_IO_PROTOCOL *disk,WyseInstallLayout *layo
     return ok;
 }
 
+bool installer_mount_existing_esp(void) {
+    char path[160];
+    WyseInstallLayout layout;
+    EFI_BLOCK_IO_PROTOCOL *disk=find_emmc(path,sizeof(path));
+    return disk && existing_install(disk,&layout) &&
+        fatvol_attach(FATVOL_TARGET_ESP,disk,layout.esp_first,layout.esp_count)==FR_OK;
+}
+
 static bool upgrade_flush(void *context) {
     EFI_BLOCK_IO_PROTOCOL *disk=context;
     return !EFI_ERROR(blkcache_flush(disk)) && !EFI_ERROR(bio_flush(disk));
@@ -742,10 +752,17 @@ void installer_run(void) {
     if (blocks<2048*MB_BLOCKS || blocks>0xffffffffull) stop("Unsupported eMMC capacity");
     WyseInstallLayout installed;
     bool can_upgrade=existing_install(emmc,&installed);
-    step("Choose installation mode",can_upgrade?
-         "U: Upgrade   I: New install   Esc: Cancel":
-         "No supported installation found. I: New install   Esc: Cancel",0);
-    int mode=wait_key(); last_step_us=0;
+    int mode;
+    for (;;) {
+        step("Choose installation mode",can_upgrade?
+             "U: Upgrade   I: New install   X: Extras   Esc: Cancel":
+             "I: New install   X: Extras   Esc: Cancel",0);
+        mode=wait_key(); last_step_us=0;
+        if (mode!='x' && mode!='X') break;
+        installer_ui_restore();
+        extras_open(true);
+        installer_ui_restore();
+    }
     if ((mode=='u' || mode=='U') && can_upgrade) {
         step("Keep drive C: and current settings intact",
              "Press \"U\" to start upgrade, or \"Esc\" to cancel",0);
