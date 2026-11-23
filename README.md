@@ -448,3 +448,8 @@ The wyseDOS code is released under the **GNU General Public License v3.0** —
 see [`LICENSE`](LICENSE) and [`LICENSES/`](LICENSES/). Bundled third-party guest
 drivers retain their own terms. Excluded Windows USB packages are not part
 of the GPL distribution; their redistribution permissions remain unverified.
+
+## Media
+
+- [WyseDOS video on YouTube](https://www.youtube.com/watch?v=t9u3JwAEjqU)
+- [Já a můj nonstop parťák – od DOSu po Windows XP na Dellu Wyse 3040](https://www.high-voltage.cz/2026/ja-a-muj-nonstop-partak-od-dosu-po-windows-xp-na-dellu-wyse-3040/) (High Voltage, in Czech)
